@@ -47,8 +47,7 @@ vi.mock('@/lib/evaluation-read-model-judging-state', () => ({
 
 vi.mock('@/i18n', () => ({ getDictionary: vi.fn(async () => en) }));
 
-// Why the dictionary is handed over without its provider: the record header now carries the live
-// indicator, whose copy comes from the same dictionary the layout's page supplies in the browser.
+// The live indicator's copy comes from the dictionary the layout supplies in the browser.
 vi.mock('@/hooks/useDictionary', async () => {
   const actual = await vi.importActual<typeof import('@/hooks/useDictionary')>('@/hooks/useDictionary');
   const dictionary = await vi.importActual<{ default: Dictionary }>('@/dictionaries/en.json');
@@ -227,9 +226,7 @@ function breadcrumbHrefs(html: string): string[] {
 
 describe('Submission record breadcrumbs', () => {
   it('closes the trail on the submissions list the record lives under', () => {
-    // Why Home and the list are the two links: the group is a section with no page
-    // of its own, while the submissions list is the record's real parent and the
-    // reader's way back up out of the record.
+    // The submissions list is the record's real parent and the reader's way back up.
     expect(breadcrumbHrefs(recordHtml)).toEqual(['/en', '/en/evaluation/submissions']);
   });
 

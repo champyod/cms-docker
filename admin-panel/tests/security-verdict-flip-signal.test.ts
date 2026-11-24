@@ -10,14 +10,7 @@ import {
   NOW,
 } from './security-signal-fixture';
 
-/**
- * The flip as the channel says it: one fact for the whole set, naming the count and the worst CVE,
- * deduplicated against the last message exactly like every other fact.
- *
- * WHY the count and the key are asserted together: this fact stands for a SET. A key that did not
- * move with the set would make the second hidden CVE silent, which is the failure the fact exists
- * to end — so "the count changed" must read as new.
- */
+/** The fact stands for a set, so the count and the key are asserted together. */
 
 function flips(count: number, worst: Partial<NonNullable<WaivedReachable['worst']>> = {}): WaivedReachable {
   return {
@@ -52,8 +45,7 @@ describe('the digest pushes one fact for the flipped set', () => {
       detail: '3 waived findings reachable now, worst CRITICAL kernel: ksmbd: ksmbd_write error on como-main',
       since: '2026-11-10T09:00:00.000Z',
     });
-    // The unwaived critical is still pushed, and the flip leads: a decision that no longer fits
-    // is the one thing here a reader cannot discover from a count.
+    // A decision that no longer fits is the one thing a reader cannot discover from a count, so the flip leads.
     expect(digest.triggers[0]?.kind).toBe('waiver-flip');
     expect(digest.triggerCount).toBe(2);
   });

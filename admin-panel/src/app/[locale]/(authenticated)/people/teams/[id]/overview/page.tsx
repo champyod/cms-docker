@@ -11,8 +11,7 @@ import { leaderName } from '@/components/teams/teamColumns';
 import { TeamOverviewTab } from '@/components/teams/TeamOverviewTab';
 import { formatCount } from '@/lib/format-number';
 
-// Why: the reader enforces the same keys, but the page must resolve the exact
-// registry route first so a disabled or narrowed descriptor 404s before data.
+// The page resolves the registry route itself so a disabled or narrowed descriptor 404s before the data is read.
 async function authorizeTeamTab(routeId: RouteId): Promise<ReadonlySet<string>> {
   const route = ROUTE_REGISTRY.find((candidate) => candidate.id === routeId);
   if (!route || !route.enabled) notFound();
@@ -37,8 +36,6 @@ export default async function TeamOverviewPage({ params }: { params: Promise<{ l
   const copy = dictionary.teams.overview;
   return (
     <DetailPage
-      // The record shell above renders the team's name, its trail and its tabs. This tab adds the
-      // two values the edit form does not show, then the three it does.
       ownsHeader={false}
       facts={[
         { term: copy.leader, value: leaderName(summary, dictionary.common.notSet) },

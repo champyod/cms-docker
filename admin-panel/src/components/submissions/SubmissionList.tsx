@@ -37,26 +37,13 @@ export interface SubmissionListProps {
   readonly initialSubmissions: readonly SubmissionListItem[];
   readonly navigation: Dictionary['navigation'];
   readonly initialSort?: ListSortInput;
-  /**
-   * The active narrowing. Optional because the list is also rendered without one, and
-   * an absent filter means "everything" rather than "nothing".
-   */
+  /** Absent means everything, not nothing. */
   readonly filters?: SubmissionFilters;
-  /**
-   * Whether the reader may requeue, single or in bulk. Resolved on the server from the
-   * same four keys both requeue paths gate on, so neither control can appear to someone
-   * the action would refuse.
-   */
+  /** Resolved on the server from the same keys the requeue paths gate on. */
   readonly canRecalculate?: boolean;
-  /**
-   * Whether the reader may flip the official flag. Resolved from `submission:update`, the
-   * key `toggleSubmissionOfficial` re-checks on every call.
-   */
+  /** Resolved from submission:update, the key the official flag re-checks on every call. */
   readonly canOfficial?: boolean;
-  /**
-   * Whether the reader may write the comment field in bulk. Resolved from the same
-   * `submission:update` key the bulk comment actions re-check on every call.
-   */
+  /** Resolved from submission:update, the key the bulk comment actions re-check. */
   readonly canComment?: boolean;
 }
 
@@ -64,15 +51,10 @@ function recordHref(locale: string, submission: SubmissionListItem): string {
   return buildRoute(locale, 'evaluation.submission-record', { id: submission.id });
 }
 
-// Why one fragment for the size: the desktop row and the mobile card render the same
-// cluster, so a per-layout target would drift the two apart.
+// The desktop row and the mobile card render the same cluster, so the size target is shared.
 const ROW_ACTION_TARGET = 'min-h-11 min-w-11';
 
-/**
- * The checkbox cell of a selectable column, with the shift-range wiring around it:
- * the range is applied on pointer-down so the end row's own toggle cannot fight it,
- * and the click that follows is cancelled only when a range was actually taken.
- */
+/** The range applies on pointer-down so the end row's own toggle cannot fight it. */
 function withShiftSelection(
   column: ResponsiveColumn<SubmissionListItem>,
   onSelectorPointerDown: (event: React.PointerEvent<HTMLSpanElement>, submission: SubmissionListItem) => void,
@@ -103,8 +85,7 @@ export function SubmissionList({ initialSubmissions, navigation, initialSort, fi
   const { recalculateSubmissionConfirm, toggleOfficialConfirm } = useConfirmationCopy();
   const reasonPrompt = useReasonPrompt();
   const [pendingRejudge, setPendingRejudge] = useState<number | null>(null);
-  // Why the generated record label: the row action opens the submission record,
-  // so its accessible name comes from the same bilingual key the record uses.
+  // The row action opens the record, so its accessible name comes from the record's own key.
   const recordLabel = navigation.evaluation['submission-record'].label;
 
   const submissionIds = submissions.map((submission) => submission.id);
@@ -115,9 +96,7 @@ export function SubmissionList({ initialSubmissions, navigation, initialSort, fi
     router.push(recordHref(locale, submission));
   };
 
-  // Why the reason dialog instead of a bare confirm: the server requires the
-  // justification on every requeue, and the dialog that collects it carries the
-  // same confirmation copy the single-submission control has always shown.
+  // The server requires a justification on every requeue, so the dialog collects it.
   const rejudge = (submissionId: number): void => {
     const base = recalculateSubmissionConfirm('score');
     reasonPrompt.ask({
@@ -191,8 +170,7 @@ export function SubmissionList({ initialSubmissions, navigation, initialSort, fi
     ...buildSubmissionColumns(dict.common.notSet),
   ];
 
-  // Why the page resets on sort: page 4 of one order is not page 4 of another, so keeping
-  // the number would land the reader on a page that exists only in the old order.
+  // Page 4 of one order is not page 4 of another, so the sort resets the number.
   const applySort = (next: ListSortInput): void => {
     const url = new URL(window.location.href);
     if (next !== null && next !== undefined) {

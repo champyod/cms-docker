@@ -48,13 +48,11 @@ export function AdminList({
   // Why the hook and not window.location.pathname: it hands back the path with the base path stripped.
   const pathname = usePathname();
   const confirm = useConfirm();
-  // Why: an admin account outlives every contest, so its sign-in time has no owner contest and
-  // reads in the operator's own zone.
+  // An admin account outlives every contest, so its sign-in time reads in the operator's zone.
   const formatTimestamp = useFormatTimestamp();
   const { destructiveConfirm } = useConfirmationCopy();
   const canUpdate = hasEffectivePermission(new Set(callerPermissions), ACTION_PERMISSIONS.updateAdmin);
-  // Why the pair: the Actions column and the row's own click both admit `updateAdmin`'s either
-  // entry permission, so a caller holding only `admin:password:update` still reaches the form.
+  // Both the Actions column and the row click admit either entry permission.
   const canEditRow = canUpdate || hasEffectivePermission(new Set(callerPermissions), ACTION_PERMISSIONS.setAdminPassword);
 
   useEffect(() => {
@@ -109,8 +107,7 @@ export function AdminList({
     setEditingAdmin(null);
   };
 
-  // Why published from here: the create button opens this panel's one AdminModal, so a copy of
-  // it in the header would be a second modal holding its own open state over the same list.
+  // The create button opens this panel's one AdminModal; a header copy would hold a second open state.
   usePublishModuleActions(
     'administration.admins',
     capabilities.canCreate ? (

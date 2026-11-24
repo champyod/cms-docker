@@ -7,8 +7,7 @@ import { TasksSection } from '@/components/docs/sections/TasksSection';
 import { UsersSection } from '@/components/docs/sections/UsersSection';
 import { getDictionary } from '@/i18n';
 
-// Why a token: this page is declared, so it has to survive light, dark and high contrast, and a
-// palette step looks the same in all of them.
+// A token survives light, dark and high contrast; a palette step does not.
 const OFFICIAL_DOCS_LINK =
   'inline-flex min-h-11 items-center text-xs text-foreground underline decoration-border underline-offset-2 hover:decoration-foreground';
 
@@ -17,19 +16,6 @@ function topicDetail(id: string): string | undefined {
   return docs.navigation.find((item) => item.id === id)?.detail;
 }
 
-/**
- * The panel's own reference, one section per record kind it documents.
- *
- * WHY a board: the page is five independent topics - contests, users, tasks, submissions, services -
- * and none of them is a record the reader acts on. A list would have had to invent rows, a filter
- * and a total; settings would have claimed the topics are preferences. The board is the layout that
- * holds several sections which each mean something on their own, and it renders the section
- * headings the page used to draw for itself.
- *
- * WHY the jump grid is gone: it listed the same five headings, in the same order, directly above the
- * headings the board now renders. The layout owns the section title and the link out, so the grid
- * had nothing left to add.
- */
 export default async function SystemDocsPage({
   params,
 }: {

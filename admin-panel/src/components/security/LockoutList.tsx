@@ -10,13 +10,7 @@ interface LockoutListProps {
   readonly lockouts: readonly SecurityBlock[];
 }
 
-/**
- * The open lockouts, one line per account and address.
- *
- * WHY the unlock carries its own prompt: lifting a lockout clears the counter and closes the
- * record, which is an audited write, so the reason lives beside the button that asks for it. The
- * rows draw no frame of their own — the board section is the frame.
- */
+/** Lifting a lockout is an audited write, so the reason prompt lives beside the button that asks. */
 export function LockoutList({ lockouts }: LockoutListProps): React.JSX.Element {
   const prompt = useReasonPrompt();
 

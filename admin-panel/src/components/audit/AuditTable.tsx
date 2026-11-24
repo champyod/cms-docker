@@ -23,13 +23,7 @@ import type { AuditTableProps } from './auditTypes';
 
 export type { AuditTableProps } from './auditTypes';
 
-/**
- * The audit log's rows, and the detail a row expands into.
- *
- * WHY nothing else: the filters, the count and the page number describe the request rather than the
- * rows, so the list layout places them and the page supplies them. What is left here is the one
- * thing only this component knows — which row the reader opened.
- */
+/** This component owns the one thing only it knows: which row the reader opened. */
 export function AuditTable({
   entries,
   dict,
@@ -48,8 +42,7 @@ export function AuditTable({
 
   const latestAuditIdRef = useRef<string | null>(null);
 
-  // Why the cursor and not the rows: the rows on screen are this page's own query, so a new one is only
-  // visible through the reload the stream triggers — and only once per new row.
+  // The rows on screen are this page's own query, so a new row is only visible through the reload the stream triggers.
   const onAuditFrame = useCallback(
     (frame: AuditCursorFrame): void => {
       if (latestAuditIdRef.current === frame.latestId) return;
@@ -59,8 +52,7 @@ export function AuditTable({
     [router],
   );
 
-  // Why the stream's own status is not projected anywhere: it reports the push channel, not the
-  // rows, and the rows this page reads are what say whether the read succeeded.
+  // The stream's status reports the push channel, not the rows; the rows say whether the read succeeded.
   useLiveStream<AuditCursorFrame>({
     url: '/api/audit/stream',
     onFrame: onAuditFrame,
@@ -100,16 +92,14 @@ export function AuditTable({
         setDetailError(result.error);
       }
     } catch (error) {
-      // The action body reports failures via the result; only transport-level
-      // rejections reach here, and they must still clear the spinner.
+      // Only transport-level rejections reach here, and they must still clear the spinner.
       setDetailError(error instanceof Error ? error.message : 'Request failed');
     } finally {
       setLoadingDetail(false);
     }
   };
 
-  // Why: one column definition drives desktop rows and mobile cards, so
-  // the two layouts cannot drift apart.
+  // One column definition drives the desktop rows and the mobile cards, so the two layouts cannot drift.
   const columns = useMemo(
     () => buildAuditColumns(dict, { formatTimestamp, truncate, resultBadgeVariant }, missing),
     [dict, missing],

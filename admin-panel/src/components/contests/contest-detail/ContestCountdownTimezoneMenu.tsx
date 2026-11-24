@@ -16,12 +16,7 @@ import { interpolate } from '@/lib/interpolate';
 // The list runs to hundreds of zones, so a search box beats scrolling all of them.
 const MAX_VISIBLE_RESULTS = 200;
 
-/*
- * The panel's box, mirrored from its stylesheet rule: the panel is placed by the click that
- * opens it, and reading its size back would cost an extra render before it could be shown.
- * The height is the bound the list's own max height gives the panel, not the height it
- * happens to take with the matches of the moment.
- */
+/* The panel's box is mirrored from its stylesheet rule; reading it back would cost a render before showing. */
 const PANEL_WIDTH_PX = 320;
 const PANEL_HEIGHT_PX = 336;
 

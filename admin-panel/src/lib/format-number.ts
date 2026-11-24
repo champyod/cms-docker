@@ -1,10 +1,4 @@
-/**
- * One way to print a count.
- *
- * The panel had no number formatting at all, so a metric of 1204 read as "1204" while every other
- * number in the product was grouped. Grouping is a property of the number, not of the page that
- * shows it, so it lives here rather than being retyped per surface.
- */
+/** Grouping is a property of the number, not of the page that shows it. */
 export function formatCount(value: number, locale?: string): string {
   if (!Number.isFinite(value)) return String(value);
   try {
@@ -20,22 +14,12 @@ export function formatCountOrText(value: number | string, locale?: string): stri
   return typeof value === 'number' ? formatCount(value, locale) : value;
 }
 
-/**
- * A count with its noun, singular or plural, in the reader's locale.
- *
- * Why here: the panel hand-rolled the same `count === 1 ? 'task' : 'tasks'` in five places, each free
- * to disagree with the others. A language without plurals passes the same word twice.
- */
+/** One place for count-and-noun; a language without plurals passes the same word twice. */
 export function countLabel(count: number, noun: { one: string; other: string }, locale?: string): string {
   return `${formatCount(count, locale)} ${count === 1 ? noun.one : noun.other}`;
 }
 
-/**
- * A score printed at the precision the task declares, grouped in the reader's locale.
- *
- * Why here: a score's precision belongs to the task, not to the page that shows it, and four surfaces
- * were each deciding that for themselves (`toFixed(precision)`, `toFixed(1)`, a bare `toFixed(0)`).
- */
+/** A score's precision belongs to the task, not to the page that shows it. */
 export function formatScore(value: number, precision: number, locale?: string): string {
   if (!Number.isFinite(value)) return String(value);
   try {

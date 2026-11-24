@@ -10,20 +10,6 @@ import {
 import { getDictionary } from '@/i18n';
 import { authorizeRoutePage } from '@/lib/navigation/page-authorization';
 
-/**
- * What this host is doing: its services, its CPU and memory, its workers, its counters and the
- * traffic the proxy logged.
- *
- * WHY a board: five readings that share no row shape and no meaning of empty - a service's state, a
- * percentage, a worker endpoint, a set of totals and a log line - each read on a track of its own.
- * A list would have had to invent one row set, one filter and one total across the five; a dashboard
- * would have put counts above sections that are not counts.
- *
- * WHY no page-level state and no page-level freshness: each section carries the cue that says when
- * its own value was read, and the panel deliberately has no live badge - a stream that stops is
- * marked where the reader is looking, in the section that stopped moving. Both are named in the
- * inventory rather than filled with a placeholder.
- */
 export default async function InfrastructureResourcesPage({
   params,
 }: {

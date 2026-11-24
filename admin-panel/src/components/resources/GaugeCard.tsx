@@ -9,13 +9,7 @@ export interface GaugeCardProps {
   source: string | null;
   percent: number;
   tone: 'auto' | 'info';
-  /**
-   * What the cell around the gauge needs the card to carry.
-   *
-   * Why the gauge takes a class from its caller at all: the freshness cue wraps the figure in an
-   * element of its own, and that wrapper — not the card — becomes the grid cell, so the card has to
-   * fill it (`h-full`) instead of stretching as the cell itself. The gauge's own sizing stays here.
-   */
+  /** The freshness wrapper becomes the grid cell, so the card must fill it rather than stretch. */
   className?: string;
 }
 

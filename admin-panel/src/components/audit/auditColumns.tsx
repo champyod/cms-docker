@@ -9,8 +9,7 @@ export interface AuditColumnHelpers {
   resultBadgeVariant: (result: string) => 'success' | 'destructive' | 'neutral';
 }
 
-// Why module scope: the formatter is built per call, so one per audit row on every
-// render of both the desktop table and the mobile cards.
+// The formatter is built per call, so one per row on every render; module scope builds it once.
 const AUDIT_TIME_FORMAT = new Intl.DateTimeFormat();
 
 export function formatTimestamp(iso: string): string {
@@ -28,8 +27,7 @@ export function resultBadgeVariant(result: string): 'success' | 'destructive' | 
   return 'neutral';
 }
 
-// Why: one column definition drives desktop rows and mobile cards, so
-// the two layouts cannot drift apart.
+// One column definition drives the desktop rows and the mobile cards, so the two layouts cannot drift.
 export function buildAuditColumns(
   dict: AuditDict,
   helpers: AuditColumnHelpers,

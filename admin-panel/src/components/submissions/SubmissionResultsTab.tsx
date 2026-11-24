@@ -29,9 +29,7 @@ function outcomeGlyph(outcome: string | null): React.JSX.Element {
   return <AlertCircle className="text-muted-foreground w-5 h-5 shrink-0" />;
 }
 
-// Why the same wording as the row: the status line is derived from the outcome
-// columns, so a reader sees one interpretation per dataset rather than a second
-// interpretation in a summary card.
+// The status line is derived from the same outcome columns, so there is one interpretation per dataset.
 function phaseLabel(phase: SubmissionJudgingPhase, labels: StatusLabels): string {
   return labels[judgingPhaseLabelKey(phase)];
 }
@@ -43,8 +41,7 @@ function scoreTone(result: ResultRow): string {
 }
 
 function ResultCard({ result }: { readonly result: ResultRow }): React.JSX.Element {
-  // Why: a scoring run is an event of the evaluation service rather than of a contest, so it reads
-  // in the reviewer's own zone.
+  // A scoring run belongs to the evaluation service, not a contest, so it reads in the reviewer's zone.
   const formatTimestamp = useFormatTimestamp();
   const record = useDictionary().submissions.record;
   const compilationFailed = result.compilationOutcome === 'fail';

@@ -37,8 +37,7 @@ export interface UserTableProps {
   onSortChange?: (sort: ListSortInput) => void;
 }
 
-// Why: position is precomputed so the shared column model stays a pure
-// row-to-node map without needing a row index at render time.
+// Position is precomputed so the column model stays a pure row-to-node map.
 export interface UserRow {
   user: UsersPageRow;
   position: number;

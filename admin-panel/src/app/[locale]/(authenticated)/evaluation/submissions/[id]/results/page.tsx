@@ -32,13 +32,10 @@ export default async function SubmissionResultsPage({ params }: { params: Promis
   const dictionary = await getDictionary(locale);
   const model = await readRecordOrNotFound(() => getSubmissionResults(id));
   const copy = dictionary.submissions.record;
-  // Why failed compilations and not failed evaluations: a dataset whose compilation failed was
-  // never evaluated, so counting both would report the same dataset twice.
+  // A failed compilation was never evaluated, so counting both would report the same dataset twice.
   const compilationsFailed = model.results.filter((result) => result.compilationOutcome === 'fail').length;
   return (
     <DetailPage
-      // The record shell above renders the submission's name, its trail, its status and its tabs.
-      // This tab adds the two totals the shell cannot derive, then the per-dataset cards.
       ownsHeader={false}
       facts={[
         { term: copy.results.datasets, value: formatCount(model.results.length, locale) },

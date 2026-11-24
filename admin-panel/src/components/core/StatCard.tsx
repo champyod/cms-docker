@@ -13,18 +13,7 @@ export interface StatCardProps {
   readonly locale?: string;
 }
 
-/**
- * One metric: a term, its value, and what the value is measured against.
- *
- * The three parts are a definition pair rather than three lines of text, so a reader is told which
- * word the number belongs to instead of hearing a run of numbers.
- *
- * The value is a section-level size, not the page-title size: a metric as loud as the page's own
- * heading makes the reader weigh two things that do not carry the same importance.
- *
- * The label is not uppercased. English can shout with capitals; Thai cannot, so an uppercase label
- * would give one language an emphasis the other never receives.
- */
+/** No uppercased label: Thai has no case, so capitals give one language an emphasis the other never receives. */
 export function StatCard({ label, value, reference, locale }: StatCardProps): React.JSX.Element {
   return (
     <Card className="p-4">

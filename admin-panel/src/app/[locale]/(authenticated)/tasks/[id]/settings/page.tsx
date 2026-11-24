@@ -13,8 +13,7 @@ type TaskRouteProps = {
   params: Promise<{ locale: string; id: string }>;
 };
 
-// Why: the reader enforces the same keys, but the page must resolve the exact
-// registry route first so a disabled or narrowed descriptor 404s before data.
+// The page resolves the registry route itself so a disabled or narrowed descriptor 404s before the data is read.
 async function authorizeTaskTab(routeId: RouteId): Promise<ReadonlySet<string>> {
   const route = ROUTE_REGISTRY.find((candidate) => candidate.id === routeId);
   if (!route || !route.enabled) notFound();
@@ -46,8 +45,7 @@ export default async function TaskSettingsPage({ params }: TaskRouteProps): Prom
           key: 'task',
           title: copy.title,
           description: copy.description,
-          // The values below reach the contestant side and the judge, never another operator's
-          // screen, so the group says so before a reader changes one.
+          // These values reach the contestant side and the judge, never another operator's screen.
           scope: copy.scope,
           children: (
             <TaskSettingsTab data={data} labels={dictionary.tasks.facts} notSet={dictionary.common.notSet} />

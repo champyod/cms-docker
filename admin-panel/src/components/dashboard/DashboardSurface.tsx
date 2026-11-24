@@ -58,11 +58,7 @@ const ALERT_TONE: Record<StatusType, 'success' | 'warning' | 'destructive'> = {
   down: 'destructive',
 };
 
-/**
- * The dashboard as data in, markup out, so the page keeps the queries and this keeps the rules:
- * nothing interrupts unless something is wrong, colour appears only where it carries meaning, and
- * the activity list is a table rather than a stack of cards.
- */
+/** Data in, markup out: the page keeps the queries and this keeps the rules. */
 export function DashboardSurface({
   stats,
   service,
@@ -128,14 +124,7 @@ export function DashboardSurface({
   );
 }
 
-/**
- * Label, number, reference — the same three slots in every cell, so four cards read as one row.
- * No decorative icon and no colour: a number that is not a status must not look like one.
- */
-/**
- * The system's state, on its own so the page can place it above every metric. Quiet when nothing
- * is wrong; an alert titled with the state when something is.
- */
+/** A number that is not a status must not look like one. */
 export function DashboardState({
   service,
   labels,

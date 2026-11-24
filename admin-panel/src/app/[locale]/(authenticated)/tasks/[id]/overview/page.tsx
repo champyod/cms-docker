@@ -15,8 +15,7 @@ type TaskRouteProps = {
   params: Promise<{ locale: string; id: string }>;
 };
 
-// Why: the reader enforces the same keys, but the page must resolve the exact
-// registry route first so a disabled or narrowed descriptor 404s before data.
+// The page resolves the registry route itself so a disabled or narrowed descriptor 404s before the data is read.
 async function authorizeTaskTab(routeId: RouteId): Promise<ReadonlySet<string>> {
   const route = ROUTE_REGISTRY.find((candidate) => candidate.id === routeId);
   if (!route || !route.enabled) notFound();
@@ -41,14 +40,11 @@ export default async function TaskOverviewPage({ params }: TaskRouteProps): Prom
   const data = await readRecordOrNotFound(() => getTaskOverview(taskId));
   return (
     <DetailPage
-      // The record shell above renders the task's name, its trail and its tabs, and the tab rail
-      // already says Overview, so this page adds only the values and the statements under them.
       ownsHeader={false}
       facts={[
         { term: facts.scoreMode, value: humanizeEnum(data.task.score_mode) },
         { term: facts.feedback, value: humanizeEnum(data.task.feedback_level) },
-        // Why a word and not a dash: a null precision is a task that never set one, not a 0, and
-        // DESIGN.md 19 bans the em dash from anything a reader sees.
+        // A null precision was never set, so it reads as a word rather than a dash or a zero.
         {
           term: facts.scorePrecision,
           value: data.task.score_precision === null ? dictionary.common.notSet : String(data.task.score_precision),

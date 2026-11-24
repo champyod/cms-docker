@@ -5,14 +5,6 @@ import { MaintenanceProvider, MaintenanceSaveBar } from '@/components/system/Mai
 import { getDictionary } from '@/i18n';
 import { authorizeRoutePage } from '@/lib/navigation/page-authorization';
 
-/**
- * What the host does on its own: the backup policy it runs under, and where it reports.
- *
- * WHY settings: both groups change how this deployment behaves for everybody - the dump schedule
- * runs on the host, the webhook posts every alert - and each states who it reaches before the reader
- * edits it. The backup policy waits for the page's save; the notification group saves itself, which
- * is why the save bar is the policy's own press and not a second one for the webhook.
- */
 export default async function SystemMaintenancePage({ params }: {
   params: Promise<{ locale: 'en' | 'th' }>;
 }): Promise<React.JSX.Element> {

@@ -33,14 +33,7 @@ function ToggleRow({ label, checked, disabled, onChange }: { label: string; chec
   );
 }
 
-/**
- * The fields one contest settings group edits.
- *
- * Why no section card of its own: the settings layout draws each group as a card carrying the
- * group's title, description and scope, so a heading here would repeat them inside the same card.
- * Why the lock flag: a read-only caller must never meet an editable form, so either flag locks
- * every input and no false save affordance reaches the reader.
- */
+/** Either flag locks every input: a read-only caller must never meet an editable form. */
 export function ContestSettingsSection({ formData, disabled = false, canEdit = true, onChange, copy }: Props): React.JSX.Element {
   const readOnly = disabled || !canEdit;
   return (

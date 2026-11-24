@@ -15,8 +15,7 @@ type ContestRouteProps = {
   params: Promise<{ locale: string; id: string }>;
 };
 
-// Why: the reader enforces the same keys, but the page must resolve the exact
-// registry route first so a disabled or narrowed descriptor 404s before data.
+// The page resolves the registry route itself so a disabled or narrowed descriptor 404s before the data is read.
 async function authorizeContestTab(routeId: RouteId): Promise<ReadonlySet<string>> {
   const route = ROUTE_REGISTRY.find((candidate) => candidate.id === routeId);
   if (!route || !route.enabled) notFound();
@@ -43,17 +42,11 @@ export default async function ContestCountdownPage({ params }: ContestRouteProps
   if (contestId === null) notFound();
   await authorizeContestTab('contests.tabs.countdown');
   const data = await readRecordOrNotFound(() => getContestCountdown(contestId));
-  // Why the facts carry absolute times while the clock carries the remainder: the clock behind
-  // them counts down and can be paused, so it answers "how long left"; only the four stored timings
-  // say when this contest actually runs, and reading them in the contest's own zone is the point.
-  // The zone a timestamp is read in, which needs a usable value; what the page *says* the zone is
-  // comes from the record, so a contest with none reads as unset rather than claiming UTC.
+  // The clock can be paused, so only the four stored timings say when the contest actually runs.
   const zone = data.timezone ?? 'UTC';
   const copy = dictionary.contests.countdown.facts;
   return (
     <DetailPage
-      // The record shell above renders the contest's name, its trail and its tabs; the rail says
-      // Countdown, so the tab adds the timings and the clock that counts to them.
       ownsHeader={false}
       facts={[
         { term: copy.timezone, value: data.timezone ?? dictionary.common.notSet },

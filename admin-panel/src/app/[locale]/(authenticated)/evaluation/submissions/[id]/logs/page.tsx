@@ -49,8 +49,6 @@ export default async function SubmissionLogsPage({ params }: { params: Promise<{
   const copy = dictionary.submissions.record;
   return (
     <DetailPage
-      // The record shell above renders the submission's name, its trail and its tabs; the rail says
-      // Logs, so this page states the verdict that produced the output and its size.
       ownsHeader={false}
       facts={[
         { term: copy.outcome.compilation, value: model.compilationOutcome ?? copy.results.pending },

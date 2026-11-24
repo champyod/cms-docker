@@ -1,6 +1,4 @@
-// What one finished scan says on the channel: one embed, five levels, composed from facts only.
-// WHY facts and not a store read: the poller counts first and renders second, so the layout is
-// testable without a database and cannot disagree with the numbers it prints.
+// The poller counts first and renders second, so the layout is testable without a database.
 
 /** Discord's cap on an embed description; the builder trims, so the receiver never has to. */
 export const DISCORD_BODY_LIMIT = 2000;
@@ -85,8 +83,7 @@ export interface ScanAnnouncement {
   readonly color: number;
 }
 
-/** One run's identity, and its message's dedupe key: box and start, never the source. */
-// WHY no source: one run pushes osv and rootfs separately, and a key naming the source split it in two.
+/** The dedupe key is box and start, never the source: one run pushes osv and rootfs separately. */
 export function scanRunKey(host: string | null, runStartedAt: Date): string {
   return `${host ?? '-'}|${runStartedAt.toISOString()}`;
 }
@@ -128,8 +125,7 @@ function titleLine(facts: ScanRunFacts): string {
     return `${countLabel(facts.criticals, { one: 'CRITICAL finding', other: 'CRITICAL findings' })} awaiting action, ${where(facts)}`;
   }
   if (facts.counts.high > 0) {
-    // Nothing to patch is a different message from work waiting: state which one this is.
-    // The verb agrees with the noun countLabel prints: one finding needs, several need.
+    // The verb agrees with the noun countLabel prints.
     const one = facts.counts.high === 1;
     const awaiting =
       facts.counts.highWithFix === 0

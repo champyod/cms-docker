@@ -13,13 +13,7 @@ function unbanDescription(ip: string, jail: string): string {
   return `Queue an unban for ${ip} in the ${jail} jail. The host agent applies it on its next tick.`;
 }
 
-/**
- * The live bans, one line per address.
- *
- * WHY it holds its own prompt: the unban is an audited write, so the reason dialog belongs to the
- * rows that ask for it rather than to the page that frames them. The list draws no card and no
- * heading, because the board section owns both and a second copy would read as a second list.
- */
+/** The unban is an audited write, so the reason dialog belongs to the rows that ask for it. */
 export function BannedAddressList({ bans }: BannedAddressListProps): React.JSX.Element {
   const prompt = useReasonPrompt();
 

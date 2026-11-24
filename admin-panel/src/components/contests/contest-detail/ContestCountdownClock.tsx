@@ -38,10 +38,7 @@ interface DigitProps {
   panicTurn: number;
 }
 
-/**
- * One character.  Re-mounts (and plays the entry animation) whenever its value
- * changes.  Key encodes both position and character so only changed digits fire.
- */
+/** The key encodes position and character, so only a changed digit re-mounts and plays its entry. */
 function Digit({ char, index, isPanicking, panicTurn }: DigitProps): React.JSX.Element {
   return (
     <span
@@ -108,20 +105,7 @@ const IDX_HOURS   = 2;
 const IDX_MINUTES = 4;
 const IDX_SECONDS = 6;
 
-/**
- * Left-prune zero leading units.
- *
- * Rules (applied in order from most significant to least):
- *  - Days are shown only when days > 0.
- *  - Hours are shown only when days > 0 OR hours > 0.
- *  - Minutes and seconds are always shown (the minimum display is MM:SS).
- *
- * This means:
- *   3d 04h 05m 06s → 03:04:05:06
- *      04h 05m 06s →    04:05:06
- *          05m 06s →       05:06
- *              06s →       00:06  ← seconds always shown with MM floor
- */
+/** Left-prune zero units; minutes and seconds are the floor, so the display never shrinks below MM:SS. */
 function visibleUnits(units: TimeUnits): {
   showDays: boolean;
   showHours: boolean;
@@ -131,15 +115,6 @@ function visibleUnits(units: TimeUnits): {
   return { showDays, showHours };
 }
 
-/**
- * YouTube Premiere-style countdown: DAYS · HOURS · MINUTES · SECONDS.
- *
- * Leading zero units are pruned from the left so the display is always
- * as compact as the current time requires.  Minutes and seconds are the
- * minimum — the display never shrinks below MM:SS.
- *
- * All three original props are preserved unchanged.
- */
 export function ContestCountdownClock({
   remainingMs,
   isPanicking = false,
@@ -152,8 +127,7 @@ export function ContestCountdownClock({
     ? visibleUnits(units)
     : { showDays: false, showHours: false };
 
-  // Count how many unit cards are visible (always 2–4).
-  // Used as a data attribute so CSS can scale font size per card count.
+  // The unit count drives a data attribute CSS scales the font from.
   const unitCount =
     2 + (showHours ? 1 : 0) + (showDays ? 1 : 0);
 

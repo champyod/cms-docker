@@ -60,10 +60,7 @@ async function updateConfigToml(ext: ImageExtension | null): Promise<void> {
   await fs.writeFile(tomlPath, setLogoPath(content, ext), 'utf-8');
 }
 
-/**
- * The service reads the volume directory, so an upload still serves on a
- * deployment without a config.toml. Losing the pointer must not fail the upload.
- */
+/** The service reads the volume directory, so losing the config.toml pointer must not fail the upload. */
 async function pointConfigAtLogo(ext: ImageExtension | null): Promise<void> {
   try {
     await updateConfigToml(ext);

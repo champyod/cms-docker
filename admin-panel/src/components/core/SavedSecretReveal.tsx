@@ -46,9 +46,7 @@ function toOutcome(result: Extract<SavedSecretResult, { success: true }>): Secre
   return result.kind === 'bcrypt' ? { kind: 'bcrypt' } : { kind: 'plaintext', value: result.value };
 }
 
-/** Why the request is latched in a ref: the secret arrives once per mount, so a
- * Hide/Reveal pair must not re-request it. A failed request releases the latch so the
- * next Reveal retries. */
+/** The secret arrives once per mount, and a failed request releases the latch so Reveal retries. */
 function useSecretReveal(onReveal: () => Promise<SavedSecretResult>): SecretRevealView {
   const [outcome, setOutcome] = useState<SecretOutcome>({ kind: 'pending' });
   const [isOpen, setIsOpen] = useState(false);

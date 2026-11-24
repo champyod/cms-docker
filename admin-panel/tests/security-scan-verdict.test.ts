@@ -8,11 +8,7 @@ import {
   type ScanRunFacts,
 } from '@/lib/security/scan-report';
 
-/**
- * Why these exist: an unwaived HIGH is unfixed and unwaived, and the first version of the
- * announcement called that "nothing needs you" in green. The verdict has three tiers, and each
- * one is pinned here so the calm reading can never again be printed over standing work.
- */
+/** Each verdict tier is pinned so a calm reading is never printed over standing work. */
 function facts(over: Partial<ScanRunFacts> & { high?: number; highWithFix?: number } = {}): ScanRunFacts {
   const high = over.high ?? 0;
   const highWithFix = over.highWithFix ?? 0;
@@ -43,8 +39,7 @@ describe('the announcement changes tier with what is actually unwaived', () => {
   });
 
   it('says there is nothing to apply when no fixed version exists', () => {
-    // Production on 2026-11-13: 1,415 unwaived HIGH and not one carrying an `available` version —
-    // 1,105 of them the same 221 kernel CVEs. "Patch or accept" was advice nobody could act on.
+    // The real feed's unwaived HIGH mostly carry no available version, so patch-or-accept is unactionable.
     const message = buildScanAnnouncement(facts({ high: 1415, highWithFix: 0 }));
     expect(message.title).toBe('1,415 HIGH findings await an upstream fix, box-a');
     expect(message.color).toBe(SCAN_WARN_COLOR);

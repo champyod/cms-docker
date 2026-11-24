@@ -43,10 +43,7 @@ export function ContainerSettingsModal({
     getDiscordWebhookStatus().then((status) => setIsDiscordConfigured(status.configured)).catch(() => setIsDiscordConfigured(false));
   }, []);
 
-  // Why the server read on open: the stream snapshot this modal also receives can be a poll old,
-  // and an operator about to change a restart policy edits the values the server holds. Opening the
-  // settings is a human read of that config, so it is the one that belongs on the audit trail —
-  // the stream that carries the same values on every tick is not.
+  // The stream snapshot can be a poll old, and a human read of the config belongs on the audit trail.
   useEffect(() => {
     let active = true;
     getContainerConfig()
@@ -65,10 +62,7 @@ export function ContainerSettingsModal({
     return (): void => { active = false; };
   }, [containerId]);
 
-  // Why the server read on open: the stream snapshot this modal also receives can be a poll old,
-  // and an operator about to change a restart policy edits the values the server holds. Opening the
-  // settings is a human read of that config, so it is the one that belongs on the audit trail —
-  // the stream that carries the same values on every tick is not.
+  // The stream snapshot can be a poll old, and a human read of the config belongs on the audit trail.
   useEffect(() => {
     let active = true;
     getContainerConfig()

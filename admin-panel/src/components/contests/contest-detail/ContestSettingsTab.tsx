@@ -14,8 +14,7 @@ import {
 
 export type ContestSettingsTabProps = { data: ContestSettingsData };
 
-// Why: the settings tab owns every field its reader loads, so unlike the
-// overview tab the payload carries the whole form.
+// The settings tab owns every field its reader loads, so the payload carries the whole form.
 function buildSettingsPayload(form: ContestSettingsFormState): Partial<ContestData> {
   return {
     name: form.name,
@@ -36,16 +35,10 @@ function buildSettingsPayload(form: ContestSettingsFormState): Partial<ContestDa
   };
 }
 
-/**
- * The contest's settings fields and the save that writes them.
- *
- * Why the save sits inside the group instead of the layout's save bar: the values it writes live in
- * this component's form state, and the layout cannot hold a control it does not own the state for.
- */
+/** The save sits with the form state it writes; the layout cannot hold a control it does not own. */
 export function ContestSettingsTab({ data }: ContestSettingsTabProps): React.JSX.Element {
   const settings = useDictionary().contests.settings;
-  // Why: the settings reader carries only contest:read — without
-  // contest:update the form locks and the save affordance never appears.
+  // The reader carries only contest:read, so without contest:update the form locks and no save appears.
   const canEdit = hasEffectivePermission(new Set(data.permissionKeys), 'contest:update');
   const { formData, updateForm, saving, justSaved, handleSave } = useContestSettingsState(
     data.contestId,

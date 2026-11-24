@@ -77,16 +77,7 @@ function previewWarnings(toc: TocSummary | null): readonly string[] {
   return [...catalog, ...unknown];
 }
 
-/**
- * Restores an uploaded dump into a throwaway postgres:15 container and leaves it
- * running for the diff and sample reads. The live database is never a restore
- * target here; only the read-only counts in getPreviewTables touch it.
- *
- * A failed start removes the container but keeps the quarantined dump so the
- * upload can be retried, and deletePreview removes the rest. A preview nobody
- * deletes leaves its container behind, findable by name or label prefix
- * `cms-restore-preview-` for an operator sweep.
- */
+/** Restores into a throwaway container; the live database is never a restore target here. */
 export async function startPreview(previewId: string): Promise<PreviewStartResult> {
   await ensurePermission('backup:restore');
   if (!isPreviewId(previewId)) return { success: false, started: false, error: 'Unknown preview id.', warnings: [] };
@@ -111,9 +102,7 @@ export async function startPreview(previewId: string): Promise<PreviewStartResul
     if (toc.catalogTables.length === 0) throw new Error('The archive holds none of the backup catalog tables.');
     const client = postgresClientSpawn(env, container, [
       'pg_restore', '-U', env.POSTGRES_USER, '-d', env.POSTGRES_DB, '-Fc',
-      // Ownership and privileges are irrelevant in a throwaway container and would
-      // fail on roles the dump names; --exit-on-error makes a non-zero exit mean a
-      // real restore failure instead of ignorable warnings.
+      // Ownership would fail on roles the dump names, and --exit-on-error makes a non-zero exit mean a real failure.
       '--no-owner', '--no-privileges', '--exit-on-error', CONTAINER_DUMP_PATH,
     ]);
     await runDocker(client.args, RESTORE_TIMEOUT_MS, client.env);
@@ -132,15 +121,7 @@ export async function startPreview(previewId: string): Promise<PreviewStartResul
   };
 }
 
-/**
- * Per-table archive and live row counts, an added-row estimate from the counts,
- * and an updated-row estimate projected from an archive primary-key sample.
- *
- * Every catalog table gets a row, so a table the archive does not carry shows up
- * as absent instead of disappearing. Each measurement is reported on its own
- * when it fails rather than failing the whole preview, and the archive side of a
- * table is only measured when the TOC says the archive has it.
- */
+/** Each measurement reports its own failure rather than failing the preview. */
 export async function getPreviewTables(previewId: string): Promise<PreviewTablesResult> {
   await ensurePermission('backup:restore');
   const unknown: PreviewTablesResult = { success: false, previewId, tables: [], failures: [], warnings: [], error: 'Unknown preview id.' };

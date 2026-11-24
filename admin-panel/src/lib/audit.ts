@@ -1,9 +1,7 @@
 import type { Prisma } from '@prisma/client';
 import { canonicaliseAuditRow, computeEntryHash, stableStringify, type AuditRowPayload } from '@/lib/audit-chain';
 
-// The digest and the canonical form live in lib/audit-chain.ts, which the operator verifier
-// (scripts/audit-log.ts) imports too. Re-exported here so the panel's existing callers and tests
-// keep one import site.
+// The digest and canonical form live in lib/audit-chain.ts; re-exported so callers keep one import site.
 export { computeEntryHash };
 
 export type AuditResult = 'success' | 'failure';
@@ -16,15 +14,7 @@ export interface AuditEntry {
   afterValues?: unknown;
   reason?: string;
   result: AuditResult;
-  /**
-   * The admin the row is filed under, `null` for a named system process, or absent to resolve the
-   * signed-in administrator from the session.
-   *
-   * WHY `null` is a distinct value and not "0": a background service has no session to read (it
-   * runs outside any request), and the audit table's whole job is to say who acted. Filing its rows
-   * under a person would be a false attribution; `null` says "the acting identity is the database
-   * actor, which for these rows is a `system:` one".
-   */
+  /** null is a named system process; undefined resolves the signed-in admin from the session. */
   actorId?: number | null;
   ip?: string;
   sessionId?: string;
@@ -84,12 +74,7 @@ function describeError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-/**
- * Publishes one named frame for a freshly written audit row: web bell when the
- * row is push-worthy, Discord only when it is sensitive. Name lookups fall back
- * to `#id` text, and the whole step never throws, so alerting can neither
- * duplicate nor break logging.
- */
+/** One named frame per fresh row: web bell when push-worthy, Discord only when sensitive; never throws. */
 async function publishFrame(
   entry: AuditEntry,
   actorId: number | null,
@@ -124,8 +109,7 @@ async function publishFrame(
       publishNotification({ ...framed, id: `audit-${String(rowId)}`, timestamp: timestamp.toISOString() });
     }
     if (!discord) return;
-    // Why this sentence is composed here and not on the frame: Discord is an operator channel with no
-    // reader locale to honour, so it keeps one language while the panel's copy comes from its dictionary.
+    // Discord has no reader locale to honour, so this sentence keeps one language.
     const { logToDiscord } = await import('@/lib/discord-notifier');
     const outcome = entry.result === 'failure' ? 'failed' : 'ran';
     void logToDiscord(
@@ -155,10 +139,7 @@ async function tryResolve<T>(resolve: () => Promise<T>): Promise<T | null> {
 
 async function resolveAuditContext(): Promise<AuditRequestContext> {
   return {
-    // Why the dynamic import: `request-identity` reads `next/headers`, and this module is also
-    // loaded by the poller image (the security signal), which runs outside Next and outside any
-    // request. Both reads below are best-effort by design, so the import lives behind the same
-    // guard as the call.
+    // request-identity reads next/headers and this module is also loaded outside Next, so the import is dynamic.
     ip: await tryResolve(async () => (await import('@/lib/request-identity')).resolveClientIp()),
     sessionId: await tryResolve(async () => (await import('@/lib/auth')).getSessionId()),
   };
@@ -168,8 +149,7 @@ export async function recordAudit(entry: AuditEntry): Promise<void> {
   try {
     const { prisma } = await import('@/lib/prisma');
 
-    // `undefined` means "resolve the session" (the request path); `null` means a named process that
-    // has no session, and must not be looked up as if it had one.
+    // undefined resolves the session; null is a named process that has none.
     let actorId: number | null | undefined = entry.actorId;
     if (actorId === undefined) {
       const session = await tryResolve(async () => (await import('@/lib/auth')).getSession());
@@ -189,10 +169,7 @@ export async function recordAudit(entry: AuditEntry): Promise<void> {
     const previousHash = previous?.entry_hash ?? null;
     const context = await resolveAuditContext();
 
-    // WHY the hash is taken over the row payload and not over `entry`: the caller's object omits
-    // whatever the writer resolves from the request (ip, session id, actor), so a hash of it could
-    // not be re-derived from the database — and a chain nobody can recompute verifies nothing.
-    // `canonicaliseAuditRow` is the same function the verifier uses.
+    // A hash of the caller's entry could not be re-derived from the database, and a chain nobody can recompute verifies nothing.
     const payload: AuditRowPayload = {
       actor_id: actorId ?? null,
       after_values: entry.afterValues ?? null,

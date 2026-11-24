@@ -5,9 +5,7 @@ import { AuditTable } from '@/components/audit/AuditTable';
 import { getAuditEntry } from '@/app/actions/audit';
 import type { AuditLogRow } from '@/app/actions/audit';
 
-// Why: globals are disabled in vitest.config.ts, so @testing-library/react's
-// automatic afterEach cleanup does not run; without it, queries bind to the
-// accumulated document.body and later tests can grab stale buttons.
+// globals are disabled in vitest.config.ts, so testing-library's automatic cleanup does not run.
 afterEach(() => cleanup());
 
 vi.mock('next/navigation', () => ({

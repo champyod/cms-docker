@@ -1,15 +1,7 @@
 import { cn } from '@/lib/utils';
 import React, { ElementType } from 'react';
 
-/**
- * The spacing ladder this panel allows, as literal class names.
- *
- * WHY literal: Tailwind generates a utility it can see in the source. `gap-${gap}` is not a class
- * it can see, so the spacing only appeared when some unrelated file happened to use the same
- * number — and disappeared the day that file changed. The same trap applied to `items-${align}`
- * and `justify-${justify}`. A map makes the allowed scale explicit, keeps every class visible to
- * the compiler, and turns an unsupported value into a type error instead of a silent no-op.
- */
+/** Literal class names, because Tailwind only generates a utility it can see in the source. */
 const GAP_CLASSES = {
   0: 'gap-0',
   1: 'gap-1',
@@ -115,11 +107,7 @@ interface PageHeaderProps {
   className?: string;
 }
 
-// Why the layout lives here and not in a caller-supplied className: the title and its
-// description are one column that must stay stacked, while the actions sit beside the title.
-// Owning the direction here keeps `flex-row` from being merged onto the container by a
-// consumer, which would lift the description out of the title column. `items-start` keeps the
-// actions on the title's top edge when the title column is the taller of the two.
+// Owning the direction here keeps a consumer's flex-row from lifting the description out of the title column.
 export function PageHeader({ title, description, actions, className }: PageHeaderProps) {
   return (
     <div className={cn('flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between', className)}>

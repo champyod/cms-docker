@@ -195,20 +195,7 @@
     min-height: 100vh;
   }
 
-  /* Display density.
-   *
-   * WHY this is a token override and no longer a per-component variant: Tailwind v4 derives every
-   * spacing utility from one `--spacing` value, and the production build keeps that indirection —
-   * verified in the emitted CSS, which contains `padding:calc(var(--spacing)*1)` rather than a
-   * literal. So one override retunes spacing across the whole panel. The older note here said an
-   * author-CSS override "does not survive the production minifier"; measured on this Tailwind
-   * version, spacing does. `density:` variants remain for the few places that need a change of
-   * *shape* rather than of scale (e.g. a table row's padding against its font size).
-   *
-   * WHY `html.density-compact` and not `.density-compact`: Tailwind emits the theme variable on
-   * `:root`, which has the same specificity as a bare class; naming the element wins regardless of
-   * which layer the framework's output lands in.
-   */
+  /* One --spacing override retunes spacing panel-wide, and html.density-compact beats a bare class on :root specificity. */
   html.density-compact {
     --spacing: 0.2rem; /* 20% tighter than the 0.25rem default */
   }
@@ -226,7 +213,6 @@
   }
 }
 
-/* Only a digit whose character changed re-mounts, so this plays on the tick that moved it. */
 /* A tick, not a fade: the digit drops in and overshoots slightly before settling, so a
    changed second reads as a mechanical step. The overshoot is in the easing, not the
    keyframes, which keeps it to transform only and off the paint path. */
@@ -306,14 +292,7 @@
   }
 }
 
-/*
- * The ended screen's mark: four balls that bounce off each other in front of the field.
- *
- * Each ball runs its own vector on a quarter-cycle stagger, so exactly one ball
- * is in the middle at a time — the only thing that changes between frames is
- * a translate, the shape never changes, and nothing animates on an ancestor
- * of the blurred surface.
- */
+/* Each ball runs its own vector on a quarter-cycle stagger, so exactly one ball is in the middle at a time. */
 .countdown-mark {
   position: absolute;
   top: 50%;
@@ -338,11 +317,7 @@
   animation: countdown-mark-bounce var(--countdown-mark-cycle, 1.6s) ease-in-out infinite;
 }
 
-/*
- * Four quarters — out, into the middle, held, back out — and a delay of one quarter per ball,
- * so exactly one ball is in the middle at a time and the hand-off at a quarter boundary is the
- * only moment two of them meet there.
- */
+/* A quarter-cycle delay per ball, so exactly one ball is in the middle at a time. */
 @keyframes countdown-mark-bounce {
   0%, 75%, 100% {
     transform: translate(0, 0);
@@ -522,27 +497,7 @@
   outline: none;
 }
 
-/* ─── Countdown clock shell ───────────────────────────────────────────────────
- *
- * .yt-clock-shell  — the outer flex column that fills all available height from
- *                    the plate/panic chain above it.
- * .yt-units-row    — the horizontal flex row of unit cards.
- * .yt-unit-block   — one column: digits card + label.
- * .yt-unit-digits  — the pill card holding two digit spans.
- * .yt-digit        — one character; re-mounts on change to play its entry animation.
- * .yt-sep          — the blinking colon separator.
- *
- * SIZING STRATEGY
- * Target: cards should together span ~80 % of whichever viewport axis is tighter.
- * Three cards + two colons across ≈ (3 × card-width) + (2 × sep-width).
- * With three HH:MM:SS cards each card is ~22 % of viewport width on landscape
- * and ~22 % of viewport height on portrait.  `min(22vw, 38vh)` picks whichever
- * axis would overflow first, and a clamp() gives hard floor/ceiling guards.
- *
- * WHY NOT ResizeObserver: the old clock needed it because a variable-width string
- * font has no predictable advance width.  Two fixed digits in a card are a
- * rectangle — CSS can size them accurately without measuring.
- * ─────────────────────────────────────────────────────────────────────────────── */
+/* Cards sized by min(22vw, 38vh) with clamp guards; two fixed digits per card need no ResizeObserver. */
 
 /* Shell: grows to fill the plate that holds it. */
 .yt-clock-shell {
@@ -585,22 +540,7 @@
   flex: 0 0 auto;
 }
 
-/*
- * Digit card.
- *
- * Two digits side-by-side in a rounded pill.  Font size is the critical number:
- *   clamp(2rem, min(20vw, 36vh), 14rem)
- *
- * • min(20vw, 36vh):  three cards + two colons across ~80 % of the tighter axis.
- *     Landscape (e.g. 1200 × 700 px): min(20vw=240, 36vh=252) → 240 px → scales on width.
- *     Portrait  (e.g. 400 × 900 px):  min(20vw=80,  36vh=324) → 80  px → scales on width.
- *     Fullscreen (100vh tall):         min(20vw,    36vh)       → height governs nicely.
- * • clamp low=2rem so it is always legible; high=14rem for very large screens.
- *
- * WHY font-size drives everything: padding, gap and border-radius are all in `em`
- * units so they scale automatically with the font, keeping the card proportions
- * correct at every size.
- */
+/* Font size drives the card: padding, gap and radius are in em and scale with it. */
 .yt-unit-digits {
   display: flex;
   align-items: center;        /* digits centred vertically inside the pill */
@@ -620,15 +560,7 @@
   text-shadow: 0 0 1em hsl(var(--countdown-hue, 226) 80% 70% / 0.5);
 }
 
-/*
- * One digit span inside the card.
- *
- * `1ch` is defined as the advance width of the "0" glyph in the current font
- * at the current font-size.  "0" is the widest digit in Chakra Petch Bold, so
- * every digit slot is exactly as wide as the widest possible character — no
- * clipping, no excess gap.  This works even on proportional fonts where
- * tabular-nums produces no effect, because the slot is sized to the worst case.
- */
+/* 1ch is the 0 advance width, the widest digit, so no slot clips and none gaps. */
 .yt-digit {
   display: inline-block;
   width: 1ch;
@@ -652,14 +584,7 @@
   white-space: nowrap;
 }
 
-/*
- * Colon separator.
- *
- * Vertically centred with the digit cards by `align-self: center` on the flex
- * row.  Its font size is ~65 % of the digit size so it reads as punctuation not
- * as a fourth unit.  `padding-bottom` lifts it slightly above the mathematical
- * centre to optically align with the digit numerals.
- */
+/* About 65 percent of the digit size and lifted slightly above centre, so it reads as punctuation. */
 .yt-sep {
   font-size: clamp(1.2rem, min(13vw, 24vh), 9rem);
   font-weight: 700;
@@ -695,20 +620,7 @@
   font-size: clamp(1.1rem, min(3.6vw, 5.6vh), 2.6rem);
 }
 
-/*
- * Per-unit-count scaling.
- *
- * When leading zero units are pruned the remaining cards should grow to fill
- * the freed space.  The base size (defined on .yt-unit-digits above) is
- * calibrated for 3 units (HH:MM:SS).  Multipliers for each count:
- *
- *   4 units (D:HH:MM:SS) — tighter fit, scale down so all four cards fit
- *   3 units (HH:MM:SS)   — base, no override needed
- *   2 units (MM:SS)      — ×1.35, noticeably larger
- *
- * The same ratio is applied to .yt-sep so the colon stays proportional.
- * All three expressions stay inside their own clamp() bounds.
- */
+/* Pruned units let the remaining cards grow; the same ratio keeps the colon proportional. */
 .yt-units-row[data-units="4"] .yt-unit-digits {
   font-size: clamp(1.5rem, min(15vw, 27vh), 11rem);
 }
@@ -761,25 +673,7 @@
   }
 }
 
-/*
- * ─── Countdown zone clock and its front-layer panel ─────────────────────────
- *
- * .countdown-zone-clock         — the live actual time, HH:MM in the chosen zone.
- * .countdown-zone-clock-digits  — the row the size is set on.
- * .countdown-zone-clock-glyph   — one numeral in a fixed 1ch slot.
- * .countdown-zone-clock-sep     — a colon, unslotted because it needs no numeral's width.
- *
- * SIZING STRATEGY
- * The glyph slot is exactly one "0" advance, so the row is five slots wide whatever the
- * time reads and the number cannot twitch as the minutes tick. Those slots bound the text
- * box, which is why no measurement is needed to size it — the same reasoning that keeps
- * the countdown digits in CSS rather than in JavaScript.
- *
- * The size is fluid on both axes: width alone leaves a tall window showing a thin clock.
- * `max(...)` of the two lengths gives the tighter axis the last word, and the clamp keeps
- * a legible floor and a ceiling that still leaves the countdown digits the larger element.
- * ────────────────────────────────────────────────────────────────────────────
- */
+/* Glyph slots are one 0 advance wide, so the row never twitches and no measurement is needed. */
 
 .countdown-zone-clock {
   display: flex;
@@ -811,29 +705,14 @@
   animation: yt-sep-pulse 1s step-end infinite;
 }
 
-/*
- * The zone panel is portalled to the body, so its stacking order is set here rather than by
- * any ancestor: above the surface's clock (z-10) and the ended ornament (z-2), level with
- * the app's other front-layer panels, and still under the modal layer.
- */
+/* Portalled to the body, so stacking order is set here: above the clock, level with front-layer panels, under the modal layer. */
 .countdown-zone-panel {
   position: fixed;
   z-index: 50;
   width: 20rem;
 }
 
-/*
- * Syntax colours for the submission code surface.
- * ────────────────────────────────────────────────────────────────────────────
- * The panel used to import highlight.js's own github-dark theme, which paints the block
- * #0d1117 — a colour of its own rather than the card's, and one that also carried a fixed
- * light-on-dark palette the light theme could not survive. Mapping the token classes onto
- * the same semantic tokens the rest of the panel reads keeps the block on whatever surface
- * it sits in, in both themes and in high contrast.
- *
- * Only the classes the registered grammars actually emit are listed; an unmapped class
- * inherits the base colour above rather than rendering unreadable.
- */
+/* Token classes mapped onto the panel's own tokens, so the block follows its surface in every theme. */
 .source-code {
   color: var(--card-foreground);
 }

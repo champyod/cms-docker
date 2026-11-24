@@ -20,16 +20,7 @@ interface ActiveContestCardProps {
   availableContests: ContestOption[];
 }
 
-/**
- * The contests this deployment serves, per shard, from the service registry.
- *
- * WHY there is no control here: a shard is moved to another contest by writing its registry row,
- * which a running instance re-reads within seconds — so a lever that activated a contest by
- * recreating the contest stack was the one path that could restart the board mid-contest. The
- * registry screen owns that write; this section states the result.
- *
- * WHY no card and no title: the board frames this section and names it.
- */
+/** Moving a shard is a registry write a running instance re-reads; recreating the stack could restart the board mid-contest. */
 export function ActiveContestCard({
   shardBindings,
   activeContestId,

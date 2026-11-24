@@ -112,9 +112,7 @@ export function ArchiveBrowserSection({ refreshToken, locationId }: ArchiveBrows
         [locationId, waitForPollDelay],
     );
 
-    // Why the mount load is not here: useSurfaceLoad starts the first load itself, so this effect
-    // only reacts to a refresh token the parent bumps after a backup, and then watches for the
-    // dossier the detached dump is still producing.
+    // The mount load already ran; this effect only reacts to a refresh token and the dossier still being produced.
     useEffect(() => {
         if (isFirstLoadRef.current) {
             isFirstLoadRef.current = false;
@@ -127,10 +125,7 @@ export function ArchiveBrowserSection({ refreshToken, locationId }: ArchiveBrows
     }, [refreshToken, reload, pollForNewArchive, stopPolling]);
 
     const handleDelete = async (name: string) => {
-        // WHY the shared dialog and not the browser's: `confirm()` cannot be translated (the panel
-        // ships TH and EN), cannot be styled, and blocks the whole tab. It was the only call site
-        // left in the panel still using it — every other destructive action already asks through
-        // this provider.
+        // confirm cannot be translated or styled and blocks the tab; this provider is the panel's one shared dialog.
         if (!(await confirm(deleteArchiveConfirm(name)))) return;
         setDeletingName(name);
         setNotice(null);

@@ -9,8 +9,7 @@ import { parseRecordId, readRecordOrNotFound } from '@/lib/queries/record-access
 import { ListPage } from '@/components/patterns/ListPage';
 import { TeamContestsEmpty, TeamContestsTab } from '@/components/teams/TeamContestsTab';
 
-// Why: the reader enforces the same keys, but the page must resolve the exact
-// registry route first so a disabled or narrowed descriptor 404s before data.
+// The page resolves the registry route itself so a disabled or narrowed descriptor 404s before the data is read.
 async function authorizeTeamTab(routeId: RouteId): Promise<ReadonlySet<string>> {
   const route = ROUTE_REGISTRY.find((candidate) => candidate.id === routeId);
   if (!route || !route.enabled) notFound();
@@ -36,9 +35,6 @@ export default async function TeamContestsPage({ params }: { params: Promise<{ l
     <ListPage
       // The team's record shell renders this tab's name, the team, the trail and the tab rail.
       ownsHeader={false}
-      // Why no filter, no toolbar and no count line: the read returns every contest this team
-      // entered in a single pass, so the table already shows the whole set and a total beneath it
-      // would repeat what the reader can count.
       empty={contests.length === 0 ? <TeamContestsEmpty copy={dictionary.teams} /> : undefined}
     >
       <TeamContestsTab contests={contests} locale={locale as 'en' | 'th'} missing={dictionary.common.notSet} />

@@ -11,11 +11,7 @@ import {
   unknownStalenessFixture,
 } from './security-signal-fixture';
 
-/**
- * The digest is the one answer to "what is wrong and how bad": the card, the channel and the tests
- * all read it. These cases pin the counts the card shows, which item it names, and the one rule that
- * decides whether a fact is allowed to start a message.
- */
+/** Pins the counts, the named item, and the one rule that lets a fact start a message. */
 describe('security digest', () => {
   it('counts what the card shows and names the worst and the longest-standing item', () => {
     const digest = buildSecurityDigest(
@@ -37,8 +33,7 @@ describe('security digest', () => {
     expect(digest.counts.unwaivedHigh).toBe(1);
     expect(digest.counts.expiredWaivers).toBe(1);
     expect(digest.counts.staleImages).toBe(1);
-    // The waiver lapsed 24 days ago and the critical was first seen 54 days ago, so the critical is
-    // the older of the two unowned items and the only one named as "oldest".
+    // The critical is the older unowned item, so it is the one named as oldest.
     expect(digest.worst?.label).toBe('rootfs glibc');
     expect(digest.worst?.detail).toContain('CRITICAL');
     expect(digest.worst?.detail).toContain('no waiver');
@@ -67,9 +62,7 @@ describe('security digest', () => {
       'finding:rootfs:CVE-2026-1|openssl',
       'stale:backup',
     ]);
-    // HIGH, the aged MEDIUM and the drifted image are context for a message, never a reason to send
-    // one: see the module comment in lib/security/signal.ts. They are counted, not listed: a rider
-    // is only ever rendered as a number, so the digest must not walk the feed to enumerate them.
+    // Riders are context, never a reason to send; they are counted, not listed.
     expect(digest.riderCounts).toEqual({
       unwaivedHigh: 1,
       aged: 1,
@@ -89,8 +82,7 @@ describe('security digest', () => {
       NOW,
     );
 
-    // One item, one line in the message: the lapsed decision is the actionable fact, and the finding
-    // it covered still shows up in the count because an expired waiver suppresses nothing.
+    // The lapsed decision is the actionable fact, and the finding it covered still counts.
     expect(digest.triggers.map((fact) => fact.key)).toEqual(['waiver:5:expired']);
     expect(digest.counts.unwaivedCritical).toBe(1);
   });
@@ -113,8 +105,7 @@ describe('security digest', () => {
   it('reports a reading it could not take as a trigger, never as a healthy one', () => {
     const digest = buildSecurityDigest(makeSignalFacts([], []), unknownStalenessFixture(), NOW);
 
-    // Not "act": there is no finding to act on, and a card that shouts "needs attention" beside an
-    // empty finding list sends the operator looking for something that is not there.
+    // No finding to act on: a card shouting for attention beside an empty list sends the operator hunting.
     expect(digest.tone).toBe('unevaluable');
     expect(digest.triggers.map((fact) => fact.key)).toEqual([
       'cannot-evaluate:backup',
@@ -147,8 +138,7 @@ describe('security digest', () => {
       NOW,
     );
 
-    // A live waiver still suppresses the critical (so nothing pushes), yet the review date is inside
-    // the warning window, which is exactly the planning fact the page exists for.
+    // A live waiver suppresses the push, and the review date inside the window is the planning fact.
     expect(digest.triggers).toEqual([]);
     expect(digest.riderCounts.expiringWaivers).toBe(1);
     expect(digest.counts.expiringWaivers).toBe(1);

@@ -9,8 +9,7 @@ import { readRecordOrNotFound, parseRecordId } from '@/lib/queries/record-access
 import { DetailPage } from '@/components/patterns/DetailPage';
 import { UserProfileTab } from '@/components/users/UserProfileTab';
 
-// Why: a value the record does not carry is shown as the panel's missing mark rather than as an
-// empty cell, so "no email on file" cannot be read as "the field did not load".
+// A value the record does not carry reads as the panel's missing word, so it cannot be mistaken for a field that failed to load.
 
 async function authorizeUserTab(routeId: RouteId): Promise<ReadonlySet<string>> {
   const route = ROUTE_REGISTRY.find((candidate) => candidate.id === routeId);
@@ -47,13 +46,8 @@ export default async function UserProfilePage({ params }: { params: Promise<{ lo
   const copy = dictionary.users.profile;
   return (
     <DetailPage
-      // The record shell above renders the username, the trail and the tabs; the profile is one
-      // record's values, so the layout's fact strip carries them and the tab keeps only what the
-      // strip cannot: the saved password and the one action that reads it.
       ownsHeader={false}
-      // Why only five values: the shell's header already prints the status, the organization, the
-      // country and the participation count, so listing them again would be a second copy of a
-      // fact the reader has just read. These five are what the profile adds to that header.
+      // The shell's header already prints these facts, so the profile lists only what it adds.
       facts={[
         { term: copy.name, value: orMissing(`${profile.firstName} ${profile.lastName}`.trim(), dictionary.common.notSet) },
         { term: copy.email, value: orMissing(profile.email, dictionary.common.notSet) },

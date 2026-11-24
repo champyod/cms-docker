@@ -14,8 +14,7 @@ type TaskRouteProps = {
   params: Promise<{ locale: string; id: string }>;
 };
 
-// Why: the reader enforces the same keys, but the page must resolve the exact
-// registry route first so a disabled or narrowed descriptor 404s before data.
+// The page resolves the registry route itself so a disabled or narrowed descriptor 404s before the data is read.
 async function authorizeTaskTab(routeId: RouteId): Promise<ReadonlySet<string>> {
   const route = ROUTE_REGISTRY.find((candidate) => candidate.id === routeId);
   if (!route || !route.enabled) notFound();
@@ -47,13 +46,10 @@ export default async function TaskDatasetsPage({ params }: TaskRouteProps): Prom
   const dictionary = await getDictionary(locale);
   const facts = dictionary.tasks.datasets;
   const data = await readRecordOrNotFound(() => getTaskDatasets(taskId));
-  // Why the testcase count over the datasets array rather than a second read: both numbers come from
-  // the same projection, so a count that could disagree with the rows is a count nobody can check.
+  // Both numbers come from the same projection, so a second read could disagree with the rows.
   const testcases = data.datasets.reduce((total, dataset) => total + dataset.testcases.length, 0);
   return (
     <DetailPage
-      // The record shell above renders the task's name, its trail and its tabs; the rail says
-      // Datasets, so this page states which datasets exist and how the live one is chosen.
       ownsHeader={false}
       facts={[
         { term: facts.datasets, value: formatCount(data.datasets.length, locale) },

@@ -9,8 +9,7 @@ import { useActionFeedback } from '@/hooks/useActionFeedback';
 
 const FIELD_CLASSES = 'w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring';
 
-// Why one wrapper: the dialog stacks three labelled controls, and a per-field
-// label block is the only thing that differs between them.
+// The dialog stacks three labelled controls; a per-field label block is all that differs.
 function DialogField({ id, label, children }: { id: string; label: string; children: React.ReactNode }): React.JSX.Element {
   return (
     <div className="space-y-1.5">
@@ -29,8 +28,7 @@ export function CreateLaneDialog({ items, laneNames, onClose, onDone }: { items:
   const handleCreate = async (): Promise<void> => {
     setBusy(true);
     try {
-      // Why a seed submission is required: lanes persist only as audit rows, so a
-      // lane with no submission cannot be recorded — creation is a move to a new name.
+      // Lanes persist only as audit rows, so a lane with no submission cannot be recorded.
       const outcome = await runAction(
         { pending: 'Creating lane…', success: 'Lane created', failure: 'Lane creation failed' },
         () => moveEvaluationLane(Number(submissionId), name.trim(), reason.trim()),

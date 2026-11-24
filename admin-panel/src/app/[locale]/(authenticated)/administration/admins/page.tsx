@@ -8,8 +8,7 @@ import { authorizeRoutePage } from '@/lib/navigation/page-authorization';
 import { hasEffectivePermission } from '@/lib/permission-engine';
 
 function adminCapabilities(effective: ReadonlySet<string>): AdminCapabilities {
-  // Why: capabilities come from the caller's own effective keys, never from the
-  // route gate, so the control surface matches what each server action allows.
+  // Capabilities come from the caller's own effective keys, not the route gate, so the controls match what each action allows.
   return {
     canCreate: hasEffectivePermission(effective, 'admin:create'),
     canUpdate: hasEffectivePermission(effective, 'admin:update'),
@@ -19,14 +18,6 @@ function adminCapabilities(effective: ReadonlySet<string>): AdminCapabilities {
   };
 }
 
-/**
- * The administrators, one record kind with one row shape.
- *
- * WHY a list and not a board: the page's second table of facts — the groups each admin holds and
- * the overrides written for them — is read per admin and lands in that admin's own row. A board
- * section for it would either repeat the rows or pull the groups out of the row that names the
- * person they belong to, and neither tells the operator anything the joined table does not.
- */
 export default async function AdminsPage({
   params,
   searchParams,

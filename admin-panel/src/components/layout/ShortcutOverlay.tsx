@@ -22,10 +22,7 @@ export interface ShortcutRouteBinding {
   readonly href: string;
 }
 
-// Why the join lives here and not in the hook: the chord layer knows only the key
-// and the frozen route id, because a module under `hooks/` must not reach into
-// `components/` to resolve a label. This is the one component that renders a
-// chord list, so this is the one place the presentation needs resolving.
+// A module under hooks must not reach into components, so the label join lives here.
 function useShortcutBindings(
   permissionKeys: readonly string[],
 ): readonly ShortcutRouteBinding[] {

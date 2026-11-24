@@ -10,16 +10,6 @@ import {
 import { getDictionary } from '@/i18n';
 import { authorizeRoutePage } from '@/lib/navigation/page-authorization';
 
-/**
- * The deployed contest stack: which contest each shard serves, the values the stack starts with, and
- * the workers behind it.
- *
- * WHY a board: three record kinds that are not the same record and do not save together - a registry
- * binding per shard, the stack's config.toml values, and the worker fleet - plus one state that
- * belongs to all of them: a deploy in flight, or three sources that disagree about which contest is
- * running. Settings would have claimed one save bar for two independent writes; a list would have had
- * to invent one row set.
- */
 export default async function InfrastructureDeploymentsPage({
   params,
 }: {

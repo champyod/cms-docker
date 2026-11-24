@@ -32,13 +32,10 @@ export default async function SubmissionHistoryPage({ params }: { params: Promis
   const dictionary = await getDictionary(locale);
   const history = await getSubmissionHistory(id);
   const copy = dictionary.submissions.record;
-  // Why the newest entry and not a count: the log returns at most one page of entries, so a total
-  // would be a claim about rows the read never asked for. The latest change is exact either way.
+  // The read returns one page of entries, so a total would claim rows it never asked for.
   const latest = history.success ? history.data[0] : undefined;
   return (
     <DetailPage
-      // The record shell above renders the submission's name, its trail, its status and its tabs;
-      // the tab rail already names this section, so the tab adds only the latest change and the trail.
       ownsHeader={false}
       facts={[
         { term: copy.history.actor, value: latest?.actor_name ?? dictionary.common.notSet },

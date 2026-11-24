@@ -76,14 +76,12 @@ export function BackupSelectionSection({ onBackupComplete, locationId }: BackupS
     const handleToggle = (name: string) => {
         setSelected((current) => {
             const next = current.includes(name) ? current.filter((entry) => entry !== name) : [...current, name];
-            // Required tables come back automatically, so deselecting the last consumer
-            // of the large-object subtree is not a two-step act the user has to know about.
+            // Required tables come back automatically, so deselecting the last consumer is not a two-step act.
             return withRequiredTables(next);
         });
     };
 
-    // The dump the server runs is this list, the required tables included: what the
-    // confirmation dialog names and what pg_dump receives are the same set.
+    // The confirmation dialog and pg_dump receive the same set, the required tables included.
     const orderedSelection = useMemo(() => withRequiredTables(selected), [selected]);
     const validation = useMemo(() => validateTableSelection([...orderedSelection]), [orderedSelection]);
 

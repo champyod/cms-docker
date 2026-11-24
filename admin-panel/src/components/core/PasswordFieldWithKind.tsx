@@ -70,8 +70,7 @@ interface SavedPasswordFieldProps {
   reveal: RevealProps;
 }
 
-/** Why the request is latched in a ref: the secret arrives once per mount, and a
- * ref keeps a Hide/Reveal pair from re-arming the fetch on every reopen. */
+/** The secret arrives once per mount; the ref keeps a Hide and Reveal pair from re-arming the fetch. */
 function useSavedPasswordReveal(reveal: RevealProps) {
   const [isRevealed, setIsRevealed] = useState(false);
   const hasRequestedRef = useRef(false);

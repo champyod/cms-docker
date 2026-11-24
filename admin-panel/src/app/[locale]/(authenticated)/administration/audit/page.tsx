@@ -25,17 +25,6 @@ interface AuditSearchParams {
   live?: string;
 }
 
-/**
- * Every recorded action, one row kind, narrowed by the request.
- *
- * WHY a list: the log is one record shape read in one order, and every control on it — the filters,
- * the count, the page number — narrows or describes that one set instead of introducing a second
- * one. A board would need independent record kinds it does not have.
- *
- * WHY the filters, the footer and the table are three components: the list layout decides where each
- * sits, so each supplies its facts and none of them draws a frame of its own. The narrowing and the
- * page number live in the address, so a filtered view is a link somebody can send and keep.
- */
 export default async function AuditPage({
   params,
   searchParams,
@@ -49,8 +38,7 @@ export default async function AuditPage({
   const query = await searchParams;
   const page = Number(query.page) || 1;
   const sort = readListSort({ sort: query.sort, dir: query.dir });
-  // The narrowing the rows were read with; the controls start from it and the export repeats it, so
-  // the file cannot describe a different set than the table above it.
+  // The export repeats this narrowing, so the file can only describe the set the rows were read with.
   const filters: AuditFilterValues = {
     entity: query.entity,
     verb: query.verb,
@@ -77,8 +65,7 @@ export default async function AuditPage({
     sort,
   });
   if (!result.success) {
-    // No rows were read, so there is nothing to lay out: a list here would print "no entries" over
-    // a failed read and claim the log holds none.
+    // A failed read is not an empty log, so the empty list is not rendered over it.
     return (
       <SurfaceState
         status={{

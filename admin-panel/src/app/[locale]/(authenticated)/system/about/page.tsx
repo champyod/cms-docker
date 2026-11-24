@@ -16,8 +16,7 @@ import type { CreditsAsset } from '@/lib/credits';
 
 type AboutCopy = Dictionary['about'];
 
-// Why a token and not a palette step: this page is declared, so it has to be measurable in light,
-// dark and high contrast - an indigo literal looks the same in all three.
+// A token, not a palette step: the page must stay readable in light, dark and high contrast.
 const EXTERNAL_LINK = 'text-foreground underline decoration-border underline-offset-2 hover:decoration-foreground';
 
 function ExternalLink({ href, children }: { readonly href: string; readonly children: string }) {
@@ -78,14 +77,6 @@ function AssetsTable({ assets, copy, missing }: { readonly assets: readonly Cred
   );
 }
 
-/**
- * The panel's own record: what it is, who wrote it, what it carries.
- *
- * WHY a detail: the page describes one record - this panel - with a handful of values and three
- * sections that belong to it. There is nothing to list, nothing to count and nothing to change, so
- * the only layout whose shape the page actually has is the one that leads with the values and then
- * shows what belongs to them.
- */
 export default async function SystemAboutPage({
   params,
 }: {

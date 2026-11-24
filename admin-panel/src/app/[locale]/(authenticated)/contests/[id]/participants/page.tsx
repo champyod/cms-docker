@@ -14,8 +14,7 @@ type ContestRouteProps = {
   params: Promise<{ locale: string; id: string }>;
 };
 
-// Why: the reader enforces the same keys, but the page must resolve the exact
-// registry route first so a disabled or narrowed descriptor 404s before data.
+// The page resolves the registry route itself so a disabled or narrowed descriptor 404s before the data is read.
 async function authorizeContestTab(routeId: RouteId): Promise<ReadonlySet<string>> {
   const route = ROUTE_REGISTRY.find((candidate) => candidate.id === routeId);
   if (!route || !route.enabled) notFound();
@@ -50,9 +49,6 @@ export default async function ContestParticipantsPage({ params }: ContestRoutePr
           rows: <ContestParticipantsTab data={data} />,
         },
         {
-          // Why its own section: a participation and a roster row are different records that
-          // answer different questions, and each has its own meaning of empty. Filing them under
-          // one heading made the roster read as more participants.
           key: 'roster',
           title: dictionary.contests.roster.title,
           description: dictionary.contests.roster.description,

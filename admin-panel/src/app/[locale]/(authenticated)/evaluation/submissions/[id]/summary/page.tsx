@@ -28,12 +28,10 @@ export default async function SubmissionSummaryPage({ params }: { params: Promis
   const { locale, id: rawId } = await params;
   const id = parseRecordId(rawId);
   if (id === null) notFound();
-  // Why the keys reach the tab: the summary renders links to the outcome tabs, so
-  // it must know which of them this caller may open.
+  // The summary renders links to the outcome tabs, so it must know which of them this caller may open.
   const effective = await authorizeSubmissionTab('evaluation.submission-tabs.summary');
   const dictionary = await getDictionary(locale);
-  // Why the source read is not wrapped in readRecordOrNotFound: storing no file is
-  // a valid record, so a null source renders as an empty viewer rather than a 404.
+  // A null source is a valid record, so it renders an empty viewer rather than a 404.
   const [summary, source, previous] = await Promise.all([
     readRecordOrNotFound(() => getSubmissionSummary(id)),
     getSubmissionSource(id),
@@ -42,8 +40,6 @@ export default async function SubmissionSummaryPage({ params }: { params: Promis
   const copy = dictionary.submissions.record;
   return (
     <DetailPage
-      // The record shell above renders the submission's name, its trail, its status and its tabs.
-      // This tab adds the values the shell does not show, then the source and the outcome links.
       ownsHeader={false}
       facts={[
         { term: copy.identity.language, value: summary.language ?? dictionary.common.notSet },

@@ -30,8 +30,7 @@ interface Props {
   onRefresh: () => void;
 }
 
-// Why: task assignment is a write action — readers without task:update see
-// the roster but never a dead Add/Remove affordance.
+// Assignment is a write action, so readers without task:update never see a dead Add or Remove.
 function useCanManageTasks(permissionKeys: readonly string[]): boolean {
   return hasEffectivePermission(new Set(permissionKeys), 'task:update');
 }
@@ -91,22 +90,7 @@ function TaskRow({
   );
 }
 
-/**
- * The contest's task roster, with the bulk attach/detach the day-2 setup needs.
- *
- * WHY no section card of its own: the list layout draws the frame, and this component is the rows
- * inside it. The count it used to carry in a header now sits in the page's footer, where the reader
- * compares it with the filtered set.
- *
- * WHY the filter drives the list and the header cell selects what the filter matches: a contest's
- * roster is read one task at a time today, and attaching or detaching a term's worth of tasks one
- * row at a time is the manual work this surface exists to end. The select-all box walks the
- * filtered set, so it never reaches a row the operator's filter hid.
- *
- * WHY the detach reports a named refusal instead of a count: the write refuses the whole selection
- * when any named task is not on the contest, so the operator reads which row stopped it rather than
- * a batch that quietly covered fewer rows than they selected.
- */
+/** The select-all walks the filtered set, and the detach reports which named task stopped the whole write. */
 export function ContestTasksSection({
   contestId,
   tasks,

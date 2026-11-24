@@ -37,11 +37,7 @@ function taskScore(entry: RankingUserEntry, task: RankingTask, missing: string):
   return value === undefined ? missing : value.toFixed(task.scorePrecision);
 }
 
-/**
- * WHY the contest predicate is still here: the query is already scoped, but this helper also
- * filters by target kind and key, and keeping the contest predicate makes it correct on its own
- * rather than only when its caller has already narrowed the list.
- */
+/** The helper stays correct on its own, not only when its caller has already narrowed the list. */
 function userOverrides(
   overrides: readonly RankingOverride[],
   entry: RankingUserEntry,
@@ -122,13 +118,6 @@ function OverrideCard({ copy, entry, options, overrides, canOverride }: Override
   );
 }
 
-/**
- * One participant's row, opened.
- *
- * WHY a detail and not a list: the page is about a single record — a participation in a contest —
- * and its six values are read as a fact strip rather than as the first table on the page. The
- * scores and the overrides are sections belonging to that record, not further rows of one set.
- */
 export default async function RankingUserDetailPage({
   params,
 }: {

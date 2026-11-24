@@ -7,16 +7,6 @@ import { withBasePath } from '@/lib/base-path';
 import { buildRoute } from '@/lib/navigation/routes';
 import { authorizeRoutePage } from '@/lib/navigation/page-authorization';
 
-/**
- * How the panel looks: the scoreboard's logo, the values config.toml holds, and this screen's own
- * density.
- *
- * WHY settings and not a tabbed workspace: the three areas are read in sequence and each reaches a
- * different audience - the logo reaches every visitor of the scoreboard, the service values describe
- * the whole host, the display choices reach only this browser - which is exactly the question the
- * settings layout forces each group to answer before the reader flips anything. The tabs hid that
- * difference behind a click.
- */
 export default async function SystemAppearancePage({
   params,
 }: {
@@ -25,9 +15,7 @@ export default async function SystemAppearancePage({
   const { locale } = await params;
   await authorizeRoutePage('system.appearance');
   const [dict, toml] = await Promise.all([getDictionary(locale), readConfigToml()]);
-  // Why the read fails the page rather than emptying the group: "no value" and "could not read" look
-  // the same in a list of dashes, and this page's whole job is to state what the host is configured
-  // with. The module's error boundary says which one happened.
+  // A failed read fails the page: no value and could not read must not look the same here.
   if (!toml.success) throw new Error(toml.error);
 
   const groups: readonly SettingsGroup[] = [

@@ -12,8 +12,7 @@ type ContestRouteProps = {
   params: Promise<{ locale: string; id: string }>;
 };
 
-// Why: the reader enforces the same keys, but the page must resolve the exact
-// registry route first so a disabled or narrowed descriptor 404s before data.
+// The page resolves the registry route itself so a disabled or narrowed descriptor 404s before the data is read.
 async function authorizeContestTab(routeId: RouteId): Promise<ReadonlySet<string>> {
   const route = ROUTE_REGISTRY.find((candidate) => candidate.id === routeId);
   if (!route || !route.enabled) notFound();
@@ -41,10 +40,6 @@ export default async function ContestRankingPage({ params }: ContestRouteProps):
       sections={[
         {
           key: 'standings',
-          // Why a section and not a list: the board is read-only — no filter, no per-row action and
-          // no total of its own to fill a list's slots with — and the contest's own values are
-          // already the shell's, so a detail would only repeat them. What the reader gets is one
-          // table whose empty meaning ("no submissions yet") the table states itself.
           title: copy.title,
           description: copy.description,
           rows: <ContestRankingTab contestId={contestId} />,

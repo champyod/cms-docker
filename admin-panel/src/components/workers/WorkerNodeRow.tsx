@@ -50,8 +50,7 @@ export function WorkerNodeRow(props: WorkerNodeRowProps): ReactElement {
   const { index, row, canManage, onRemove } = props;
   const live = row.live;
   const [expanded, setExpanded] = useState(false);
-  // Why: a row the live stream names but the configuration does not carry has no entry for
-  // Remove or Edit to act on, so both would look functional and write nothing.
+  // A row the stream names but the configuration does not carry has no entry to act on, so both controls would write nothing.
   const editable = canManage && row.configured;
 
   return (

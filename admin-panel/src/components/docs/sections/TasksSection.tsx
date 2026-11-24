@@ -2,13 +2,7 @@
 
 import { Terminal } from 'lucide-react';
 
-/**
- * What a task, its datasets and its scoring are.
- *
- * WHY the panels are bordered divs and not Cards: the board already frames this section, so a Card
- * here would be a card inside a card. The three headings that used to be a second colour are plain
- * foreground, because the page is measured in four modes and a palette step is not.
- */
+/** Bordered divs, not Cards: the board already frames this section. */
 export function TasksSection(): React.JSX.Element {
   return (
     <div className="space-y-4">

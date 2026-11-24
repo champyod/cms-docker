@@ -1,8 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-// Why a store and not call assertions: the contract is about what a human was told. The facts are
-// counted through the real read path, so the store has to answer what that path asks: aggregates,
-// bounded row lists, the waiver table and the ingest ledger.
+// The contract is what a human was told; the store answers what the real read path asks.
 
 type Row = Record<string, unknown>;
 

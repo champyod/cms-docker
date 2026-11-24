@@ -13,8 +13,7 @@ import {
 
 export type ContestOverviewTabProps = { data: ContestOverviewData };
 
-// Why: the overview owns only timing — sending the full form would clobber
-// settings fields this reader never loads, so the payload is picked narrowly.
+// The overview owns only timing; the full form would clobber fields this reader never loads.
 function buildOverviewPayload(form: ContestSettingsFormState): Partial<ContestData> {
   return {
     start: form.start,

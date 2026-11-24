@@ -63,8 +63,7 @@ export function ContestList({ initialContests, permissionKeys, initialSort }: Co
 
   const contestIds = useMemo(() => contests.map((contest) => contest.id), [contests]);
   const selection = useListSelection('contests.list', contestIds);
-  // Why the header reloads through this registration: its create dialog renders in the page
-  // header, outside this component, and only this component knows the current query.
+  // The create dialog renders in the page header, and only this component knows the current query.
   const refreshList = useCallback((): void => { router.refresh(); }, [router]);
   useRegisterContestListRefresh(refreshList);
 
@@ -85,8 +84,7 @@ export function ContestList({ initialContests, permissionKeys, initialSort }: Co
     router.push(buildRoute(locale, 'contests.record', { id }));
   }, [router, locale]);
 
-  // Why: one column definition drives desktop rows and mobile cards, so
-  // the two layouts cannot drift apart.
+  // One column definition drives the desktop rows and the mobile cards, so the two layouts cannot drift.
   const columns = useMemo(
     () => [
       buildSelectionColumn<ContestRowData>({

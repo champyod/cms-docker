@@ -26,9 +26,7 @@ async function authorizeSubmissionTab(routeId: RouteId): Promise<ReadonlySet<str
   }
 }
 
-// Why a numeric outcome decides the count: the evaluation service writes a verdict as a score
-// ("1.0", "0.0"), so only a readable zero is a failure. A null outcome is still running and a
-// non-numeric manager verdict is not this page's to judge, and both are counted as neither.
+// A readable zero is the only failure; a null outcome is still running and a non-numeric verdict is not this page's to judge.
 function failedCount(model: SubmissionEvaluationModel): number {
   return model.evaluations.filter((row) => {
     if (row.outcome === null) return false;
@@ -47,8 +45,6 @@ export default async function SubmissionEvaluationPage({ params }: { params: Pro
   const copy = dictionary.submissions.record;
   return (
     <DetailPage
-      // The record shell above renders the submission's name, its trail, its status and its tabs.
-      // This tab adds how the run went overall, then the per-testcase rows.
       ownsHeader={false}
       facts={[
         { term: copy.evaluation.testcases, value: formatCount(model.evaluations.length, locale) },

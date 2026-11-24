@@ -4,14 +4,6 @@ import { MonitorConfigSection } from '@/components/settings/MonitorConfigSection
 import { getDictionary } from '@/i18n';
 import { authorizeRoutePage } from '@/lib/navigation/page-authorization';
 
-/**
- * The two things this page changes, and who each change reaches.
- *
- * WHY the environment is one group and not one group per config section: the sections inside
- * `EnvConfigView` save themselves, one file at a time, so the page cannot speak for them with a
- * single save bar. What it can state once is the reach of a save, which every section shares -
- * and that is the question a reader arrives with.
- */
 const ENVIRONMENT: Omit<SettingsGroup, 'children'> = {
   key: 'environment',
   title: 'Environment',

@@ -172,8 +172,7 @@ export function TaskModal({ isOpen, onClose, task, onSuccess, permissionKeys }: 
         return;
       }
       const savedTaskId = task ? task.id : (typeof result.id === 'number' ? result.id : undefined);
-      // The task is already saved, so a statement failure is reported without
-      // blocking the close — the file can be re-added from the Overview tab.
+      // The task is already saved, so a statement failure is reported without blocking the close.
       if (savedTaskId !== undefined && statementQueue.length > 0) {
         const { failed } = await uploadStatements(savedTaskId, statementQueue);
         if (failed.length > 0) toast.error(`Task saved, but these statements failed: ${failed.join(', ')}`);
@@ -199,8 +198,7 @@ export function TaskModal({ isOpen, onClose, task, onSuccess, permissionKeys }: 
 
   if (!isOpen) return null;
 
-  // Why the guard: a submit already in flight cannot be recalled, so cancelling
-  // through it would close the dialog over an unresolved save.
+  // A submit in flight cannot be recalled, so cancelling through it would close over an unresolved save.
   const cancel = (): void => {
     if (!loading) onClose();
   };

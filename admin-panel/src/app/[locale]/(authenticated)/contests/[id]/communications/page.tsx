@@ -12,9 +12,7 @@ type ContestRouteProps = {
   params: Promise<{ locale: string; id: string }>;
 };
 
-// Why: the communications reader is client-fetched, but the page still gates
-// every all-of read key first so announcements, questions, and ranking stay
-// hidden from partial readers before any admin identity resolves.
+// The page resolves the registry route itself so a disabled or narrowed descriptor 404s before the data is read.
 async function authorizeContestTab(routeId: RouteId): Promise<ReadonlySet<string>> {
   const route = ROUTE_REGISTRY.find((candidate) => candidate.id === routeId);
   if (!route || !route.enabled) notFound();
@@ -43,9 +41,6 @@ export default async function ContestCommunicationsPage({ params }: ContestRoute
       ownsHeader={false}
       sections={[
         {
-          // Why an announcement and a question are two sections and not two tabs of one: they are
-          // different records with different actions and different meanings when empty, and a tab
-          // rail inside a page that already has one hid half the contest's messages behind a click.
           key: 'announcements',
           title: 'Announcements',
           description: 'What was published to every contestant of this contest, newest first.',

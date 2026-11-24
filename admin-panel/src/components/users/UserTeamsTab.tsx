@@ -44,13 +44,6 @@ function MembershipRow({ membership, copy, missing, locale }: {
   );
 }
 
-/**
- * The team each of this user's participations was made under, one row per membership.
- *
- * Why no card and no heading of its own: the list layout draws the frame and the tab rail above
- * already names the section, so the card here was a box inside a box and the heading a second copy
- * of the tab label.
- */
 export function UserTeamsTab({ memberships, copy, missing, locale }: UserTeamsTabProps): React.JSX.Element {
   return (
     <div className="divide-y divide-border">

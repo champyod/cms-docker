@@ -8,13 +8,7 @@ export interface RankingShardTabsProps {
   readonly copy: Dictionary['ranking']['overrides'];
 }
 
-/**
- * The shard strip: one tab per shard, each naming the contest its own rows bind.
- *
- * WHY hidden at one shard: a single-tab strip offers no switch, so it only tells the reader the
- * deployment has one board where the page already shows exactly that. WHY the tab carries the
- * contest name: the operator picks the board by what it serves, not by a shard index.
- */
+/** Hidden at one shard: a single tab offers no switch the page does not already show. */
 export function RankingShardTabs({ shards, activeShard, copy }: RankingShardTabsProps): React.JSX.Element | null {
   if (shards.length < 2) return null;
   return (

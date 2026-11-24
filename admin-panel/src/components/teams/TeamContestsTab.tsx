@@ -13,8 +13,7 @@ export interface TeamContestsTabProps {
   readonly missing: string;
 }
 
-// Why: a contest whose id is not readable must not become a link, because the
-// canonical record route can only be built from a readable id.
+// A contest whose id is not readable must not become a link: the record route needs a readable id.
 function contestHref(locale: 'en' | 'th', contest: TeamContest): string | null {
   if (contest.id === null) return null;
   return buildRoute(locale, 'contests.tabs.overview', { id: contest.id });
@@ -42,18 +41,11 @@ function ContestRow({ contest, locale, missing }: { readonly contest: TeamContes
   );
 }
 
-/**
- * The contests this team entered, one row each, with the contest open on the right.
- *
- * Why no card and no heading: the list layout draws the frame and the tab rail above already names
- * the section, so the card was a box inside a box and the heading a second copy of that label.
- */
 export function TeamContestsTab({ contests, locale, missing }: TeamContestsTabProps): React.JSX.Element {
   return (
     <div className="divide-y divide-border">
       {contests.map((contest, index) => (
-        // Why: a field-filtered contest may carry no id, so the row position
-        // joins the readable key instead of relying on it alone.
+        // A field-filtered contest may carry no id, so the row position joins the readable key.
         <ContestRow key={`${contest.id ?? contest.name ?? 'contest'}-${index}`} contest={contest} locale={locale} missing={missing} />
       ))}
     </div>

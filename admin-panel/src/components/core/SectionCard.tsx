@@ -13,10 +13,7 @@ export interface SectionCardProps {
   readonly count?: number;
   /** What this section answers, when the title alone would leave it ambiguous. */
   readonly description?: React.ReactNode;
-  /**
-   * A promise about the section rather than a description of it - who a change reaches, what a save
-   * covers. Settings groups need it; a board section rarely does.
-   */
+  /** A promise about the section: who a change reaches, what a save covers. */
   readonly note?: React.ReactNode;
   /** Present together with `onToggle` to make the section collapsible; absent for a plain section. */
   readonly expanded?: boolean;
@@ -26,20 +23,7 @@ export interface SectionCardProps {
   readonly className?: string;
 }
 
-/**
- * One section of a page: its title, what it answers, its own actions and its content, inside the
- * card the panel uses for a section.
- *
- * The heading level and the title's size live here, so a section title cannot be an h3 on one page
- * and an h2 on the next - and the collapsible and plain modes cannot disagree about it either.
- *
- * The heading carries the title and nothing else. The count and the description are siblings of the
- * heading, because anything inside it joins its accessible name: a reader navigating by headings
- * would otherwise hear "Statements (12) No statements uploaded yet" as the name of the section.
- *
- * The body owns its padding. The header already pays for the top, so content never sits flush
- * against the card edge and no caller has to compensate for it.
- */
+/** The count and description stay out of the heading: anything inside joins its accessible name. */
 export function SectionCard({
   title,
   icon,

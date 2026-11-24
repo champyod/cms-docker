@@ -39,8 +39,7 @@ function ParticipationChips({ participation, copy }: {
   );
 }
 
-// Why: rows without a linked user still render — the reader types user as
-// nullable, so labels fall back instead of crashing on a missing relation.
+// Rows without a linked user still render: the reader types user as nullable.
 function ParticipationIdentity({ participation }: { participation: Participation }): React.JSX.Element {
   const username = participation.users?.username || 'Unknown participant';
   const fullName = participation.users ? `${participation.users.first_name} ${participation.users.last_name}`.trim() : '';
@@ -70,12 +69,6 @@ function ParticipantActions({ participation, permissionKeys, onMarkAsTest, onOpe
   );
 }
 
-/**
- * The contest's participation rows, with the gated invite controls above them.
- *
- * Why no section card of its own: the board layout draws a card per section with the section's
- * title and the meaning of its rows, so the header this component used to carry is the layout's.
- */
 export function ContestParticipantsSection({
   participations,
   permissionKeys,

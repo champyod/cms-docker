@@ -16,12 +16,7 @@ export interface AuditFilterValues {
   toDate?: string;
 }
 
-/**
- * The rows the page hands its table.
- *
- * WHY no count and no page number: those describe the request, and the list layout prints them in
- * the footer it owns. A table carrying them would be a second place they could disagree.
- */
+/** The count and page number belong to the layout's footer; a table carrying them is a second place they could disagree. */
 export interface AuditTableProps {
   entries: AuditLogRow[];
   dict: AuditDict;

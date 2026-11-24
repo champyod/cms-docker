@@ -31,16 +31,7 @@ export interface ModePageProps extends Omit<PageSlots, 'children'> {
   readonly ownsHeader?: boolean;
 }
 
-/**
- * The modes layout: one page that is several mutually exclusive workflows, only one of which is on
- * screen at a time.
- *
- * It exists because a page like backup and restore holds five flows that must never be shown
- * together - two of them restore over live data - and no other layout can say "these are exclusive".
- * A board would stack all five; settings would claim they save together; a list has no single row
- * set. The switcher is a set of links rather than client state, so a mode is an address: it survives
- * a reload, it can be sent to a colleague, and the browser's back button works.
- */
+/** Mutually exclusive workflows; the switcher is links, so a mode is an address that survives a reload. */
 export function ModePage({
   breadcrumbs,
   title,
@@ -55,8 +46,7 @@ export function ModePage({
   children,
   ownsHeader = true,
 }: ModePageProps): React.JSX.Element {
-  // A key the list does not contain highlights no tab at all, which reads as a broken switcher
-  // rather than as a mode that does not exist.
+  // A key the list does not contain highlights nothing, which reads as a broken switcher.
   if (process.env.NODE_ENV !== 'production' && modes.length > 0 && !modes.some((mode) => mode.key === activeKey)) {
     throw new Error(`ModePage: activeKey "${activeKey}" is not one of the modes this page lists`);
   }

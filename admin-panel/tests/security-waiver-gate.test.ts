@@ -62,8 +62,7 @@ describe('waiver export boundary', () => {
     expect(parsed.value.waivers[0].reason).toBe('no fixed release');
   });
 
-  // The column refuses a waiver without a date; this is the same rule at the file boundary, where
-  // a human can edit the document the gate reads.
+  // The same rule at the file boundary, where a human can edit the document the gate reads.
   it('refuses a waiver with no review date, no reason, no owner or no match', () => {
     const base = {
       version: 1,

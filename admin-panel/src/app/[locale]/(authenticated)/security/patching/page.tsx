@@ -16,20 +16,7 @@ function counted(template: string, count: number): string {
   return template.replace('{count}', String(count));
 }
 
-/**
- * The patching page: one page of the feed, and the numbers for the whole of it.
- *
- * WHY the query comes off `searchParams` and not from client state: the page is a server component,
- * so the filters, the sort and the page number have to be part of the request for the database to
- * apply them. That also makes every view of this table a link somebody can send.
- *
- * WHY the paged action and not `readPatchingState`: the overview's read builds the digest, and the
- * digest is about the whole feed — computing it here would put a dozen aggregate queries behind a
- * page that renders none of them.
- *
- * WHY the rows, the controls and the arithmetic are three components: the list layout decides where
- * each of the three sits, so each one supplies its facts and none of them draws a frame of its own.
- */
+/** The page is a server component, so the filters, the sort and the page number must be part of the request. */
 export default async function SecurityPatchingPage({
   params,
   searchParams,
@@ -39,13 +26,11 @@ export default async function SecurityPatchingPage({
 }): Promise<React.JSX.Element> {
   const { locale } = await params;
   const query = await searchParams;
-  // The descriptor is the gate: it demands security:read + patching:read, so a reader
-  // missing either key is concealed as a 404 rather than shown an empty page.
+  // The descriptor demands security:read and patching:read, so a reader missing either is concealed as a 404.
   const effective = await authorizeRoutePage('security.patching');
   const [state, dict] = await Promise.all([readPatchingFindingsPage(query), getDictionary(locale)]);
   const copy = dict.security.patching;
-  // The newest report among the rows shown: the feed's own age, which is what tells a clean table
-  // from a producer that stopped pushing.
+  // The newest report among the shown rows is what tells a clean table from a producer that stopped pushing.
   const newest = state.groups
     .flatMap((group) => group.findings)
     .reduce<string | null>(
@@ -57,8 +42,6 @@ export default async function SecurityPatchingPage({
   ).toString();
   return (
     <ListPage
-      // The security module shell renders this page's name, description and trail from the
-      // navigation registry, so the page supplies its state, its rows and nothing else.
       ownsHeader={false}
       state={
         state.waivedReachable > 0

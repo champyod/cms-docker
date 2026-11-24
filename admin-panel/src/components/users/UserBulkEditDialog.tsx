@@ -52,8 +52,7 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, unavailable
     exportSelectedRows(`users-selected-${Date.now()}.csv`, buildEditExportCsv);
   };
 
-  // Why the guard: an apply already in flight cannot be recalled, so cancelling
-  // through it would close the dialog over an unresolved write.
+  // An apply in flight cannot be recalled, so cancelling through it would close over an unresolved write.
   const cancel = (): void => {
     if (!loading) onClose();
   };

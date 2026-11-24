@@ -1,40 +1,20 @@
 import crypto from 'crypto';
 
 import { SignJWT, jwtVerify, type JWTPayload } from 'jose';
-/*
- * WHY `next/headers` is imported lazily rather than at the top: this module is reached from the
- * Prisma client's actor resolution, and the client is loaded by processes that are not requests at
- * all — the permission seed, the backup scheduler, the CLI, the waiver export. A static import made
- * every one of them die with MODULE_NOT_FOUND the moment they touched the database, which is how
- * the first production seed failed after the migrations had already committed.
- */
+/* next/headers is imported lazily: the Prisma client is loaded by processes that are not requests. */
 
-/**
- * The session cookie: its name, the key that signs it, and the two operations on it.
- *
- * WHY this is its own module and not part of `auth.ts`: `auth.ts` reads the admin table to check
- * liveness, and a read needs a database actor — which is derived from this cookie. Keeping the
- * cookie entirely DB-free breaks that cycle: `db-actor.ts` imports this, `auth.ts` imports this and
- * the access layer, and neither reaches back into the other.
- *
- * The secret is created once, here. Two modules each generating their own random fallback would
- * sign and verify with different keys on a host with no AUTH_SECRET, and every session would read
- * as invalid the moment the two modules disagreed about who owned the cookie.
- */
+/** DB-free on purpose: db-actor derives from this cookie and auth.ts reads the admin table, so the cycle breaks here. */
 
 // Why: use 7-day session cookie but 2-hour JWT expiry so the session has to be re-signed on a timer
 export const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
 
-// Why: tokens hard-expire at 2h, so re-signing at half that age always leaves a presented
-// token more than half its life remaining while still sliding the 7-day cookie window
+// Re-signing at half the hard-expiry age always leaves more than half the token's life remaining.
 export const SESSION_REFRESH_INTERVAL_MS = 60 * 60 * 1000;
 
-// Why the name is configurable: two panels on one host — a /beta deployment beside the root one —
-// share a cookie namespace, and a name only one of them writes is what keeps their sessions apart.
+// Two panels on one host share a cookie namespace; the name keeps their sessions apart.
 export const SESSION_COOKIE_NAME = process.env.SESSION_COOKIE_NAME?.trim() || 'session';
 
-// Why: a clear must repeat the path the cookie was written with. Without it the browser
-// scopes the expiring cookie to the request directory and keeps the original session alive
+// A clear must repeat the path the cookie was written with, or the browser keeps the original alive.
 export const SESSION_COOKIE_PATH = '/';
 
 const secretKey = (() => {
@@ -79,14 +59,7 @@ export async function readSessionClaims(token: string): Promise<SessionClaims | 
   }
 }
 
-/**
- * The claims of the cookie on the request in flight, or null.
- *
- * WHY every failure is null: outside a request (a CLI run, a test, a background job) `cookies()`
- * throws, and inside one it returns an empty jar — both mean "no session here", which is exactly
- * what the caller needs to distinguish from a broken one. This function never has an opinion about
- * whether a database actor exists; that is `db-actor.ts`'s decision and its error to raise.
- */
+/** Outside a request cookies() throws and inside one it returns an empty jar; both mean no session here. */
 export async function readSessionClaimsFromCookies(): Promise<SessionClaims | null> {
   let token: string | undefined;
   try {

@@ -76,12 +76,7 @@ function ReachabilityCell({
   );
 }
 
-/**
- * A waiver row's review state, in the same vocabulary a finding's waiver column renders.
- *
- * WHY derived here and not stored: `expired` is the read path's verdict at request time, and the
- * cell must say exactly what the overview card counted — one value, two renderings.
- */
+/** Derived here because expired is the read path's verdict and the cell must match the overview card. */
 function waiverCellState(waiver: PatchingWaiver): WaiverState {
   return waiver.expired
     ? { status: 'expired', reviewBy: waiver.reviewBy }
@@ -95,8 +90,7 @@ function WaiverCell({ waiver, copy }: { waiver: WaiverState; copy: PatchingCopy 
   if (waiver.status === 'active') {
     return <Badge variant="emerald">{fill(copy.waiver.active, waiver.reviewBy)}</Badge>;
   }
-  // Why red and the word "expired": a lapsed decision is not a quiet state. It stays on the
-  // row and in its own section below, because hiding it is what an ignore line used to do.
+  // A lapsed decision is not a quiet state; it stays on the row and in its own section.
   return <Badge variant="red">{fill(copy.waiver.expired, waiver.reviewBy)}</Badge>;
 }
 
@@ -110,8 +104,7 @@ export function PatchingPanel({ state, copy, canWaive, missing }: PatchingPanelP
   const [pending, startTransition] = useTransition();
 
   const expired = useMemo(() => state.waivers.filter((waiver) => waiver.expired), [state.waivers]);
-  // Which of the four filters is narrowing, so the empty message can tell "the feed is clean" from
-  // "nothing matches what you asked for".
+  // Which filter is narrowing, so the empty message tells a clean feed from nothing matching.
   const { query } = state.page;
   const filtered =
     query.source !== 'all' || query.severity !== 'all' || query.reachability !== 'all' || query.flip !== 'all';
@@ -222,18 +215,7 @@ export function PatchingPanel({ state, copy, canWaive, missing }: PatchingPanelP
     },
   ];
 
-  /**
-   * The waiver list, as the same shared table the findings use.
-   *
-   * WHY the table component and not a bespoke list: a waiver is a row with columns (what it
-   * covers, why, who signed it, when it lapses) exactly like a finding is, and the page already
-   * has one responsive table that renders a row as a card on a phone. A second hand-built markup
-   * for the same shape would drift from it the first time either changed.
-   *
-   * WHY the review date is a badge and not a column of plain dates: a lapsed decision has to read
-   * as a failure at a glance, and the same red the findings use for a finding whose waiver expired
-   * is what tells the operator "this is the one CI is complaining about".
-   */
+  /** The same shared table the findings use, so the two row shapes cannot drift. */
   const waiverColumns: ResponsiveColumn<PatchingWaiver>[] = [
     {
       key: 'source',
@@ -336,8 +318,7 @@ export function PatchingPanel({ state, copy, canWaive, missing }: PatchingPanelP
           columns={waiverColumns}
           rows={[...state.waivers]}
           getRowKey={(waiver) => waiver.id}
-          // Why no empty-state card inside an empty card: the title and the sentence are one
-          // statement ("nothing is waived"), and the shared empty state already reads as one.
+          // No empty-state card inside an empty card: the title and the sentence are one statement.
           emptyState={<EmptyState title={copy.waiversEmpty} />}
           renderRowActions={
             canWaive

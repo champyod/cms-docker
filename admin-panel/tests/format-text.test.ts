@@ -14,8 +14,7 @@ describe('humanizeEnum', () => {
     expect(humanizeEnum('every_submission_counts_once')).toBe('every submission counts once');
   });
 
-  // Why this case exists: a value with a separator at the edge is what a trailing-underscore column
-  // would produce, and the shared function must behave the way both former copies did.
+  // A separator at the edge is what a trailing-underscore column produces.
   it('does not trim a separator at the edge', () => {
     expect(humanizeEnum('_sum_')).toBe(' sum ');
   });

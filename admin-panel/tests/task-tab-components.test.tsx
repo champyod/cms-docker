@@ -26,8 +26,7 @@ describe('Task tab components', () => {
 
   it('renders dataset empty state and current action labels', () => {
     const html = renderToStaticMarkup(<TaskDatasetsTab data={{ taskId: 9, activeDatasetId: null, datasets: [], permissionKeys: ['task:read', 'dataset:read', 'dataset:create', 'testcase:read'] }} />);
-    // Why no "Datasets" heading assertion: the page's fact strip and the tab rail say it, so the
-    // tab is left with the action and the empty meaning.
+    // The fact strip and the tab rail say Datasets, so the tab keeps the action and the empty meaning.
     expect(html).toContain('Create Dataset');
     expect(html).toContain('No datasets created yet');
   });

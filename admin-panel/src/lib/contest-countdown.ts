@@ -175,19 +175,11 @@ export const COUNTDOWN_BASE_FONT_PX = 100;
 export const COUNTDOWN_MIN_FONT_PX = 16;
 export const COUNTDOWN_MAX_FONT_PX = 960;
 
-/**
- * Share of the box the timer is sized to fill. The remainder is deliberate breathing
- * room: sizing to the full box leaves the numerals touching their own edges, which reads
- * as cramped and leaves nothing for the tick motion to move into.
- */
+/** The remainder is breathing room: full-box sizing leaves nothing for the tick motion to move into. */
 export const COUNTDOWN_FILL_RATIO = 0.9;
 export const COUNTDOWN_FIT_MARGIN_RATIO = 1 - COUNTDOWN_FILL_RATIO;
 
-/**
- * Font size at which content measured at the base size fills the given share of the box
- * on both axes. The tighter axis wins, so a long countdown stays inside the width just as
- * a tall one stays inside the height.
- */
+/** The tighter axis wins, so a long countdown stays inside the width as a tall one stays inside the height. */
 export function fitCountdownFontPx(params: {
   availableWidth: number;
   availableHeight: number;
@@ -211,13 +203,7 @@ function clampFillRatio(fillRatio: number | undefined): number {
   return Math.min(1, Math.max(0.1, fillRatio));
 }
 
-/**
- * Whether a glyph is a numeral rather than a separator such as the colon or the day mark.
- *
- * WHY the caller needs to know: the display face carries no tabular figures, so a numeral
- * is given a fixed slot to keep the row from changing width as the seconds tick. A
- * separator must not get that slot, or the row grows for no reason.
- */
+/** Numerals get a fixed slot so the row cannot change width as the seconds tick; separators must not. */
 export function isCountdownDigit(char: string): boolean {
   return char.length === 1 && char >= '0' && char <= '9';
 }

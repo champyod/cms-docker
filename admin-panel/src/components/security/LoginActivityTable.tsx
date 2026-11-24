@@ -37,17 +37,7 @@ function attemptedAt(attempt: LoginAttempt): string {
   return new Date(attempt.at).toISOString();
 }
 
-/**
- * The live failure counters a wrong password leaves behind.
- *
- * WHY it sits beside the lockout record: the record only appears once the count crosses the ban
- * threshold, while the counter is what a sub-threshold attempt — and the captcha that follows it —
- * actually is. Each row expands to the attempts that counter counted, read on demand so the page
- * never carries every list at once.
- *
- * WHY the clear lives here: it is the one write the rows offer, and it needs a reason, so the
- * prompt belongs to the table that renders the button rather than to the page above it.
- */
+/** The counter is what a sub-threshold attempt actually is; the record only appears once the count crosses the threshold. */
 export function LoginActivityTable({ rows, labels, missing }: LoginActivityTableProps): React.JSX.Element {
   // common.notSet: a login row whose timestamp or user agent the record does not hold.
   const prompt = useReasonPrompt();

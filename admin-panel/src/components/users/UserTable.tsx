@@ -47,8 +47,7 @@ export function UserTable({
   const getRowClassName = (row: UserRow): string | undefined =>
     selectedIds.has(row.user.id) ? ROW_SELECTED_CLASSES.join(' ') : undefined;
 
-  // Why: shared by desktop rows and mobile cards, with 44px targets kept
-  // in this fragment so both layouts stay touch-sized.
+  // Shared by desktop rows and mobile cards, so both layouts stay touch-sized.
   const renderRowActions = useCallback(
     (row: UserRow) => {
       const { user } = row;

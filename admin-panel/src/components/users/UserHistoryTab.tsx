@@ -31,14 +31,12 @@ interface HistoryRow {
 const DEFAULT_ROW_CLASS = 'py-2 text-sm';
 const MONO_ROW_CLASS = 'py-2 text-sm font-mono';
 
-// Why: history rows are an immutable read snapshot whose ids may be null, so the label is paired
-// with the position for a stable key.
+// History rows are an immutable snapshot whose ids may be null, so the key pairs the label with the position.
 function toRows<T>(items: readonly T[], read: (item: T) => string): readonly HistoryRow[] {
   return items.map((item, index) => ({ key: `${index}-${read(item)}`, label: read(item) }));
 }
 
-// Why: a field-filtered history row can carry no id, and an unnamed row falls back to the word the
-// other People tabs use for a value the record does not hold.
+// A field-filtered row can carry no id, so an unnamed row falls back to the shared missing word.
 function referenceRow(label: string, id: number | null, missing: string): string {
   return id === null ? missing : interpolate(label, { id });
 }
@@ -94,13 +92,6 @@ function rowsFor(
   }
 }
 
-/**
- * One of the five histories, as rows only.
- *
- * Why no card and no heading: the board layout draws a card per section and carries the section's
- * title and its meaning of empty, so the five cards this component used to draw were five boxes
- * inside the frame that already framed them.
- */
 export function UserHistorySection({ section, history, copy, missing }: UserHistorySectionProps): React.JSX.Element {
   const { rows, mono } = rowsFor(section, history, copy, missing);
   return (

@@ -8,8 +8,7 @@ import en from '@/dictionaries/en.json';
 import th from '@/dictionaries/th.json';
 import type { Dictionary } from '@/lib/dictionary';
 
-// Why: the participants tab carries the roster section, whose copy the authenticated
-// layout supplies through the provider — a bare render must supply it here.
+// The roster section's copy comes from the authenticated layout's provider, so a bare render supplies it.
 function withDictionary(node: React.JSX.Element, dict: Dictionary = en): string {
   return renderToStaticMarkup(<DictionaryProvider dict={dict}>{node}</DictionaryProvider>);
 }

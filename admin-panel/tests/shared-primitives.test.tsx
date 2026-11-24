@@ -62,9 +62,7 @@ describe('SelectField', () => {
 
 describe('RowActions', () => {
   it('right-aligns the cluster so the actions hug the row edge', () => {
-    // Why pinned: the row is a right-aligned action column, so the cluster owns its
-    // own right alignment instead of every caller passing justify-end and one
-    // forgetting it.
+    // The cluster owns its own right alignment, so no caller can forget it.
     render(<RowActions ariaLabel="Task actions" actions={EDIT_DELETE} />);
     expect(screen.getByRole('group', { name: 'Task actions' }).className).toContain('justify-end');
   });
@@ -164,8 +162,7 @@ describe('SectionCard', () => {
         <p>Body</p>
       </SectionCard>,
     );
-    // An exact name match fails the moment the count or the description joins the heading, which is
-    // how a reader navigating by headings would hear it.
+    // An exact name match fails the moment the count joins the heading.
     expect(screen.getByRole('heading', { level: 2, name: 'Statements' })).not.toBeNull();
     expect(screen.queryByRole('heading', { name: /12/ })).toBeNull();
     expect(screen.queryByRole('heading', { name: /No statements/ })).toBeNull();

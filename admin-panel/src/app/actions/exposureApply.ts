@@ -55,16 +55,7 @@ async function audit(label: string, result: ExposureApplyResult, entityId?: numb
   });
 }
 
-/**
- * Saves one exposure and applies it to the running front.
- *
- * WHY the row is written before the render: the panel's editor owns what a row means, so the render
- * reads back from the database exactly what a later sync would — a save that rendered from the posted
- * form could apply something the writer refused.
- *
- * WHY the staged swap lives in `exposure-apply`: the same guard has to serve the reconciler, and a
- * second implementation of "test, swap, reload" is how one of the two would lose its staging step.
- */
+/** The render reads back from the database, and the staged swap is shared with the reconciler. */
 export async function saveExposureApplyAction(input: ExposureInput): Promise<ExposureApplyResult> {
   try {
     await ensurePermission('container:control');

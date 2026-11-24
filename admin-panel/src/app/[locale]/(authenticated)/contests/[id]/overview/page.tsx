@@ -14,8 +14,7 @@ type ContestRouteProps = {
   params: Promise<{ locale: string; id: string }>;
 };
 
-// Why: the reader enforces the same keys, but the page must resolve the exact
-// registry route first so a disabled or narrowed descriptor 404s before data.
+// The page resolves the registry route itself so a disabled or narrowed descriptor 404s before the data is read.
 async function authorizeContestTab(routeId: RouteId): Promise<ReadonlySet<string>> {
   const route = ROUTE_REGISTRY.find((candidate) => candidate.id === routeId);
   if (!route || !route.enabled) notFound();
@@ -41,9 +40,6 @@ export default async function ContestOverviewPage({ params }: ContestRouteProps)
   const copy = dictionary.contests;
   return (
     <DetailPage
-      // The record shell above renders the contest's name, its trail and its tabs, so this tab adds
-      // only what the four editable timings below cannot say: where the contest stands right now,
-      // and which zone those timings are read in.
       ownsHeader={false}
       facts={[
         { term: copy.overview.facts.state, value: copy.phases[resolveContestPhase(contest, new Date())] },

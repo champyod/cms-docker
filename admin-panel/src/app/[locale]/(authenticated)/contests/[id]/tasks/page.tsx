@@ -15,8 +15,7 @@ type ContestRouteProps = {
   params: Promise<{ locale: string; id: string }>;
 };
 
-// Why: the reader enforces the same keys, but the page must resolve the exact
-// registry route first so a disabled or narrowed descriptor 404s before data.
+// The page resolves the registry route itself so a disabled or narrowed descriptor 404s before the data is read.
 async function authorizeContestTab(routeId: RouteId): Promise<ReadonlySet<string>> {
   const route = ROUTE_REGISTRY.find((candidate) => candidate.id === routeId);
   if (!route || !route.enabled) notFound();
@@ -43,9 +42,7 @@ export default async function ContestTasksPage({ params }: ContestRouteProps): P
     <ListPage
       // The record shell above renders the contest's name, its trail and its tabs.
       ownsHeader={false}
-      // The count is the whole assignment, not the filtered set: the rows below narrow themselves
-      // as the operator types, and a footer that moved with the filter would answer a question
-      // nobody asked. The noun comes from the dictionary because Thai does not pluralise.
+      // The count is the whole assignment; the rows below narrow themselves as the operator types.
       footer={<Text variant="muted">{countLabel(assigned, copy.tasks, locale)}</Text>}
     >
       <ContestTasksTab data={data} />

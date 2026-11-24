@@ -42,9 +42,7 @@ export function AuditDetailPanel({
     setTimeout(() => setCopiedField(null), COPY_FEEDBACK_DURATION_MS);
   };
 
-  // Why a side panel and not a block under the table: an entry's detail is
-  // read against the rows above it, and a block below pushed the row the
-  // reader clicked off the screen on every open.
+  // A block under the table pushed the clicked row off the screen on every open.
   return (
     <SidePanel
       open={entry !== undefined && (loading || detail !== null || error !== null)}

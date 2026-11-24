@@ -40,8 +40,7 @@ export interface TeamMembersEmptyProps {
   readonly copy: Dictionary['teams'];
 }
 
-// Why: an unreadable user id is never inferred, so the record link is omitted
-// instead of pointing at a row the reader may not open.
+// An unreadable user id is never inferred; the link is omitted rather than wrong.
 function memberProfileHref(locale: 'en' | 'th', member: TeamMember): string | null {
   if (member.userId === null) return null;
   return buildRoute(locale, 'people.user-tabs.profile', { id: member.userId });
@@ -104,8 +103,7 @@ function MemberRow({ member, locale, copy, selected, onToggle }: {
   );
 }
 
-/** Why the bulk affordance is reachable from the empty roster too: adding accounts is how a team
- * that has no members stops having none, so the empty state carries the same dialog as the header. */
+/** The empty roster carries the same dialog as the header: adding accounts is how it stops being empty. */
 function useBulkAffordance(permissionKeys: readonly string[]): {
   readonly canUpdateTeam: boolean;
   readonly canUpdateParticipation: boolean;
@@ -123,13 +121,7 @@ function useBulkAffordance(permissionKeys: readonly string[]): {
   };
 }
 
-/**
- * What empty means for this team's roster, and the one action that changes it.
- *
- * Why not inside the rows component: the list layout renders its empty slot instead of the rows, so
- * the meaning of empty is the page's to state; the dialog has to live with it or the empty roster
- * would offer no way out of being empty.
- */
+/** The list layout renders the empty slot, and the dialog must live with it or an empty roster has no way out. */
 export function TeamMembersEmpty({ teamId, permissionKeys, contests, copy }: TeamMembersEmptyProps): React.JSX.Element {
   const router = useAppRouter();
   const { canUpdateTeam, canUpdateParticipation, canBulk } = useBulkAffordance(permissionKeys);
@@ -165,21 +157,7 @@ export function TeamMembersEmpty({ teamId, permissionKeys, contests, copy }: Tea
   );
 }
 
-/**
- * A team's members, with the filter and the selection that drive the day-2 rotation.
- *
- * WHY the filter drives the list and the header cell selects what the filter matches: assigning a
- * team to a term's worth of accounts was one row at a time, and the day-two rotation was the same
- * work again. The select-all box walks the filtered set, so it never reaches a member the
- * operator's filter hid.
- *
- * WHY this surface owns its own selection state: the ids here are users, the rows carry contests
- * and the action is scoped to this team, so the selection is this page's own — only the write
- * behind the toolbar is shared (`lib/panel-actions/contest-accounts`).
- *
- * WHY no card and no heading: the list layout draws the frame and the tab rail above already names
- * the section, so the card here was a box inside a box and the heading a second copy of that label.
- */
+/** The select-all walks the filtered set, and the selection is this page's own: only the write is shared. */
 export function TeamMembersTab({ teamId, members, permissionKeys, contests, copy, locale }: TeamMembersTabProps): React.JSX.Element {
   const router = useAppRouter();
   const { canUpdateTeam, canUpdateParticipation, canBulk, canRotate } = useBulkAffordance(permissionKeys);
@@ -295,8 +273,7 @@ export function TeamMembersTab({ teamId, members, permissionKeys, contests, copy
       {toolbar}
       <div className="divide-y divide-border">
         {filtered.map((member, index) => (
-          // Why: an unreadable user id leaves only the row position to
-          // distinguish two members, so it joins the readable key.
+          // An unreadable user id leaves only the row position to distinguish two members.
           <MemberRow
             key={`${member.userId ?? member.username ?? 'member'}-${index}`}
             member={member}

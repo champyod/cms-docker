@@ -28,18 +28,7 @@ function fill(template: string, values: Record<string, number>): string {
   );
 }
 
-/**
- * The one digest on the security surface: how much is wrong, and the two items that name it worst
- * and longest — with a link to the page that lists them.
- *
- * WHY a server component with no hooks: it renders a value the read path already computed, so it
- * cannot drift from the numbers the patching page lists. Nothing here queries: the digest arrives in
- * `PatchingSnapshot.signal`, built once from the same rows (see `patching-read.ts`).
- *
- * WHY the zero-counts are hidden and the two named items are not: a row of four zeroes is furniture,
- * while "the worst is a CRITICAL in lodash, unwaived" is the sentence that makes an operator open the
- * page. When everything is clean the card says so once instead of counting nothing four times.
- */
+/** Server-rendered from the read path's own digest, so the card cannot disagree with the patching page. */
 export function SecuritySignalCard({ digest, locale, copy }: SecuritySignalCardProps): React.JSX.Element {
   const counts = [
     { key: 'unwaivedCritical', label: copy.counts.unwaivedCritical, value: digest.counts.unwaivedCritical },
@@ -124,8 +113,7 @@ export function SecuritySignalCard({ digest, locale, copy }: SecuritySignalCardP
       </dl>
 
       {digest.counts.unevaluable > 0 && (
-        // Why spelled out: a reading that could not be taken is not a healthy reading, and the card
-        // is the place that has to say so in words rather than leave a dash to be interpreted.
+        // A reading that could not be taken is not a healthy reading, and this card says so in words.
         <p className="mt-2 text-xs text-destructive">{copy.unreadable}</p>
       )}
     </Card>

@@ -1,22 +1,4 @@
-/**
- * The one place an operator upload reads its size and format rules from.
- *
- * WHY a single table: a cap declared inside the route that happens to accept a file
- * cannot be compared against the proxy's own body limit, and it drifts as soon as a
- * second route accepts the same kind — which is how the logo came to carry its own
- * five megabytes while the attachment cap lived somewhere else entirely.
- *
- * WHY every cap is read from the environment and never held as a literal: each one is a
- * config.toml key ([admin]) that config sync and compose deliver to this container, so
- * an operator raises a limit on a running deployment without rebuilding the image. The
- * fallback below is the fail-safe for a key that is absent or unparseable — never the
- * intended value — because a cap resolving to NaN would compare false against every
- * size and silently accept anything, and a zero would refuse every upload.
- *
- * The testcase caps keep their home in `testcase-limits.ts`, which resolves them the
- * same way; they are re-exported through the table so a reader still has one address
- * for every cap.
- */
+/** Every cap reads from the environment so an operator raises a limit without rebuilding; the fallback is a fail-safe, never the intended value. */
 import { MAX_TESTCASE_FILE_BYTES } from '@/lib/testcase-limits';
 
 export type AssetKind = 'logo' | 'avatar' | 'statement' | 'attachment' | 'testcase';
@@ -66,10 +48,7 @@ export function validateAssetSize(kind: AssetKind, bytes: number): string | null
   return null;
 }
 
-/**
- * Strips a leading dot, lowercases, and folds `.jpeg` onto `.jpg`, so one spelling per
- * kind is all the rest of the code has to know.
- */
+/** Strips the dot, lowercases, folds .jpeg onto .jpg: one spelling per kind. */
 export function normalizeImageExtension(raw: string): ImageExtension | null {
   const lower = raw.toLowerCase().replace(/^\./, '');
   const mapped = lower === 'jpeg' ? 'jpg' : lower;

@@ -82,8 +82,7 @@ describe('AuditTable mobile cards', () => {
         dict={DICT}
       />
     );
-    // Why: ResponsiveTable renders one row model in both layouts, so
-    // each value appears twice (desktop row + mobile card).
+    // One row model renders in both layouts, so each value appears twice.
     expect(getAllByText('task:update').length).toBeGreaterThan(0);
     expect(getAllByText('failure').length).toBeGreaterThan(0);
     expect(getAllByText('Fix limits').length).toBeGreaterThan(0);

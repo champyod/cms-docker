@@ -8,8 +8,7 @@ import { TaskFilesTab } from '@/components/tasks/task-detail/TaskFilesTab';
 import { TaskOverviewTab } from '@/components/tasks/task-detail/TaskOverviewTab';
 import { TaskSettingsTab } from '@/components/tasks/task-detail/TaskSettingsTab';
 
-// Why: vitest runs ESM where __dirname is undefined — derive it so the
-// no-monolith-import guard resolves the migrated component tree directly.
+// vitest runs ESM where __dirname is undefined, so it is derived for the guard.
 const testDir = dirname(fileURLToPath(import.meta.url));
 const tasksDir = join(testDir, '..', 'src', 'components', 'tasks');
 const appDir = join(testDir, '..', 'src', 'app');

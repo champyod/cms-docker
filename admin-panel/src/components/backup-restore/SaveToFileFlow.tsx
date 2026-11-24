@@ -17,13 +17,7 @@ import type { BackupTable } from '@/lib/backup-table-catalog';
 /** The endpoint the browser downloads from; the dump streams and nothing is kept server-side. */
 export const EXPORT_URL = '/api/backups/export';
 
-/**
- * The download URL for a selection.
- *
- * Names are joined with a comma and then encoded as one value, because the route
- * splits on commas: encoding each name separately would leave the separators
- * encoded too, and the route would read one long unknown table name.
- */
+/** Names join with a comma and encode as one value, because the route splits on commas. */
 export function exportUrl(tables: readonly string[]): string {
     return `${withBasePath(EXPORT_URL)}?tables=${encodeURIComponent(tables.join(','))}`;
 }
@@ -38,14 +32,7 @@ const COLUMNS: readonly ResponsiveColumn<BackupTable>[] = [
     },
 ];
 
-/**
- * Pick catalog tables and download their dump.
- *
- * The selection starts empty rather than everything: this endpoint runs a real
- * `pg_dump` against the live database, so a stray click must not start a full
- * export. Nothing is chosen on the operator's behalf, and the button says how many
- * tables it will dump before it does.
- */
+/** The selection starts empty: the endpoint runs a real pg_dump against the live database. */
 export function SaveToFileFlow(): React.JSX.Element {
     const [selection, setSelection] = useState<readonly string[]>([]);
     const [started, setStarted] = useState(false);
@@ -55,9 +42,7 @@ export function SaveToFileFlow(): React.JSX.Element {
         setStarted(false);
         setSelection((previous) => {
             const toggled = previous.includes(name) ? previous.filter((entry) => entry !== name) : [...previous, name];
-            // Same rule as the backup panel: a table that stores a digest resolving into
-            // fsobjects brings fsobjects along, because an export without it restores
-            // rows whose content cannot be resolved.
+            // A table resolving into fsobjects brings fsobjects along, or the export restores rows it cannot resolve.
             return withRequiredTables(toggled);
         });
     };
@@ -65,8 +50,7 @@ export function SaveToFileFlow(): React.JSX.Element {
     const save = () => {
         if (selection.length === 0) return;
         setStarted(true);
-        // The route answers with `Content-Disposition: attachment`, so pointing the
-        // browser at it saves the file without navigating this page away.
+        // The route answers with Content-Disposition attachment, so it saves without navigating away.
         window.location.assign(exportUrl(selection));
     };
     return (

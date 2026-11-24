@@ -7,8 +7,7 @@ import { ContestParticipantsTab } from '@/components/contests/contest-detail/Con
 import { ContestSettingsTab } from '@/components/contests/contest-detail/ContestSettingsTab';
 import en from '@/dictionaries/en.json';
 
-// Why: the participants tab now carries the roster section, whose copy comes from the
-// dictionary the authenticated layout provides — a render with none must mount it.
+// The roster section's copy comes from the dictionary the layout provides, so a render with none mounts it.
 function withDictionary(node: React.JSX.Element): string {
   return renderToStaticMarkup(<DictionaryProvider dict={en}>{node}</DictionaryProvider>);
 }

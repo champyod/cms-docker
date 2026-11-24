@@ -15,8 +15,7 @@ export function Text({ as, variant = 'body', className, children, color, ...prop
     const Component = as || (variant.startsWith('h') ? variant : 'p');
 
     const variants = {
-        // Sizes are tokens, not Tailwind steps: one ladder for the whole panel, so a heading can
-        // never quietly disagree with the body text next to it.
+        // Tokens, not Tailwind steps: one ladder, so a heading cannot disagree with the body next to it.
         h1: "text-2xl font-semibold tracking-tight",
         h2: "text-lg font-semibold",
         h3: "text-base font-medium",

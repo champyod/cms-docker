@@ -7,12 +7,10 @@ import { DictionaryProvider } from '@/components/providers/DictionaryProvider';
 import en from '@/dictionaries/en.json';
 import { ContestCountdownTimezoneMenu } from '@/components/contests/contest-detail/ContestCountdownTimezoneMenu';
 
-// Why: happy-dom rejects on Animation.cancel() when an unfinished animation is torn down, and
-// vitest fails the run on that unhandled rejection; instant animations avoid the driver.
+// happy-dom rejects on Animation.cancel of an unfinished animation; instant animations avoid the driver.
 MotionGlobalConfig.skipAnimations = true;
 
-// Why: globals are disabled in vitest.config.ts, so the automatic afterEach cleanup does not
-// run and every render would otherwise stay in the document; see notification-bell-dropdown.test.tsx.
+// globals are disabled, so the automatic cleanup does not run and every render would stay in the document.
 afterEach(() => cleanup());
 
 const PANEL_SELECTOR = '.countdown-zone-panel';

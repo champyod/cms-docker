@@ -39,14 +39,9 @@ export default async function UserHistoryPage({ params }: { params: Promise<{ lo
     <BoardPage
       // The record shell above renders the user's name, the trail and the tabs.
       ownsHeader={false}
-      // Why a board and not one list: this tab carries five different record kinds - contests,
-      // participations, teams, submissions and contest activity - and each has its own meaning of
-      // empty. Forcing them into one row set meant one filter and one total none of them could
-      // honestly fill; a board gives each its own heading and its own empty.
       sections={[
         {
-          // Not a record kind but the page's own single value, so it leads and states the one
-          // thing none of the five histories can: when this account last signed in.
+          // The sign-in time is not one of the record kinds, so it leads the five histories.
           key: 'account-access',
           title: copy.accountAccess,
           rows: <UserHistoryAccountAccess history={history} copy={dictionary.users} missing={dictionary.common.notSet} />,

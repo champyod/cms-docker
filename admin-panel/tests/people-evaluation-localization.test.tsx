@@ -31,11 +31,9 @@ vi.mock('next/navigation', () => ({
 
 vi.mock('sonner', () => ({ toast: { loading: vi.fn(), success: vi.fn(), error: vi.fn() } }));
 
-// Why the page is renderable here: its fact strip is where the profile's labels now live, so the
-// copy is pinned by rendering the page rather than the tab that used to draw the same labels.
+// The fact strip is where the labels live, so the page render pins the copy.
 vi.mock('@/lib/server/authorization', () => ({
-  // Every key the three record tabs gate on, so the pages under test resolve their descriptor
-  // instead of concealing themselves; each page still asks for its own keys one by one.
+  // The keys the three record tabs gate on, so the pages resolve their descriptor instead of concealing themselves.
   requirePermission: vi.fn(async () => new Set(['user:read', 'participation:list', 'submission:read', 'team:read'])),
   AuthorizationError: class AuthorizationError extends Error {
     readonly status: 401 | 403;
@@ -147,8 +145,7 @@ describe('User record tab copy', () => {
     ]) {
       expect(body).toContain(label);
     }
-    // The values, not only the labels: a strip of five headings with nothing under them would pass
-    // a label-only check.
+    // The values too: a strip of headings with nothing under them would pass a label-only check.
     expect(body).toContain('Asia/Bangkok');
     expect(body).toContain('THA-01');
     expect(body).not.toContain(en.users.profile.timezone);
@@ -178,8 +175,7 @@ describe('User record tab copy', () => {
     );
 
     expect(body).toContain('THA-01');
-    // The heading moved to the list layout's frame and the tab rail above it, so a second copy of
-    // the label here would be the same word three times on one screen.
+    // The label lives on the layout's frame and the tab rail, so a copy here would say it three times.
     expect(body).not.toContain(th.navigation.people['user-tabs'].teams.label);
   });
 
@@ -204,9 +200,7 @@ describe('User record tab copy', () => {
 });
 
 describe('docs affordance label', () => {
-  // Why the literals, not a contrast against docs.title: that key had no reader
-  // left once the Docs header was removed, so the affordance is pinned outright
-  // to the verb-phrase wording in each locale.
+  // The docs title had no reader left once the Docs header went, so the wording is pinned outright.
   it('keeps the original English wording instead of the documentation name', () => {
     expect(en.docs.viewDocumentation).toBe('View Documentation');
     expect(en.docs.viewDocumentation).not.toBe('CMS Documentation');

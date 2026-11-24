@@ -8,16 +8,7 @@ export interface BrandingFields {
   rankingLogoPath: string;
 }
 
-/**
- * The scoreboard's logo, previewed.
- *
- * WHY the path is read-only here: the Ranking appearance page owns every appearance column, so this
- * page shows what config.toml points at and offers the way there instead of carrying a second editor
- * of the same row. A field that accepted typing and saved nothing would be a lie the reader only
- * discovers after typing.
- *
- * WHY no card: the settings layout frames each group, so a card here would be a card inside a card.
- */
+/** Read-only: the Ranking appearance page owns the editor, and a field that saves nothing is a lie. */
 export function BrandingTab({
   logoPreview,
   logoHref,
@@ -91,13 +82,7 @@ const SERVICE_GROUPS: { title: string; keys: string[] }[] = [
   { title: 'Infrastructure', keys: ['MONITOR_INTERVAL', 'BACKUP_INTERVAL_MINS', 'PROMETHEUS_PORT'] },
 ];
 
-/**
- * What config.toml holds, read-only.
- *
- * WHY it stays a preview: writing those values recreates services, which is System → Settings' job
- * and needs a restart decision this page cannot make. Reading them here answers "what is this host
- * configured with" without pretending to be the editor.
- */
+/** Writing these values recreates services, which is System Settings' job; this page only answers what is configured. */
 export function ServicesGroup({ values, missing }: { readonly values: Record<string, string>; readonly missing: string }): React.JSX.Element {
   return (
     <div className="space-y-4">

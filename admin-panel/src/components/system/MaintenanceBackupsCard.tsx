@@ -41,12 +41,6 @@ function ArchiveList(): React.JSX.Element {
   );
 }
 
-/**
- * The backup policy: how often a dump runs, how many are kept, and what is already on disk.
- *
- * WHY no card and no title: the settings layout frames this group and names it, so the panel starts
- * at the fields.
- */
 export function MaintenanceBackupsCard(): React.JSX.Element {
   const { data, handleChange, handleBackup, backingUp, canTriggerBackup, canViewBackups, archives, archivesLoading } = useMaintenance();
   return (

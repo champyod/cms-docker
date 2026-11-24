@@ -27,9 +27,7 @@ const SETTINGS_FORM = {
   analysis_enabled: false,
 };
 
-// Why these assertions and not snapshots: each one pins that a consumer reached
-// a shared primitive instead of re-declaring the same markup, so re-inlining the
-// duplicate fails here rather than shipping a second look.
+// Each assertion pins a consumer reaching a shared primitive, so re-inlining the duplicate fails here.
 describe('detail sections render through SectionCard', () => {
   it('renders the task rows with their actions and no section header of its own', () => {
     const props = {
@@ -79,8 +77,7 @@ describe('detail sections render through SectionCard', () => {
 });
 
 describe('row action clusters render through RowActions', () => {
-  // Why a reader, not the markup: every gate here is a per-action permission, so the
-  // contract is which control a given key set reaches.
+  // Every check here is a per-action permission, so the contract is which control a key set reaches.
   function participantRow(permissionKeys: readonly string[]): void {
     render(
       <ContestParticipantsSection
@@ -103,8 +100,7 @@ describe('row action clusters render through RowActions', () => {
     expect(screen.queryByRole('button', { name: 'Remove ada' })).toBeNull();
   });
 
-  // Why each key alone: a reader holding only one of the two must reach exactly that
-  // control, and Settings must follow its own action rather than a sibling's gate.
+  // A reader holding only one key must reach exactly that control, and Settings follows its own action.
   it('gives a delete-only reader remove alone, and a reader with neither key no cluster', () => {
     participantRow(['participation:delete']);
     expect(screen.queryByRole('button', { name: 'Remove ada' })).not.toBeNull();

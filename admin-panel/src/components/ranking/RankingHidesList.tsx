@@ -20,31 +20,17 @@ function kindWord(copy: RankingCopy, kind: string): string {
   if (kind === 'contest') return copy.overrides.targetContest;
   if (kind === 'task') return copy.overrides.targetTask;
   if (kind === 'ranking') return copy.overrides.targetRanking;
-  // An unknown kind is shown as the row spells it rather than hidden: a reader that cannot name a
-  // kind must still report that the board is hiding it.
+  // An unknown kind is shown as spelled rather than hidden: the reader must know the board is hiding it.
   return kind;
 }
 
-/**
- * The target as the board knows it.
- *
- * WHY the label when it resolves: a hide is filed against a key the operator typed or picked, and
- * a key is not a person — the label is what the operator can match to the row that left the board.
- * WHY the key when it does not: the hide names something the projection does not hold, and the key
- * is the only handle the operator has to go and fix it with.
- */
+/** The label is what the operator can match to the row; the key is the handle when the projection does not hold it. */
 function targetText(hide: RankingHide, copy: RankingCopy): string {
   if (hide.targetKind === 'ranking') return copy.hides.wholeBoard;
   return hide.label ?? hide.targetKey;
 }
 
-/**
- * Where one hide came from.
- *
- * WHY the source is a badge and the author is plain text: the two are different facts — which write
- * hid the row, and which operator made it — and an override filed with no author is the case this
- * surface exists to make visible, so it carries the mark the override list also uses.
- */
+/** The source and the author are different facts: which write hid the row, and which operator made it. */
 function SourceMark({
   source,
   copy,
@@ -67,8 +53,7 @@ function reasonText(hide: RankingHide, copy: RankingCopy): string {
   for (const source of hide.sources) {
     if (source.source === 'override' && source.reason !== null && source.reason !== '') return source.reason;
   }
-  // Why a word and not a dash: DESIGN.md 19 bans the em dash from anything a reader sees, and this
-  // column's empty meaning is a sentence, not a mark.
+  // The column's empty meaning is a sentence, not a mark, so it reads as a word.
   return copy.hides.noReason;
 }
 
@@ -114,15 +99,7 @@ export interface RankingHidesListProps {
   readonly hides: readonly RankingHide[];
 }
 
-/**
- * The board's hides, one line per hidden row.
- *
- * WHY a table beside the override list rather than a section inside it: the override list is the
- * ledger of rows the operator filed, while this is the set of rows the board actually drops — it
- * includes hides no override row records, so folding it into the ledger would make a row that does
- * not exist there look like one that does. Both render through the panel's one responsive table so
- * the two cannot drift in selection, empty state or mobile layout.
- */
+/** The set the board actually drops, beside the ledger of overrides the operator filed. */
 export function RankingHidesList({ copy, hides }: RankingHidesListProps): React.JSX.Element {
   const columns = useMemo(() => buildColumns(copy), [copy]);
   return (

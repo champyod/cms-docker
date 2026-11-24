@@ -15,18 +15,6 @@ import { readShownContestId } from '@/lib/ranking-shown';
 import { authorizeRoutePage } from '@/lib/navigation/page-authorization';
 
 
-/**
- * The public scoreboard, as the deployment publishes it.
- *
- * WHY a detail and not a board: the page is about one record — the board this deployment serves —
- * and its six identity values are a fact strip, not one of several independent row kinds. The
- * standings preview and the logo belong to that record; a board section for each would claim
- * record kinds the page does not have.
- *
- * WHY the dropped-row report is the state and now reads first: it is the one thing here that can be
- * wrong, and the detail layout puts a record's state above its values so a fault is read before the
- * numbers it would explain. Everything else on the page is the record itself.
- */
 export default async function RankingBoardPage({
   params,
   searchParams,
@@ -40,9 +28,7 @@ export default async function RankingBoardPage({
   ]);
   const dictionary = await getDictionary(locale);
   const copy = dictionary.ranking;
-  // WHY the contest is resolved before the appearance read: a deployment with no
-  // contest yet still has to render the identity facts, so the standings below them must be
-  // able to say "nothing to show" rather than fail the whole page.
+  // A deployment with no contest yet still renders the identity facts, so the standings must be able to say nothing rather than fail the page.
   const contests = await getRankingBoardContests();
   const { contest } = await searchParams;
   const requested = Number.parseInt(contest ?? '', 10);
@@ -53,8 +39,7 @@ export default async function RankingBoardPage({
     getRankingDiagnostics(),
     readShownContestId(),
   ]);
-  // The contest the board serves comes from the config, the one thing that decides it: reading it
-  // off the appearance row is how this card came to name a contest the reader ignored.
+  // The contest the board serves is decided by the config, so it is read from there and not from the appearance row.
   const named = contests.find((entry) => entry.id === shownContestId) ?? null;
   const accessValue =
     appearance.accessMode === 'protected'
@@ -67,8 +52,6 @@ export default async function RankingBoardPage({
       // shell-title-exempt: the board's name comes from its appearance settings, which the module shell cannot read
       title={appearance.displayName || appearance.title || named?.name || copy.board.title}
       state={
-        // The report keeps its card: the layout places a state but does not frame one, and a set of
-        // counters loose on the page background reads as part of the fact strip above it.
         <SectionCard title={copy.diagnostics.title}>
           <RankingDiagnosticsCard diagnostics={diagnostics} copy={copy.diagnostics} />
         </SectionCard>

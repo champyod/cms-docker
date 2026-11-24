@@ -12,8 +12,7 @@ type ContestRouteProps = {
   params: Promise<{ locale: string; id: string }>;
 };
 
-// Why: the reader enforces the same keys, but the page must resolve the exact
-// registry route first so a disabled or narrowed descriptor 404s before data.
+// The page resolves the registry route itself so a disabled or narrowed descriptor 404s before the data is read.
 async function authorizeContestTab(routeId: RouteId): Promise<ReadonlySet<string>> {
   const route = ROUTE_REGISTRY.find((candidate) => candidate.id === routeId);
   if (!route || !route.enabled) notFound();
@@ -43,8 +42,7 @@ export default async function ContestSettingsPage({ params }: ContestRouteProps)
           key: 'contest',
           title: 'Contest Settings',
           description: 'How this contest presents itself, and what it lets contestants do.',
-          // The toggles below change the contestant side, not the operator's screen, so the group
-          // says so before the reader flips one.
+          // The toggles change the contestant side, not the operator's screen, so the group says so before one is flipped.
           scope: 'Every contestant of this contest: nobody else.',
           children: <ContestSettingsTab data={data} />,
         },

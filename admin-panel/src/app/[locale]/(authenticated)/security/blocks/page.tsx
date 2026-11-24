@@ -14,16 +14,6 @@ import { readCaptchaStatus } from '@/lib/captcha-status';
 import { authorizeRoutePage } from '@/lib/navigation/page-authorization';
 import { listLoginSurfaces, surfaceLabels } from '@/lib/security/login-surfaces';
 
-/**
- * Five record kinds share one page and none of them is the same record: a captcha setting, a host
- * ban, a standing exemption, a live failure counter and a lockout record. A board is the only
- * layout that lets each keep its own rows and its own meaning of empty without inventing one row
- * set and one total that the page cannot honestly fill.
- *
- * WHY the empty elements for bans and exemptions carry a form: those two sections exist to be
- * acted on, and the control that adds the first row has to survive the empty state — so the
- * section's empty is the sentence plus the control, not the sentence alone.
- */
 export default async function SecurityBlocksPage({
   params,
 }: {
@@ -94,8 +84,7 @@ export default async function SecurityBlocksPage({
       title: 'Login activity',
       description:
         'Live failure counters from the shared store: every failed sign-in, the account and address it came from, when it last failed, and when that account last signed in. A counter clears whole when its window lapses; clearing lifts it now. Expand a row for the attempts behind it.',
-      // A counter store that cannot be read is not an empty counter, so the failure takes the
-      // section's state and the section has no empty meaning until the read succeeds.
+      // An unreadable counter store is a failed read, not an empty counter, so the section shows the failure instead.
       state: activity.ok ? undefined : (
         <InlineAlert tone="destructive" density="compact" announce="polite">
           {activity.error}
@@ -116,8 +105,6 @@ export default async function SecurityBlocksPage({
 
   return (
     <BoardPage
-      // The security module shell renders this page's name, description and trail from the
-      // navigation registry, so the page supplies only its sections.
       ownsHeader={false}
       sections={sections}
     />

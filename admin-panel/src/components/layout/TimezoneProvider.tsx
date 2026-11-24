@@ -4,16 +4,7 @@ import { createContext, useCallback, useContext, useMemo, type ReactNode } from 
 
 import { formatDayInZone, formatInZone, formatTimeInZone, resolveDisplayZone } from '@/lib/timezone';
 
-/**
- * The word every formatter here falls back to: a payload that carries no parseable instant says so
- * rather than leaving a blank cell or the browser's "Invalid Date" text, so a row's absence is visible
- * and identical across surfaces.
- *
- * Why a constant and not the dictionary: a formatter is a function, not a component, and the panel has
- * no dictionary outside a component. The alternative was a `missing` argument on all three hooks and
- * every call site that uses them, for one word. This is the panel's one reader-visible string that does
- * not follow the language setting, and it is recorded as such rather than hidden.
- */
+/** The one reader-visible string outside the dictionary: a formatter is a function, not a component. */
 export const MISSING_TIMESTAMP = 'Unknown';
 
 /** Renders an instant, from whatever shape the payload carried it in, as text in the display zone. */
@@ -27,30 +18,18 @@ interface TimezoneProviderProps {
   readonly children: ReactNode;
 }
 
-/**
- * Publishes the zone of the contest that owns the record being rendered, so one page's timestamps
- * cannot disagree with each other. A route that mounts this owns every timestamp below it; a route
- * with no contest leaves it unmounted rather than seeding it, which is what makes "no owner" and
- * "owner with an unusable zone string" the same case at the hook boundary.
- */
+/** No contest leaves the provider unmounted, which makes no owner and owner-with-an-unusable-zone the same case. */
 export function TimezoneProvider({ timezone, children }: TimezoneProviderProps): React.JSX.Element {
   return <DisplayZoneContext.Provider value={timezone}>{children}</DisplayZoneContext.Provider>;
 }
 
-/**
- * The zone timestamps under this point are displayed in: the owning contest's zone, or the runtime's
- * own zone where no provider is mounted. Never throws, so a corrupt contest row degrades to the
- * browser zone instead of blanking the page.
- */
+/** Never throws: a corrupt contest row degrades to the browser zone instead of blanking the page. */
 export function useDisplayTimezone(): string {
   const ownerZone = useContext(DisplayZoneContext);
   return useMemo(() => resolveDisplayZone(ownerZone), [ownerZone]);
 }
 
-/**
- * A formatter for `render` bound to the current display zone, memoized on the zone so a list of rows
- * reuses one formatter. Input that is not a parseable instant renders `MISSING_TIMESTAMP`.
- */
+/** Memoized on the zone so a list of rows reuses one formatter. */
 function useInstantFormatter(render: (iso: string, zone: string) => string): TimestampFormatter {
   const zone = useDisplayTimezone();
   return useCallback(

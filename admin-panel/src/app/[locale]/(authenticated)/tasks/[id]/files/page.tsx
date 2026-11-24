@@ -14,8 +14,7 @@ type TaskRouteProps = {
   params: Promise<{ locale: string; id: string }>;
 };
 
-// Why: the reader enforces the same keys, but the page must resolve the exact
-// registry route first so a disabled or narrowed descriptor 404s before data.
+// The page resolves the registry route itself so a disabled or narrowed descriptor 404s before the data is read.
 async function authorizeTaskTab(routeId: RouteId): Promise<ReadonlySet<string>> {
   const route = ROUTE_REGISTRY.find((candidate) => candidate.id === routeId);
   if (!route || !route.enabled) notFound();
@@ -39,8 +38,6 @@ export default async function TaskFilesPage({ params }: TaskRouteProps): Promise
   const data = await readRecordOrNotFound(() => getTaskFiles(taskId));
   return (
     <DetailPage
-      // The record shell above renders the task's name, its trail and its tabs; the rail says Files,
-      // so this page states how many files the task carries and leaves the list to the tab.
       ownsHeader={false}
       facts={[
         { term: dictionary.tasks.files.attachments, value: formatCount(data.attachments.length, locale) },

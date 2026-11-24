@@ -28,28 +28,22 @@ interface PendingDrop {
 
 const FIELD_CLASSES = 'w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring';
 
-// Why module scope: every card formats its own timestamp, so a per-card formatter
-// would be rebuilt for each row on every render.
+// A per-card formatter would be rebuilt for each row on every render.
 const LANE_TIME_FORMAT = new Intl.DateTimeFormat();
 
 export function LaneBoard({ board, permissionKeys }: LaneBoardProps) {
   const router = useRouter();
   const sensor = useSensor(PointerSensor, { activationConstraint: { distance: 4 } });
-  // Why memoized: the key list is stable for the session, so the gate below rebuilds
-  // the same Set on every render without reading different data.
+  // The key list is stable for the session; without the memo the permission check below rebuilds the same Set every render.
   const effective = useMemo(() => new Set(permissionKeys), [permissionKeys]);
-  // Why lane_move, not lane_assign: every card already has a lane, so any
-  // placement change is a move — matching how SubmissionList gates its modal.
+  // Every card already has a lane, so any placement change is a move.
   const canMove = hasEffectivePermission(effective, 'evaluation:lane_move');
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [pending, setPending] = useState<PendingDrop | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
 
   const laneNames = useMemo(() => board.lanes.map((entry) => entry.lane), [board]);
-  // Why no windowing: the server caps this board before it reaches here, and the
-  // sibling lists are paginated rather than virtualized. Row virtualisation would
-  // also unmount the drag handles dnd-kit measures against, so a drop that looks
-  // available would no longer be droppable.
+  // Virtualisation would unmount the drag handles dnd-kit measures against, so a drop that looks available would not be.
   const allItems = useMemo(() => board.lanes.flatMap((entry) => entry.items), [board]);
 
   const handleDragEnd = (event: DragEndEvent): void => {
@@ -59,8 +53,7 @@ export function LaneBoard({ board, permissionKeys }: LaneBoardProps) {
     const rawOver = over.data.current?.lane as string | undefined;
     const targetLane = rawOver ?? (typeof over.id === 'string' && over.id.startsWith('lane:') ? over.id.slice(5) : undefined);
     if (sourceLane === undefined || targetLane === undefined || sourceLane === targetLane) return;
-    // Why confirm, not direct move: a lane change needs an audit reason, so the
-    // drop stages the target and the same move action runs after reason entry.
+    // A lane change needs an audit reason, so the drop stages the target and the move runs after reason entry.
     setPending({ submissionId: Number(active.id), lane: targetLane });
     setExpandedId(Number(active.id));
   };
@@ -181,8 +174,7 @@ function DropConfirm({ pending, onDone, onCancel }: { pending: PendingDrop; onDo
   const handleMove = async (): Promise<void> => {
     setBusy(true);
     try {
-      // Why same action as the selector: drop and selector are two entries to one
-      // move flow, so both call moveEvaluationLane with lane + reason.
+      // Drop and selector are two entries to one move flow, so both call the same action.
       const outcome = await runAction(
         { pending: 'Moving evaluation lane…', success: 'Lane moved', failure: 'Lane move failed' },
         () => moveEvaluationLane(pending.submissionId, pending.lane, reason.trim()),

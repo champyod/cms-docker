@@ -34,9 +34,6 @@ export default async function UserTeamsPage({ params }: { params: Promise<{ loca
     <ListPage
       // The user's record shell renders this tab's name, the user, the trail and the tab rail.
       ownsHeader={false}
-      // Why no filter, no toolbar and no count line: the read returns every membership this user
-      // holds in one pass, so the table already shows the whole set and a total beneath it would
-      // repeat what the reader can count.
       empty={memberships.length === 0 ? <UserTeamsEmpty copy={dictionary.users} /> : undefined}
     >
       <UserTeamsTab memberships={memberships} copy={dictionary.users} missing={dictionary.common.notSet} locale={locale as 'en' | 'th'} />

@@ -3,8 +3,7 @@ import type { ResponsiveColumn } from '@/components/core/ResponsiveTable';
 import type { GroupWithPermissions } from '@/app/actions/adminPermissions';
 import type { GroupsDict } from './groupListTypes';
 
-// Why: one column definition drives desktop rows and mobile cards, so
-// the two layouts cannot drift apart.
+// One column definition drives the desktop rows and the mobile cards, so the two layouts cannot drift.
 export function buildColumns(
   dict: GroupsDict,
   missing: string,

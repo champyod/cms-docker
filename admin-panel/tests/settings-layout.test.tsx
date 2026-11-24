@@ -26,8 +26,7 @@ describe('SettingsPage', () => {
   it('draws a group with the panel section frame, not with a card of its own', () => {
     const html = renderToStaticMarkup(<SettingsPage breadcrumbs={crumbs} title="Settings" groups={groups} />);
 
-    // One heading level for every section in the panel, and the section frame's title size and
-    // weight - the page title is allowed to be heavier, a group title is not.
+    // One heading level for every section; a group title is not allowed to outweigh the page title.
     const headings = [...html.matchAll(/<h2[^>]*>/g)].map((match) => match[0]);
     expect(headings).toHaveLength(2);
     for (const heading of headings) {

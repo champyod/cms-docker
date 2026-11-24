@@ -57,8 +57,7 @@ describe('BoardPage', () => {
       />,
     );
 
-    // The heading is the word; the count is a badge beside it, so a reader navigating by headings
-    // hears "Service" and not "Service 12".
+    // The count is a badge beside the heading, so a reader navigating by headings hears the word alone.
     expect(html).toMatch(/<h2[^>]*>Service<\/h2>/);
     expect(html).toContain('(12)');
   });
@@ -78,8 +77,7 @@ describe('BoardPage', () => {
   });
 
   it('renders its state alone when the thing it is about does not exist yet', () => {
-    // A board with no sections is legitimate: the page says why in its state, and the gate fails a
-    // board that has neither.
+    // No sections is legitimate only when the state says why.
     const html = renderToStaticMarkup(
       <BoardPage
         breadcrumbs={crumbs}

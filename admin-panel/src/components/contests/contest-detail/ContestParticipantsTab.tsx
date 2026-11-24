@@ -14,8 +14,7 @@ export type ContestParticipantsTabProps = { data: ContestParticipantsData };
 
 type ParticipantActions = ReturnType<typeof useContestParticipantActions>;
 
-// Why: the invite picker must not offer users already participating — the
-// reader returns every invitable user, so the tab excludes members itself.
+// The reader returns every invitable user, so the tab excludes members itself.
 function useInviteCandidates(data: ContestParticipantsData): ContestParticipantsData['availableUsers'] {
   const participantUserIds = useMemo(
     () => new Set(data.participations.map((participation) => participation.user_id)),
@@ -27,8 +26,7 @@ function useInviteCandidates(data: ContestParticipantsData): ContestParticipants
   );
 }
 
-// Why: the section renders usernames itself with a fallback for rows whose
-// user relation is null — the tab passes every row through untouched.
+// The section renders usernames itself with a fallback for null user rows.
 function useSectionParticipations(data: ContestParticipantsData): { id: number; user_id: number; unrestricted: boolean; hidden: boolean; users: { username: string; first_name: string; last_name: string } | null; teams?: { code: string } | null }[] {
   return useMemo(
     () => data.participations.map((participation) => ({
@@ -83,13 +81,7 @@ function ParticipantDialogs({ data, inviteCandidates, actions, onSuccess }: {
   );
 }
 
-/**
- * The participation rows and the dialogs that invite, edit or remove one.
- *
- * Why the roster is not in here: a roster row is a team's registration override, not a
- * participation, so it is a section of its own on the page. Keeping it here made one heading cover
- * two record kinds.
- */
+/** A roster row is a team's registration override, not a participation, so it is a section of its own. */
 export function ContestParticipantsTab({ data }: ContestParticipantsTabProps): React.JSX.Element {
   const participantsCopy = useDictionary().contests.participants;
   const actions = useContestParticipantActions();

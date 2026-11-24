@@ -9,13 +9,7 @@ export type TaskSettingsTabProps = {
   notSet: string;
 };
 
-/**
- * The value each setting the group lists holds right now.
- *
- * Why the values and not an edit button: the record shell above already offers "Edit Task", which
- * opens exactly the dialog this tab used to open, so the second identical button was one action drawn
- * twice. The group says what each value means; the write goes through the record's one action.
- */
+/** The record shell above already opens this dialog; the group shows the values instead. */
 export function TaskSettingsTab({ data, labels, notSet }: TaskSettingsTabProps): React.JSX.Element {
   return (
     <dl className="grid grid-cols-2 gap-4 md:grid-cols-4">

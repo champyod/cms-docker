@@ -74,9 +74,7 @@ function ContainerActions({
   const dict = useDictionary();
   const busy = actionLoading === container.id;
 
-  // Why only a log read: the WAF and the ingress stack are a security boundary, so the row offers no
-  // control at all — not even to a Superadmin, who holds container:control and would otherwise see
-  // Stop and Restart here. The server refuses regardless; this keeps the UI from offering it.
+  // The WAF and ingress stack are a security boundary, so the row offers no control, not even to a Superadmin.
   if (container.protected) {
     return (
       <div className="flex flex-wrap items-center gap-2 sm:gap-4 sm:justify-end">

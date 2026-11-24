@@ -27,14 +27,7 @@ export interface RankingConfigSurfaceProps {
   readonly canShow: boolean;
 }
 
-/**
- * The board's config: the contests the ranking draws.
- *
- * WHY it sits beside the override surface and is not part of it: the config says what the board
- * shows and an override is the exception that wins over it, so they are two surfaces with two
- * jobs. Presenting them as one list — which is what the retired wording did — is what left an
- * operator unable to say which of the two they were looking at.
- */
+/** Config says what the board shows; an override is the exception that wins over it. */
 export function RankingConfigSurface({
   copy,
   rows,

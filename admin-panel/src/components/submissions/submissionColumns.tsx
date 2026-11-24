@@ -13,8 +13,7 @@ export function formatSubmissionDate(date: Date): string {
   return SUBMISSION_TIME_FORMAT.format(new Date(date));
 }
 
-// Why the first result only: a submission is scored per dataset, and the list
-// has always summarised the first one; the record tabs show every dataset.
+// A submission is scored per dataset; the list summarises the first and the record shows all.
 function firstResult(submission: SubmissionListItem): SubmissionResult | undefined {
   return submission.submission_results[0];
 }
@@ -61,9 +60,7 @@ function submissionScore(submission: SubmissionListItem, missing: string): React
   return <span className={score > 0 ? 'text-success' : 'text-destructive'}>{score.toFixed(0)}</span>;
 }
 
-// Why one definition: the same columns drive the desktop table and the mobile
-// cards, so a cell can no longer be edited in one layout and forgotten in the
-// other.
+// One definition drives the desktop table and the mobile cards, so a cell cannot be edited in one layout and forgotten in the other.
 export function buildSubmissionColumns(missing: string): ResponsiveColumn<SubmissionListItem>[] {
   return [
     { key: 'id', header: 'ID', sortKey: 'id', headerClassName: 'w-24', cellClassName: 'font-mono text-muted-foreground text-xs', render: (row) => <span>#{row.id}</span> },

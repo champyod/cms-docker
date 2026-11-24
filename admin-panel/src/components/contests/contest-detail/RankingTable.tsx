@@ -18,8 +18,7 @@ function formatTaskScore(value: number | undefined, precision: number, missing: 
   return value !== undefined ? formatScore(value, precision) : missing;
 }
 
-// Why: one column definition drives desktop rows and mobile cards, so
-// the two layouts cannot drift apart.
+// One column definition drives the desktop rows and the mobile cards, so the two layouts cannot drift.
 function buildRankingColumns(
   tasks: TaskCol[],
   missing: string,

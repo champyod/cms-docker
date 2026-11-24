@@ -52,9 +52,7 @@ function memoryText(bytes: string | null, missing: string): string {
   return `${(value / BYTES_PER_MEBIBYTE).toFixed(2)} MiB`;
 }
 
-// Why parse the outcome: the evaluation service writes it as a score value
-// ("1.0", "0.0"), so a positive score earns the pass tone and anything else —
-// including a non-numeric manager outcome — stays neutral rather than red.
+// The service writes the outcome as a score, so only a positive score earns the pass tone.
 function verdictVariant(outcome: string | null): 'success' | 'destructive' | 'neutral' {
   if (outcome === null) return 'neutral';
   const score = Number(outcome);
@@ -81,8 +79,7 @@ function DetailBlock({ label, body, emptyLabel }: {
   );
 }
 
-// Why an explicit reason: an unreadable testcase is a permission boundary, so the
-// panel names the key instead of rendering an empty block that reads as missing data.
+// An unreadable testcase is a permission boundary, so the table names the key.
 function HiddenTestcaseData(): React.JSX.Element {
   return (
     <InlineAlert tone="info" density="compact">
@@ -138,10 +135,7 @@ function TestcaseRow({ row, expanded, onToggle, missing, copy }: {
   );
 }
 
-/**
- * One row per testcase; opening a row fetches that testcase's input, expected
- * output and stored output from the gated per-testcase route.
- */
+/** Opening a row fetches that testcase's inputs from the gated per-testcase route. */
 export function TestcaseDetailTable({ model, canReadTestcase, missing, copy }: TestcaseDetailTableProps): React.JSX.Element {
   const [expandedTestcaseId, setExpandedTestcaseId] = useState<number | null>(null);
   const [detail, setDetail] = useState<SubmissionTestcaseDetailModel | null>(null);
@@ -156,8 +150,7 @@ export function TestcaseDetailTable({ model, canReadTestcase, missing, copy }: T
     setExpandedTestcaseId(row.testcaseId);
     setDetail(null);
     setError(null);
-    // Why no request: the route would only return the same hidden payload, so
-    // the reader without the key is told so without a round trip.
+    // Without the key the route returns the same hidden payload, so the reader is told without a round trip.
     if (!canReadTestcase) return;
     setLoading(true);
     try {
