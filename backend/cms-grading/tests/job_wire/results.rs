@@ -28,7 +28,10 @@ fn stats() -> ExecutionStats {
 fn compilation() -> Compilation {
     Compilation {
         sandboxes: vec![PathBuf::from("/sandbox/compile")],
-        sandbox_digests: Default::default(),
+        sandbox_digests: digests(&[(
+            "/sandbox/compile",
+            "7777777777777777777777777777777777777777",
+        )]),
         success: true,
         compilation_success: Some(true),
         text: Some(vec!["Compilation succeeded".to_owned()]),
@@ -41,7 +44,10 @@ fn compilation() -> Compilation {
 fn evaluation() -> Evaluation {
     Evaluation {
         sandboxes: vec![PathBuf::from("/sandbox/evaluate")],
-        sandbox_digests: Default::default(),
+        sandbox_digests: digests(&[(
+            "/sandbox/evaluate",
+            "8888888888888888888888888888888888888888",
+        )]),
         success: true,
         ran: true,
         outcome: Some(42.5),
@@ -72,6 +78,10 @@ fn a_compilation_writer_fills_the_keys_the_finished_decoder_reads() {
     assert_eq!(body["text"], json!(["Compilation succeeded"]));
     assert!(body["admin_text"].is_null());
     assert_eq!(body["sandboxes"], json!(["/sandbox/compile"]));
+    assert_eq!(
+        body["sandbox_digests"],
+        json!({"/sandbox/compile": "7777777777777777777777777777777777777777"})
+    );
     assert_eq!(
         body["executables"],
         json!({"foo": "3333333333333333333333333333333333333333"})
@@ -105,6 +115,10 @@ fn an_evaluation_writer_fills_the_keys_the_finished_decoder_reads() {
     assert_eq!(
         body["user_output"],
         json!("6666666666666666666666666666666666666666")
+    );
+    assert_eq!(
+        body["sandbox_digests"],
+        json!({"/sandbox/evaluate": "8888888888888888888888888888888888888888"})
     );
 
     let decoded = decoded(&body);

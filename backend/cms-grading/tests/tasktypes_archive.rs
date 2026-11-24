@@ -7,7 +7,7 @@ use cms_grading::execute::compile;
 use cms_grading::stage::{ArchiveError, FsCache};
 use cms_grading::tasktypes::{Batch, TaskError, TaskType};
 use cms_proto::DigestMap;
-use serde_json::json;
+use serde_json::{json, Map};
 
 use helpers::{
     compile_job, content_of, managers, produced, runtime_of, store_of, workspace, StubToolchain,
@@ -49,6 +49,11 @@ fn a_compilation_archive_is_keyed_by_its_sandbox_path() {
     assert_eq!(compiled.sandboxes.len(), 1);
     assert_archived(&store, &compiled.sandboxes, &compiled.sandbox_digests);
     assert!(compiled.sandboxes[0].is_dir());
+
+    let mut body = Map::new();
+    compiled.write_body(&mut body);
+    assert_eq!(body["sandbox_digests"], json!(compiled.sandbox_digests));
+    assert_eq!(body["sandboxes"], json!(compiled.sandboxes));
 }
 
 #[test]
