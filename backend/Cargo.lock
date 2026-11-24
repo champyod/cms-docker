@@ -278,6 +278,7 @@ dependencies = [
  "cms-db",
  "cms-grading",
  "cms-proto",
+ "cms-svc",
  "serde_json",
 ]
 

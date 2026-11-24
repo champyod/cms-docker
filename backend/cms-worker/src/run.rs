@@ -12,6 +12,12 @@
 //! cache belong to the worker rather than to a request, so each phase receives
 //! the same settings and a clone of the same filesystem store.
 //!
+//! The language lookup is deferred rather than raised: a known toolchain is
+//! passed when there is one, and an unknown name is reported only if the selected
+//! phase returns [`TaskError::NoLanguage`]. A phase that answers from a carried
+//! file or skips compilation therefore never asks for a toolchain it does not
+//! read, as the reference does.
+//!
 //! # Errors
 //!
 //! [`JobError`], and only that: a malformed wire body, an unknown language, bad
@@ -29,7 +35,7 @@ use cms_grading::execute;
 use cms_grading::job::{CompilationJob, EvaluationJob};
 use cms_grading::languages::get_language;
 use cms_grading::stage::{Cache, FsCache};
-use cms_grading::tasktypes::{Runtime, TaskType, Toolchain};
+use cms_grading::tasktypes::{Runtime, TaskError, TaskType, Toolchain};
 use cms_proto::JobKind;
 use serde_json::{Map, Value};
 
@@ -95,11 +101,11 @@ fn run_compilation(
     store: Box<dyn Cache>,
 ) -> Result<(), JobError> {
     let job = CompilationJob::from_body(body).map_err(work)?;
-    let toolchain = resolve_toolchain(job.language.as_deref())?;
     let task_type =
         TaskType::of(task_type_name, &job.task_type_parameters).map_err(from_task_error)?;
-    let result =
-        execute::compile(&task_type, &job, toolchain, runtime, store).map_err(from_task_error)?;
+    let (toolchain, unknown_language) = lookup_language(job.language.as_deref());
+    let result = execute::compile(&task_type, &job, toolchain, runtime, store)
+        .map_err(|error| phase_refusal(error, unknown_language))?;
     result.write_body(body);
     Ok(())
 }
@@ -112,19 +118,37 @@ fn run_evaluation(
     store: Box<dyn Cache>,
 ) -> Result<(), JobError> {
     let job = EvaluationJob::from_body(body).map_err(work)?;
-    let toolchain = resolve_toolchain(job.language.as_deref())?;
     let task_type =
         TaskType::of(task_type_name, &job.task_type_parameters).map_err(from_task_error)?;
-    let result =
-        execute::evaluate(&task_type, &job, toolchain, runtime, store).map_err(from_task_error)?;
+    let (toolchain, unknown_language) = lookup_language(job.language.as_deref());
+    let result = execute::evaluate(&task_type, &job, toolchain, runtime, store)
+        .map_err(|error| phase_refusal(error, unknown_language))?;
     result.write_body(body);
     Ok(())
 }
 
 /// The toolchain a job names, or none when the task takes no language.
-fn resolve_toolchain(name: Option<&str>) -> Result<Option<&'static dyn Toolchain>, JobError> {
-    name.map(|name| get_language(name).map_err(work))
-        .transpose()
+///
+/// The unknown-name sentence is returned beside it rather than raised because
+/// only a phase that reaches a language step may refuse it.
+fn lookup_language(name: Option<&str>) -> (Option<&'static dyn Toolchain>, Option<String>) {
+    let Some(name) = name else {
+        return (None, None);
+    };
+    match get_language(name) {
+        Ok(toolchain) => (Some(toolchain), None),
+        Err(error) => (None, Some(error.to_string())),
+    }
+}
+
+/// Reports an unknown language only when the selected phase needed a toolchain.
+fn phase_refusal(error: TaskError, unknown_language: Option<String>) -> JobError {
+    if matches!(&error, TaskError::NoLanguage) {
+        if let Some(reason) = unknown_language {
+            return JobError::Work { reason };
+        }
+    }
+    from_task_error(error)
 }
 
 /// Carries a refusal from the wire or language layer as work, not a tombstone.

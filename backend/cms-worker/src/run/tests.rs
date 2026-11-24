@@ -49,6 +49,19 @@ impl Cache for RefusingCache {
     }
 }
 
+/// A cache whose carried answer and correct output are the same bytes.
+struct AnswerCache;
+
+impl Cache for AnswerCache {
+    fn get_file(&self, _handle: &CacheHandle) -> Result<Vec<u8>, StageError> {
+        Ok(b"the answer".to_vec())
+    }
+
+    fn put_file(&self, _digest: &FileDigest, _content: &[u8]) -> Result<bool, StageError> {
+        Ok(false)
+    }
+}
+
 /// A directory this test owns, cleared before the case starts.
 fn workspace(name: &str) -> PathBuf {
     let dir = std::env::temp_dir().join("cms-worker-run-tests").join(name);
@@ -176,14 +189,15 @@ fn a_configuration_refusal_is_written_as_a_failed_result() {
 fn an_unknown_language_is_work_with_the_lookup_sentence() {
     let dir = workspace("run-unknown-language");
     let mut body = body(JobKind::Compilation);
-    put(&mut body, JobKey::LANGUAGE, json!("C++"));
-    let refusal = run_job(
-        "OutputOnly",
+    put(&mut body, JobKey::TASK_TYPE, json!("Batch"));
+    put(
         &mut body,
-        &runtime(&dir),
-        Box::new(UnusedCache),
-    )
-    .expect_err("a language this worker does not know is refused");
+        JobKey::TASK_TYPE_PARAMETERS,
+        json!(["alone", ["", ""], "diff"]),
+    );
+    put(&mut body, JobKey::LANGUAGE, json!("C++"));
+    let refusal = run_job("Batch", &mut body, &runtime(&dir), Box::new(UnusedCache))
+        .expect_err("a Batch compilation needs the language it named");
     assert_eq!(
         refusal,
         JobError::Work {
@@ -193,10 +207,130 @@ fn an_unknown_language_is_work_with_the_lookup_sentence() {
 }
 
 #[test]
+fn output_only_phases_ignore_an_unknown_language() {
+    let dir = workspace("run-output-only-unknown-language");
+    for kind in [JobKind::Compilation, JobKind::Evaluation] {
+        let mut body = body(kind);
+        put(&mut body, JobKey::LANGUAGE, json!("C++"));
+        run_job(
+            "OutputOnly",
+            &mut body,
+            &runtime(&dir),
+            Box::new(UnusedCache),
+        )
+        .expect("an output-only phase never reads a toolchain");
+        assert_eq!(body[JobKey::SUCCESS.as_str()], json!(true));
+        assert_eq!(body[JobKey::SANDBOXES.as_str()], json!([]));
+    }
+}
+
+#[test]
+fn batch_and_output_answer_only_phases_ignore_an_unknown_language() {
+    let dir = workspace("run-mixed-answer-unknown-language");
+    let parameters = json!(["alone", ["", ""], "diff", ""]);
+    let mut compilation = body(JobKind::Compilation);
+    put(&mut compilation, JobKey::TASK_TYPE, json!("BatchAndOutput"));
+    put(
+        &mut compilation,
+        JobKey::TASK_TYPE_PARAMETERS,
+        parameters.clone(),
+    );
+    put(
+        &mut compilation,
+        JobKey::FILES,
+        json!({"output_1.in.txt": STORED_DIGEST}),
+    );
+    put(&mut compilation, JobKey::LANGUAGE, json!("C++"));
+    run_job(
+        "BatchAndOutput",
+        &mut compilation,
+        &runtime(&dir),
+        Box::new(UnusedCache),
+    )
+    .expect("an answer-only compilation needs no toolchain");
+    assert_eq!(compilation[JobKey::SUCCESS.as_str()], json!(true));
+    assert_eq!(
+        compilation[JobKey::COMPILATION_SUCCESS.as_str()],
+        json!(true)
+    );
+    assert_eq!(compilation[JobKey::SANDBOXES.as_str()], json!([]));
+
+    let mut evaluation = carried_answer();
+    put(&mut evaluation, JobKey::TASK_TYPE, json!("BatchAndOutput"));
+    put(&mut evaluation, JobKey::TASK_TYPE_PARAMETERS, parameters);
+    put(&mut evaluation, JobKey::LANGUAGE, json!("C++"));
+    run_job(
+        "BatchAndOutput",
+        &mut evaluation,
+        &runtime(&dir),
+        Box::new(AnswerCache),
+    )
+    .expect("a carried answer needs no toolchain");
+    assert_eq!(evaluation[JobKey::SUCCESS.as_str()], json!(true));
+    assert_eq!(evaluation[JobKey::OUTCOME.as_str()], json!("1.0"));
+    assert_eq!(
+        evaluation[JobKey::TEXT.as_str()],
+        json!(["Output is correct"])
+    );
+    assert_eq!(evaluation[JobKey::SANDBOXES.as_str()], json!([]));
+}
+
+#[test]
+fn a_batch_and_output_listed_testcase_ignores_an_unknown_language() {
+    let dir = workspace("run-mixed-listed-unknown-language");
+    let mut body = carried_answer();
+    put(&mut body, JobKey::TASK_TYPE, json!("BatchAndOutput"));
+    put(
+        &mut body,
+        JobKey::TASK_TYPE_PARAMETERS,
+        json!(["alone", ["", ""], "diff", "1.in"]),
+    );
+    put(&mut body, JobKey::FILES, json!({}));
+    put(
+        &mut body,
+        JobKey::EXECUTABLES,
+        json!({"sol": STORED_DIGEST}),
+    );
+    put(&mut body, JobKey::LANGUAGE, json!("C++"));
+    run_job(
+        "BatchAndOutput",
+        &mut body,
+        &runtime(&dir),
+        Box::new(UnusedCache),
+    )
+    .expect("a listed output-only testcase never reaches the Batch phase");
+    assert_eq!(body[JobKey::SUCCESS.as_str()], json!(true));
+    assert_eq!(body[JobKey::OUTCOME.as_str()], json!("0.0"));
+    assert_eq!(body[JobKey::TEXT.as_str()], json!(["File not submitted"]));
+    assert_eq!(body[JobKey::SANDBOXES.as_str()], json!([]));
+}
+
+#[test]
+fn a_missing_language_on_a_batch_job_keeps_the_no_language_reason() {
+    let dir = workspace("run-missing-language");
+    let mut body = body(JobKind::Compilation);
+    put(&mut body, JobKey::TASK_TYPE, json!("Batch"));
+    put(
+        &mut body,
+        JobKey::TASK_TYPE_PARAMETERS,
+        json!(["alone", ["", ""], "diff"]),
+    );
+    let refusal = run_job("Batch", &mut body, &runtime(&dir), Box::new(UnusedCache))
+        .expect_err("a Batch compilation cannot run without a language");
+    assert_eq!(
+        refusal,
+        JobError::Work {
+            reason: String::from("the job needs a language, but no toolchain was given"),
+        }
+    );
+}
+
+#[test]
 fn bad_task_parameters_are_work_with_the_task_sentence() {
     let dir = workspace("run-bad-parameters");
     let mut body = body(JobKind::Compilation);
     put(&mut body, JobKey::TASK_TYPE_PARAMETERS, json!(["neither"]));
+    put(&mut body, JobKey::LANGUAGE, json!("C++"));
     let refusal = run_job(
         "OutputOnly",
         &mut body,
