@@ -69,15 +69,31 @@ impl Counter {
         if keys.is_empty() {
             return Ok(());
         }
-        // The attempt list is cleared with its counter, so a successful sign-in
-        // leaves neither a count nor the attempts behind it.
-        let mut all: Vec<String> = Vec::with_capacity(keys.len() * 2);
+        // The attempt list and display metadata are cleared with the counter, so a
+        // successful sign-in leaves neither a count nor the facts behind it.
+        let mut all: Vec<String> = Vec::with_capacity(keys.len() * 3);
         for key in keys {
             all.push(key.clone());
             all.push(lockout::attempt_key_for(key));
+            all.push(lockout::metadata_key_for(key));
         }
         let mut connection = self.manager.clone();
         let _: () = connection.del(all).await?;
+        Ok(())
+    }
+
+    /// Store the panel display facts beside a hashed account key, expiring with the counter.
+    pub async fn record_identity(
+        &self,
+        key: &str,
+        username: &str,
+        address: &str,
+        window: Duration,
+    ) -> Result<(), redis::RedisError> {
+        let seconds = window.as_secs().max(1);
+        let value = serde_json::json!({"username": username, "ip": address}).to_string();
+        let mut connection = self.manager.clone();
+        let _: () = connection.set_ex(key, value, seconds).await?;
         Ok(())
     }
 

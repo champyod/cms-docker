@@ -14,7 +14,7 @@ grep -q 'Err(error) => {' "$submit" && ok || bad "malformed credential branch mi
 grep -q 'unusable stored credential' "$submit" && ok || bad "malformed credential is not logged"
 grep -q 'return Ok(None)' "$submit" && ok || bad "malformed credential does not fall through to credentials"
 ! grep -q 'Err(error) => return Err(Refusal' "$submit" && ok || bad "malformed credential still becomes a service refusal"
-grep -q 'record_failure(counter, &account_key, &address_key, &facts)' "$submit" && ok || bad "credential failures do not record the counter"
+grep -q 'record_failure(counter, Some(&account_key), &address_key, &facts)' "$submit" && ok || bad "credential failures do not record the counter"
 grep -q '"/login?error=credentials"' "$submit" && ok || bad "the generic credentials redirect is missing"
 
 printf '%d passed, %d failed\n' "$pass" "$fail"

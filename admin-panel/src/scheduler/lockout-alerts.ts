@@ -1,6 +1,7 @@
 import { createClient } from 'redis';
 
 import { LOCKOUT_NAMESPACES } from '@/lib/lockout-namespaces';
+import { loadRankingIdentities, type LockoutActor } from '@/lib/login-lockouts';
 import { describeLockoutKey } from '@/lib/redis-lockouts';
 
 // Failures at which a surface refuses the attempt outright (the ban threshold).
@@ -50,7 +51,21 @@ export async function scanLockoutAlerts(url: string): Promise<LockoutAlert[]> {
         found.push({ key, subject: describeLockoutKey(entry.namespace, key), count, retryAfterSeconds: ttl });
       }
     }
-    return found;
+    let identities = new Map<string, LockoutActor>();
+    try {
+      identities = await loadRankingIdentities(
+        url,
+        found.map((alert) => alert.key),
+      );
+    } catch (error) {
+      console.error('lockout alert identity read failed:', error);
+    }
+    return found.map((alert) => {
+      const identity = identities.get(alert.key);
+      return identity === undefined || identity.username === null
+        ? alert
+        : { ...alert, subject: `${identity.username} from ${identity.ip}` };
+    });
   } catch {
     return [];
   } finally {

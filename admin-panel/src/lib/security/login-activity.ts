@@ -1,5 +1,10 @@
 import { LOGIN_LOCKOUT_MS } from '@/lib/auth-rate-limit';
-import { describeLockoutActor, listLoginLockouts, type LockoutActor } from '@/lib/login-lockouts';
+import {
+  describeLockoutActor,
+  listLoginLockouts,
+  loadRankingIdentities,
+  type LockoutActor,
+} from '@/lib/login-lockouts';
 import { listAttempts, type LoginAttempt } from '@/lib/login-attempts';
 import { lockoutNamespaceFor, type LockoutSurface } from '@/lib/lockout-namespaces';
 import { prisma } from '@/lib/prisma';
@@ -69,7 +74,11 @@ function subjectFor(actor: LockoutActor): string {
  */
 export async function listLoginActivity(url: string): Promise<LoginActivity[]> {
   const counters = await listLoginLockouts(url);
-  const actors = counters.map((counter) => ({ counter, actor: describeLockoutActor(counter.key) }));
+  const identities = await loadRankingIdentities(url, counters.map((counter) => counter.key));
+  const actors = counters.map((counter) => ({
+    counter,
+    actor: identities.get(counter.key) ?? describeLockoutActor(counter.key),
+  }));
   const usernames = [
     ...new Set(
       actors

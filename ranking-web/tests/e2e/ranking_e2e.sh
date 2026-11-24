@@ -241,7 +241,7 @@ console_login_refuses_an_admin_without_the_key() {
 
 console_login_treats_a_malformed_credential_as_a_credential_failure() {
     local ip="198.51.100.203" code i
-    for i in 1 2 3 4 5; do
+    for _ in 1 2 3 4 5; do
         code="$(curl -sS -o /dev/null -w "%{http_code}" -H "X-Forwarded-For: ${ip}" \
             -d "username=e2e-bad" -d "password=e2e-secret" "${BASE}/login")"
         [[ "${code}" == "303" || "${code}" == "307" ]] ||
@@ -253,6 +253,23 @@ console_login_treats_a_malformed_credential_as_a_credential_failure() {
     [[ "${code}" == "429" ]] ||
         fail "malformed credentials did not count toward the source lockout, got ${code}"
     pass "a malformed credential is counted and cannot confirm a username"
+}
+
+console_login_rejects_an_oversized_username() {
+    local ip="198.51.100.204" code i long
+    long="$(python3 -c 'print("a" * 4096)')"
+    for _ in 1 2 3 4 5; do
+        code="$(curl -sS -o /dev/null -w "%{http_code}" -H "X-Forwarded-For: ${ip}" \
+            --data-urlencode "username=${long}" -d "password=e2e-secret" "${BASE}/login")"
+        [[ "${code}" == "303" || "${code}" == "307" ]] ||
+            fail "an oversized username should be a generic refusal, got ${code}"
+    done
+    code="$(curl -sS -o /dev/null -w "%{http_code}" -H "X-Forwarded-For: ${ip}" \
+        -d "username=e2e" -d "password=e2e-secret" "${BASE}/login")"
+    [[ "${code}" == "429" ]] ||
+        fail "oversized usernames did not count toward the source lockout, got ${code}"
+    grep -q 'refused oversized username' "${LOG}" || fail "oversized username left no log signal"
+    pass "an oversized username is refused, logged and counted without a database lookup"
 }
 
 protected_mode_redirects() {
@@ -291,6 +308,7 @@ main() {
     a_stale_event_id_is_answered_with_a_reinit
     seed_console_admin
     console_login_treats_a_malformed_credential_as_a_credential_failure
+    console_login_rejects_an_oversized_username
     protected_mode_redirects
     printf "\nacceptance rehearsal passed\n"
 }

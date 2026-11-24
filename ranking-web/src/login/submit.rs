@@ -45,8 +45,25 @@ pub async fn submit(
         return Redirect::to("/login?error=empty").into_response();
     }
     let address = client_address(&headers);
-    let account_key = lockout::account_key(&username, &address);
     let address_key = lockout::address_key(&address);
+    if !lockout::username_within_limit(&username) {
+        let facts = AttemptFacts {
+            username: &username,
+            address: &address,
+            ua: headers
+                .get(header::USER_AGENT)
+                .and_then(|value| value.to_str().ok()),
+        };
+        if let Some(response) =
+            enforce_throttle(&state, counter, &fields, None, &address_key, &facts).await
+        {
+            return response;
+        }
+        record_failure(counter, None, &address_key, &facts).await;
+        eprintln!("cms-ranking: refused oversized username from {address}");
+        return Redirect::to("/login?error=credentials").into_response();
+    }
+    let account_key = lockout::account_key(&username, &address);
     let facts = AttemptFacts {
         username: &username,
         address: &address,
@@ -54,15 +71,22 @@ pub async fn submit(
             .get(header::USER_AGENT)
             .and_then(|value| value.to_str().ok()),
     };
-    if let Some(response) =
-        enforce_throttle(&state, counter, &fields, &account_key, &address_key, &facts).await
+    if let Some(response) = enforce_throttle(
+        &state,
+        counter,
+        &fields,
+        Some(&account_key),
+        &address_key,
+        &facts,
+    )
+    .await
     {
         return response;
     }
     match authenticate(&state, &username, &password).await {
         Ok(Some(user)) => accept(&state, counter, &secret, user, &account_key, &address_key).await,
         Ok(None) => {
-            record_failure(counter, &account_key, &address_key, &facts).await;
+            record_failure(counter, Some(&account_key), &address_key, &facts).await;
             Redirect::to("/login?error=credentials").into_response()
         }
         Err(refusal) => refusal.response(),
@@ -74,7 +98,7 @@ async fn enforce_throttle(
     state: &AppState,
     counter: &Counter,
     fields: &HashMap<String, String>,
-    account_key: &str,
+    account_key: Option<&str>,
     address_key: &str,
     facts: &AttemptFacts<'_>,
 ) -> Option<Response> {
@@ -206,13 +230,13 @@ async fn accept(
 
 async fn standing(
     counter: &Counter,
-    account_key: &str,
+    account_key: Option<&str>,
     address_key: &str,
 ) -> Result<(lockout::Verdict, u32), String> {
-    let account = counter
-        .read(account_key)
-        .await
-        .map_err(|error| error.to_string())?;
+    let account = match account_key {
+        Some(key) => counter.read(key).await.map_err(|error| error.to_string())?,
+        None => None,
+    };
     let address = counter
         .read(address_key)
         .await
@@ -227,20 +251,30 @@ async fn standing(
 
 async fn record_failure(
     counter: &Counter,
-    account_key: &str,
+    account_key: Option<&str>,
     address_key: &str,
     facts: &AttemptFacts<'_>,
 ) {
-    let _ = counter.record_failure(account_key, lockout::WINDOW).await;
-    let _ = counter.record_failure(address_key, lockout::WINDOW).await;
     let entry = attempt_entry(facts);
-    let _ = counter
-        .record_attempt(
-            &lockout::attempt_account_key(facts.username, facts.address),
-            &entry,
-            lockout::WINDOW,
-        )
-        .await;
+    if let Some(account_key) = account_key {
+        let _ = counter.record_failure(account_key, lockout::WINDOW).await;
+        let _ = counter
+            .record_identity(
+                &lockout::metadata_key_for(account_key),
+                facts.username,
+                facts.address,
+                lockout::WINDOW,
+            )
+            .await;
+        let _ = counter
+            .record_attempt(
+                &lockout::attempt_account_key(facts.username, facts.address),
+                &entry,
+                lockout::WINDOW,
+            )
+            .await;
+    }
+    let _ = counter.record_failure(address_key, lockout::WINDOW).await;
     let _ = counter
         .record_attempt(
             &lockout::attempt_address_key(facts.address),
