@@ -218,7 +218,7 @@ export function ContestTasksSection({
             onRemoveTask={onRemoveTask}
           />
         ))}
-        {filtered.length === 0 && <EmptyState icon={ClipboardList} title="No tasks assigned to this contest" />}
+        {filtered.length === 0 && <EmptyState icon={ClipboardList} title={strings.empty} />}
       </div>
     </div>
   );

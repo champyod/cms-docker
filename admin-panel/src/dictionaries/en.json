@@ -312,7 +312,8 @@
       "attachEmpty": "No available tasks",
       "attachFailed": "The attach was refused",
       "attachCancel": "Cancel",
-      "createNew": "Create new task"
+      "createNew": "Create new task",
+      "empty": "No tasks assigned to this contest"
     },
     "facts": {
       "scoreMode": "Score mode",

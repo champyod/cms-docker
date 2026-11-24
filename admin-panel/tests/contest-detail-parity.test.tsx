@@ -5,11 +5,13 @@ import { ContestTasksTab } from '@/components/contests/contest-detail/ContestTas
 import { ContestParticipantsTab } from '@/components/contests/contest-detail/ContestParticipantsTab';
 import { ContestSettingsTab } from '@/components/contests/contest-detail/ContestSettingsTab';
 import en from '@/dictionaries/en.json';
+import th from '@/dictionaries/th.json';
+import type { Dictionary } from '@/lib/dictionary';
 
 // Why: the participants tab carries the roster section, whose copy the authenticated
 // layout supplies through the provider — a bare render must supply it here.
-function withDictionary(node: React.JSX.Element): string {
-  return renderToStaticMarkup(<DictionaryProvider dict={en}>{node}</DictionaryProvider>);
+function withDictionary(node: React.JSX.Element, dict: Dictionary = en): string {
+  return renderToStaticMarkup(<DictionaryProvider dict={dict}>{node}</DictionaryProvider>);
 }
 
 describe('contest tab parity', () => {
@@ -17,6 +19,13 @@ describe('contest tab parity', () => {
     const html = withDictionary(<ContestTasksTab data={{ contestId: 7, tasks: [], availableTasks: [], permissionKeys: ['contest:read', 'task:read', 'task:update'] }} />);
     expect(html).toContain('No tasks assigned to this contest');
     expect(html).toContain('Add Task');
+  });
+
+  it('prints the task empty state in the reader language', () => {
+    const data = { contestId: 7, tasks: [], availableTasks: [], permissionKeys: ['contest:read', 'task:read', 'task:update'] };
+    const html = withDictionary(<ContestTasksTab data={data} />, th);
+    expect(html).toContain('ยังไม่มีงานที่กำหนดให้การแข่งขันนี้');
+    expect(html).not.toContain('No tasks assigned to this contest');
   });
 
   it('renders participant empty state and action labels', () => {
