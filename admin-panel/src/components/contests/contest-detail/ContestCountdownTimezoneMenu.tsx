@@ -168,7 +168,7 @@ export const ContestCountdownTimezoneMenu = memo(function ContestCountdownTimezo
                   </li>
                 ))}
                 {visible.length === 0 ? (
-                  <li className="px-3 py-2 text-sm text-muted-foreground">No zone matches that search.</li>
+                  <li className="px-3 py-2 text-sm text-muted-foreground">{words.noMatch}</li>
                 ) : null}
               </ul>
               {matched.length > visible.length ? (

@@ -208,7 +208,8 @@
         "rank": "#",
         "user": "User",
         "total": "Total"
-      }
+      },
+      "empty": "No submissions yet."
     },
     "tasks": {
       "one": "task",
@@ -231,7 +232,8 @@
         "select": "Select timezone",
         "searchLabel": "Search timezone",
         "listLabel": "Timezone",
-        "searchPlaceholder": "Search {count} timezones"
+        "searchPlaceholder": "Search {count} timezones",
+        "noMatch": "No zone matches that search."
       },
       "controls": {
         "warnTitle": "Warn me this far ahead",

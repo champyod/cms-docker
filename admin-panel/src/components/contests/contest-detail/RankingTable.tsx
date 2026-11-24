@@ -74,7 +74,7 @@ export function RankingTable({ ranking }: Props): React.JSX.Element | null {
       getRowKey={(entry) => entry.participationId}
       outerClassName="w-full overflow-x-auto"
       className="w-full"
-      emptyState={<p className="py-4 text-center text-sm text-muted-foreground">No submissions yet.</p>}
+      emptyState={<p className="py-4 text-center text-sm text-muted-foreground">{dict.contests.ranking.empty}</p>}
     />
   );
 }
