@@ -344,6 +344,7 @@ them at once. The split is now evidence-driven, not scheduled by taste:
 | S-5e3a2 sandbox archives | `archive_sandbox` calls `Stage::archive`, files a digest map on every result, and deletes independently of keep | **merged** `a5e10c98` (see note) |
 | S-5e3b worker execution layer | raw body to typed job to result body; `execute_job_group` envelope, shard stamp and error sentences | **merged** `187b4cf7` (see note) |
 | S-5e3c worker binary | environment settings, runtime over `fs-cache-shared`, host binding, `echo`/`quit` lifecycle | **merged** `36b9595b` (see note) |
+| S-5e3d worker precache | `precache_files` over `cms_db::FileCache`, shared lock, contest digests and missing-file pass-over | **merged** `1c54022d` (see note) |
 | S-5e2a task registry | `TaskType::of(key, params)`; the class-name key vs the human label | **merged** `dd37dd47` |
 | S-5e1 method context | `Method<C>` + generic `dispatch`/`Registry`/`Host`; the refactor that unblocks the worker | **merged** `e07a3ec2` |
 | S-8b submissions_status | the dashboard's status counts; the reconciliation bucket | **merged** `d69cc587` |
@@ -352,7 +353,7 @@ them at once. The split is now evidence-driven, not scheduled by taste:
 | S-5g messages | `messages.py` table + the `%s` arity contract; the missing-output defect | **merged** `b4966c79` |
 | S-5f write confinement | `allow_writing_only` + the symlink-out refusal the reference gets wrong | **merged** `a92a5e2f` |
 | `cms-grading` (:25) | job model, **scoring**, language + task-type registry — `tasktypes` 3,763 + `job` 710 + `stage` 734 + `languages` + `steps` | **extracted** (`15ff7cfc`) |
-| `cms-svc-worker` (:28) | the service that executes job groups | **library and binary merged** (`36b9595b`); deployment and precache open |
+| `cms-svc-worker` (:28) | the service that executes job groups | **library, binary and precache merged** (`1c54022d`); deployment open |
 
 The extraction was mechanical **because it was measured first**: `sandbox/` referenced
 `crate::tasktypes` and `crate::job` nowhere, while `tasktypes/` referenced `crate::sandbox` in
@@ -772,4 +773,28 @@ compose and config-sync change plus `precache_files` remain open.
 
 Merged gate: **162 targets, 1015 passed, 0 failed, 2 ignored**; fmt, clippy, build
 and `cargo metadata --locked` clean, with the same two `TZ=Asia/Bangkok` child probes.
+
+### S-5e3d: precache files through the real FileCacher
+
+The lane is three commits (`3f65470f`, `c759ed17`, `f996a28c`), merged as `1c54022d`;
+its own gate was **53 passed**, with fmt, clippy and `cargo metadata --locked` clean.
+`precache_files` takes the shared lock, loads the contest list and `enumerate_files`
+with `skip_submissions` and `skip_user_tests`, rolls the transaction back, and fetches
+each digest through `cms_db::FileCache` with `Backend::database` into
+`cache_dir/fs-cache-shared`. A missing file is passed over; a malformed or missing
+`contest_id` is refused by name; a worker without `DATABASE_URL` still serves jobs and
+refuses precache rather than panicking.
+
+The first brief routed the walk through `cms_grading::precache` over `FsCache`; that
+would have fetched nothing, because `FsCache` only reads the shared directory. The
+lane uses the database-backed `FileCache` and records that the synchronous walk stays
+unused on this path. The contest digest set is materialised in memory, matching the
+reference; `PRECACHE_BATCH` does not bound it.
+
+Deployment remains open: the container still starts `cmsWorker`, and the worker
+environment passes neither `RPC_SECRET` nor `DATABASE_URL`.
+
+Merged gate: **162 targets, 1022 passed, 0 failed, 2 ignored**; fmt, clippy and
+`cargo metadata --locked` clean, with the same two `TZ=Asia/Bangkok` child probes.
+
 
