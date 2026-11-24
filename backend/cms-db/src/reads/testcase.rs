@@ -1,9 +1,10 @@
 //! One dataset's `testcases` rows: the columns that read them, and the record
 //! each maps onto.
 
+use sqlx::postgres::PgConnection;
 use sqlx::{ColumnIndex, Decode, Error, FromRow, Row, Type};
 
-use super::ReadError;
+use super::{DatasetId, ReadError};
 
 use crate::digest::FileDigest;
 
@@ -39,6 +40,22 @@ pub struct TestcaseRecord {
     pub input: FileDigest,
     /// `testcases.output`, the digest of the output file.
     pub output: FileDigest,
+}
+
+/// Every testcase belonging to one dataset.
+///
+/// # Errors
+///
+/// Returns the driver's own error for a statement it could not run, including a
+/// [`ReadError::Digest`] carried under [`Error::ColumnDecode`] for a refused digest.
+pub async fn testcases_by_dataset(
+    connection: &mut PgConnection,
+    dataset: DatasetId,
+) -> Result<Vec<TestcaseRecord>, sqlx::Error> {
+    sqlx::query_as::<_, TestcaseRecord>(TESTCASES_BY_DATASET)
+        .bind(dataset.0)
+        .fetch_all(connection)
+        .await
 }
 
 /// Maps the columns [`TESTCASES_BY_DATASET`] names onto the record.

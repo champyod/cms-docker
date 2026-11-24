@@ -141,8 +141,26 @@ const TABLES: &[&str] = &[
     "CREATE TEMP TABLE testcases (
         id integer PRIMARY KEY,
         dataset_id integer NOT NULL REFERENCES datasets (id) ON DELETE CASCADE,
+        codename varchar NOT NULL DEFAULT 'case',
+        public boolean NOT NULL DEFAULT false,
         input varchar NOT NULL,
         output varchar NOT NULL)",
+    "CREATE TEMP TABLE evaluations (
+        id integer PRIMARY KEY,
+        submission_id integer NOT NULL,
+        dataset_id integer NOT NULL,
+        testcase_id integer NOT NULL REFERENCES testcases (id) ON DELETE CASCADE,
+        outcome varchar,
+        text varchar[] NOT NULL DEFAULT '{}',
+        admin_text varchar,
+        execution_time double precision,
+        execution_wall_clock_time double precision,
+        execution_memory bigint,
+        evaluation_shard integer,
+        evaluation_sandbox_paths varchar[],
+        evaluation_sandbox_digests varchar[],
+        FOREIGN KEY (submission_id, dataset_id)
+            REFERENCES submission_results (submission_id, dataset_id) ON DELETE CASCADE)",
     "CREATE TEMP TABLE files (
         id integer PRIMARY KEY,
         submission_id integer NOT NULL REFERENCES submissions (id) ON DELETE CASCADE,

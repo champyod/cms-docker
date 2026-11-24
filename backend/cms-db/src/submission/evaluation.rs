@@ -4,7 +4,7 @@ use sqlx::postgres::PgConnection;
 
 use super::{SubmissionError, SubmissionResult};
 use crate::base::{ArrayItem, Column, ColumnKind, Declaration};
-use crate::reads::TestcaseRecord;
+use crate::reads::{DatasetId, SubmissionId, TestcaseRecord};
 
 /// The `evaluations` table (`src/cms/db/submission.py:702-794`).
 pub const EVALUATION: Declaration = Declaration {
@@ -59,6 +59,23 @@ pub const DELETE_EVALUATIONS: &str = "\
 /// Removes the executables a compilation produced, which no evaluation may outlive.
 pub const DELETE_EXECUTABLES: &str =
     "DELETE FROM executables WHERE submission_id = $1 AND dataset_id = $2";
+
+/// Every testcase run recorded for one result, in testcase order.
+///
+/// # Errors
+///
+/// Returns the driver's own error for a statement it could not run.
+pub async fn evaluations_by_result(
+    connection: &mut PgConnection,
+    submission: SubmissionId,
+    dataset: DatasetId,
+) -> Result<Vec<Evaluation>, sqlx::Error> {
+    sqlx::query_as::<_, Evaluation>(EVALUATIONS_BY_RESULT)
+        .bind(submission.0)
+        .bind(dataset.0)
+        .fetch_all(connection)
+        .await
+}
 
 /// One testcase run: the outcome the grader reported and what it cost.
 #[derive(Debug, Clone, PartialEq, sqlx::FromRow)]
@@ -129,11 +146,7 @@ impl SubmissionResult {
         if !self.evaluated() {
             return Ok((None, None));
         }
-        let rows = sqlx::query_as::<_, Evaluation>(EVALUATIONS_BY_RESULT)
-            .bind(self.submission_id.0)
-            .bind(self.dataset_id.0)
-            .fetch_all(connection)
-            .await?;
+        let rows = evaluations_by_result(connection, self.submission_id, self.dataset_id).await?;
         Ok(max_resources(&rows))
     }
 }
