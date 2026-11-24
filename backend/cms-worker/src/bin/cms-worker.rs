@@ -73,7 +73,8 @@ fn build_worker(settings: &Settings) -> Result<Worker, StartError> {
         settings.compilation_limits,
         settings.max_file_size,
         settings.trusted_limits,
-    );
+    )
+    .with_keep_sandbox(settings.keep_sandbox);
     let cache = FsCache::at(settings.shared_file_dir()).map_err(StartError::Cache)?;
     let runner = Runner::new(runtime, cache);
     let worker = Worker::new(
