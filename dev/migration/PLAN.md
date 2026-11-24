@@ -354,6 +354,7 @@ them at once. The split is now evidence-driven, not scheduled by taste:
 | S-6c3 scoring io | candidate discovery, transaction bundle read and score upsert | **merged** `1eb276c0` (see note) |
 | S-6c4 scoring library | fair queue, transactional `score_candidate`, score invalidation | **merged** `b6e7cd17` (see note) |
 | S-6c5 scoring daemon | `cms-scoring` RPC, sweeper/worker, binary and compose entrypoint | **merged** `b5216bf4` (see note) |
+| S-6d1 ES planner | predicates, retry bounds and per-dataset submission/user-test operations | **merged** `2b328100` (see note) |
 | S-5e2a task registry | `TaskType::of(key, params)`; the class-name key vs the human label | **merged** `dd37dd47` |
 | S-5e1 method context | `Method<C>` + generic `dispatch`/`Registry`/`Host`; the refactor that unblocks the worker | **merged** `e07a3ec2` |
 | S-8b submissions_status | the dashboard's status counts; the reconciliation bucket | **merged** `d69cc587` |
@@ -971,6 +972,23 @@ regardless.
 Merged gate: **180 targets, 1114 passed, 0 failed, 2 ignored**, run with
 `CMS_DB_TEST_URL` set; the first merged run omitted it and the ten live tests failed
 by name, then passed with the variable present.
+
+### S-6d1: the EvaluationService planner
+
+`cms-evaluation` holds the pure half of EvaluationService. Its predicates stop at the
+reference's three attempts, distinguish an absent result from a failed one, and only
+evaluate a submission after a successful compilation below the evaluation limit. The
+planner reuses `cms_proto::Operation` and its priority levels: active first attempts are
+high (compilation) or medium (evaluation), later attempts drop one level, and anything
+on an inactive dataset is extra low. Submission evaluations list only testcases with no
+evaluation row, in input order; user tests compile once and then evaluate once. No
+database call is made.
+
+Two commits, merged as `2b328100`. The child stopped after a failing user-test test;
+the missing evaluation branch was completed here, and my mutation removing the
+evaluation exclusion failed `submission_evaluations_exclude_completed_testcases_in_input_order`
+at `backend/cms-evaluation/src/plan/tests/submission.rs:154`, restored byte-identically.
+Lane gate **39 passed**; merged gate **182 targets, 1153 passed, 0 failed, 2 ignored**.
 
 
 
