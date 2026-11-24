@@ -24,6 +24,10 @@
 //! reference's two sentences. Its method table keeps the base `echo` and `quit`
 //! calls beside the worker's own method.
 //!
+//! [`settings`] reads the environment the process was started with, so the
+//! composition root can refuse a bad input before it creates a runtime or binds
+//! a listener.
+//!
 //! # Errors
 //!
 //! [`cms_db::CacheError`], [`edge::JobError`] and [`service::ServiceError`], and
@@ -39,3 +43,4 @@ pub mod api;
 pub mod edge;
 pub mod run;
 pub mod service;
+pub mod settings;
