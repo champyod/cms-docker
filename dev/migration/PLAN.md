@@ -352,6 +352,7 @@ them at once. The split is now evidence-driven, not scheduled by taste:
 | S-6c1 score details | exact `score_details` / `public_score_details` JSON for Sum and Group | **merged** `aaa394d5` (see note) |
 | S-6c2 scoring core | dataset score fields plus pure `score()` producing a `ScoreRow` | **merged** `9cf76eff` (see note) |
 | S-6c3 scoring io | candidate discovery, transaction bundle read and score upsert | **merged** `1eb276c0` (see note) |
+| S-6c4 scoring library | fair queue, transactional `score_candidate`, score invalidation | **merged** `b6e7cd17` (see note) |
 | S-5e2a task registry | `TaskType::of(key, params)`; the class-name key vs the human label | **merged** `dd37dd47` |
 | S-5e1 method context | `Method<C>` + generic `dispatch`/`Registry`/`Host`; the refactor that unblocks the worker | **merged** `e07a3ec2` |
 | S-8b submissions_status | the dashboard's status counts; the reconciliation bucket | **merged** `d69cc587` |
@@ -928,6 +929,27 @@ Two commits, merged as `1eb276c0`. Lane gate: **57 targets, 384 passed, 0 failed
 passed. fmt, clippy and `cargo metadata --locked` clean; zero removed comments.
 
 Merged gate: **172 targets, 1091 passed, 0 failed, 2 ignored**.
+
+### S-6c4: the scoring service library
+
+The new `cms-scoring` crate holds a min-heap of scoring operations ordered by
+submission timestamp and insertion sequence, with a set that refuses a duplicate
+while it is queued. `score_candidate` opens one stamped transaction, reads the
+bundle, scores, upserts and commits, rolling back on every failure. `invalidate`
+selects fully scored results by `ResultFilter`, clears their five score columns in
+the same transaction, commits, and returns the candidates in timestamp order. A
+partially populated score is left untouched, matching the reference's scored rule.
+
+Two commits, merged as `b6e7cd17`. Lane gate: **61 targets, 392 passed, 0 failed,
+2 ignored** across `cms-scoring` and `cms-db`; the live scoring, replacement and
+invalidation tests ran against PostgreSQL. fmt, clippy and `cargo metadata --locked`
+clean; zero removed comments.
+
+The daemon, RPC methods, queue threads and ProxyService notification are not in this
+slice.
+
+Merged gate: **176 targets, 1099 passed, 0 failed, 2 ignored**.
+
 
 
 
