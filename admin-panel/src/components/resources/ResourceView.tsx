@@ -207,7 +207,7 @@ export function CountersSection(): React.JSX.Element {
       <RowFreshness {...freshness('server')}>
         <GaugeCard
           className="h-full"
-          icon={<Cpu className="h-4 w-4 text-primary" />}
+          icon={<Cpu className="h-4 w-4 text-muted-foreground" />}
           label={dict.resources.cpuUsage}
           source={source}
           percent={serverStats?.cpu || 0}
@@ -217,7 +217,7 @@ export function CountersSection(): React.JSX.Element {
       <RowFreshness {...freshness('server')}>
         <GaugeCard
           className="h-full"
-          icon={<Database className="h-4 w-4 text-info" />}
+          icon={<Database className="h-4 w-4 text-muted-foreground" />}
           label={dict.resources.memoryUsage}
           source={source}
           percent={serverStats?.memory || 0}
@@ -291,10 +291,10 @@ export function MetricsCard({ serverStats }: { serverStats: ServerStats | null }
             <div className="mb-1 text-xs uppercase tracking-wider text-muted-foreground">
               {dict.resources.networkTotal}{networkSource === null ? '' : ` ${networkSource}`}
             </div>
-            <div className="font-mono text-xs text-success">
+            <div className="font-mono text-xs text-foreground">
               {serverStats?.network ? `↓ ${formatBytes(serverStats.network.rx)}` : '-'}
             </div>
-            <div className="font-mono text-xs text-primary">
+            <div className="font-mono text-xs text-foreground">
               {serverStats?.network ? `↑ ${formatBytes(serverStats.network.tx)}` : '-'}
             </div>
           </div>
