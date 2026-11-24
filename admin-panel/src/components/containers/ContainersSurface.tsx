@@ -133,10 +133,10 @@ export function ContainerStats(): React.JSX.Element {
         Array.from({ length: STAT_CARD_SLOT_COUNT }, (_, index) => <StatsCardSkeleton key={index} />)
       ) : (
         <>
-          <StatsCard icon={Box} label={pageCopy.stats.total} value={containers.length} color="primary" />
+          <StatsCard icon={Box} label={pageCopy.stats.total} value={containers.length} color="neutral" />
           <StatsCard icon={CheckCircle2} label={pageCopy.stats.running} value={containers.filter((c) => c.state === 'running').length} color="success" />
           <StatsCard icon={AlertCircle} label={pageCopy.stats.stopped} value={containers.filter((c) => c.state !== 'running').length} color="destructive" />
-          <StatsCard icon={RotateCcw} label={pageCopy.stats.uptime} value="99.9%" color="info" />
+          <StatsCard icon={RotateCcw} label={pageCopy.stats.uptime} value="99.9%" color="neutral" />
         </>
       )}
     </div>

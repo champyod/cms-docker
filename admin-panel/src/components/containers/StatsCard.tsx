@@ -5,7 +5,7 @@ import { Card } from '@/components/core/Card';
 import { Skeleton } from '@/components/core/Skeleton';
 import { cn } from '@/lib/utils';
 
-export type StatColor = 'primary' | 'success' | 'destructive' | 'info';
+export type StatColor = 'neutral' | 'success' | 'destructive';
 
 interface StatsCardProperties {
   icon: LucideIcon;
@@ -15,10 +15,9 @@ interface StatsCardProperties {
 }
 
 const COLOR_CLASSES: Record<StatColor, string> = {
-  primary: 'text-primary bg-primary/10',
+  neutral: 'text-muted-foreground bg-muted',
   success: 'text-success bg-success/10',
   destructive: 'text-destructive bg-destructive/10',
-  info: 'text-info bg-info/10',
 };
 
 /** Why a card-shaped placeholder: a number the panel does not have yet cannot be shown at all. */

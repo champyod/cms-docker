@@ -52,7 +52,7 @@ impl CompilationJob {
         let language = user_test.language_descriptor.as_ref();
         let managers = compilation_managers(user_test, dataset, language)?;
         Ok(Self {
-            operation: operation.clone(),
+            operation: Some(operation.clone()),
             task_type: dataset.task_type.clone(),
             task_type_parameters: dataset.task_type_parameters.clone(),
             language: user_test.language.clone(),
@@ -130,7 +130,7 @@ impl EvaluationJob {
         let language = require_language(user_test)?;
         let managers = evaluation_managers(user_test, dataset, language)?;
         Ok(Self {
-            operation: operation.clone(),
+            operation: Some(operation.clone()),
             task_type: dataset.task_type.clone(),
             task_type_parameters: dataset.task_type_parameters.clone(),
             language: user_test.language.clone(),

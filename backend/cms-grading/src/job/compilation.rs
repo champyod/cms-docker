@@ -21,7 +21,7 @@ use super::{check_scope, BuildError, Dataset, Submission};
 #[derive(Debug, Clone, PartialEq)]
 pub struct CompilationJob {
     /// The operation the job performs, which is what the result is filed under.
-    pub operation: Operation,
+    pub operation: Option<Operation>,
     /// `datasets.task_type`, the name of the task type that judges it.
     pub task_type: String,
     /// `datasets.task_type_parameters`, opaque to everything but the task type.
@@ -69,7 +69,7 @@ impl CompilationJob {
             });
         }
         Ok(Self {
-            operation: operation.clone(),
+            operation: Some(operation.clone()),
             task_type: dataset.task_type.clone(),
             task_type_parameters: dataset.task_type_parameters.clone(),
             language: submission.language.clone(),

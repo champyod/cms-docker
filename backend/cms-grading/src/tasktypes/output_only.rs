@@ -138,8 +138,8 @@ impl OutputOnly {
     ) -> Result<Answer, TaskError> {
         let codename = job
             .operation
-            .testcase_codename
-            .as_deref()
+            .as_ref()
+            .and_then(|operation| operation.testcase_codename.as_deref())
             .unwrap_or_default();
         let Some(answer) = carried(job, codename)? else {
             return Ok(Answer::not_carried());
