@@ -84,8 +84,7 @@ pub const fn dataset_from_row(
     task_type: String,
     score_type: String,
     score_type_parameters: String,
-    time_limit: Option<f64>,
-    memory_limit: Option<i64>,
+    limits: (Option<f64>, Option<i64>),
     is_active: bool,
 ) -> DatasetRecord {
     DatasetRecord {
@@ -94,8 +93,8 @@ pub const fn dataset_from_row(
         task_type,
         score_type,
         score_type_parameters,
-        time_limit,
-        memory_limit,
+        time_limit: limits.0,
+        memory_limit: limits.1,
         is_active,
     }
 }

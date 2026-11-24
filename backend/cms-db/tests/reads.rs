@@ -159,8 +159,7 @@ fn a_dataset_row_maps_with_and_without_its_limits() {
         BATCH.to_string(),
         SCORE_TYPE.to_string(),
         SCORE_TYPE_PARAMETERS.to_string(),
-        Some(5.0),
-        Some(268_435_456),
+        (Some(5.0), Some(268_435_456)),
         true,
     );
     let bare = dataset_from_row(
@@ -169,8 +168,7 @@ fn a_dataset_row_maps_with_and_without_its_limits() {
         BATCH.to_string(),
         SCORE_TYPE.to_string(),
         SCORE_TYPE_PARAMETERS.to_string(),
-        None,
-        None,
+        (None, None),
         false,
     );
 

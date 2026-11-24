@@ -1,5 +1,10 @@
 //! What a participation's submissions are worth on one task.
 //!
+//! [`score`] turns one result and its evaluations into the row a scoring service
+//! writes, using the dataset's score type and the task's published precision. It
+//! borrows database records and performs no query, so the conversion is pure.
+//!
+//! Aggregation starts after that conversion and never derives a score of its own.
 //! A score here is never derived: a score type already decided what each submission is worth,
 //! and this module decides which of those numbers the task's score mode reads. [`Submission`]
 //! and its [`ResultColumns`] are values rather than a database read — `cms-db`'s result record
@@ -22,6 +27,12 @@
 //! another one of the same task. It compares the score, the public score and the ranking
 //! details, because those are what a contestant and the ranking server read.
 //!
+//! # Errors
+//!
+//! [`score`] returns [`ScoringError`] for score parameters that are not JSON, a
+//! negative precision, an evaluation outside the dataset or without a numeric
+//! outcome, a missing evaluation, or a score type's own refusal.
+//!
 //! # Panics
 //!
 //! Three caller mistakes, each refused with the reference's message rather than answering
@@ -37,11 +48,13 @@ use cms_db::ScoreMode;
 mod delta;
 mod modes;
 mod participation;
+mod score;
 mod task_score;
 
 pub use delta::{compute_changes_for_dataset, DatasetScores, ScoreColumns, SubmissionScoreDelta};
 pub use modes::{max, max_subtask, max_tokened_last};
 pub use participation::{Contribution, Counted, ResultColumns, Submission, SubmittedAt};
+pub use score::{score, ScoringError, ScoringInput};
 pub use task_score::{task_score, TaskScore};
 
 /// The two task columns the aggregation reads.

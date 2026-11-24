@@ -29,6 +29,8 @@
 //! task's published precision and the panel's own decimal pattern.
 //!
 //! What a submission is then worth is the half a task type's answer hands on.
+//! [`scoring::score`] first turns one result and its evaluations into that score
+//! row without a query or clock; [`scoring::ScoringError`] is its refusal.
 //! [`scoring`] is the other direction: a participation's submissions in one task, and the
 //! three score modes that turn them into the one number a ranking reads — the best
 //! submission, each subtask's best, or the best tokened one against the last. It takes the
@@ -70,6 +72,9 @@
 //! failure. [`scoring`]'s refusals are not errors and do not join that list: a caller asking
 //! for what cannot be meant is a programming error, so it panics with the reference's own
 //! message instead of returning something a caller would have to handle.
+//!
+//! [`scoring::score`] is the exception: unreadable score input returns
+//! [`scoring::ScoringError`] before any score row can be written.
 
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
