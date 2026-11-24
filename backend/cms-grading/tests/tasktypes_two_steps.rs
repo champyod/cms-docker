@@ -47,6 +47,29 @@ fn both_phases_are_started_before_either_is_waited_for() {
 }
 
 #[test]
+fn successful_two_step_boxes_are_kept_only_when_the_worker_asks() {
+    for keep in [false, true] {
+        let label = if keep {
+            "two-steps-kept"
+        } else {
+            "two-steps-removed"
+        };
+        let dir = workspace(label);
+        let runtime = runtime_of(&dir, CLEAN_LOG, true).with_keep_sandbox(keep);
+        let evaluated = task()
+            .evaluate(&job(), &StubToolchain, &runtime, Box::new(store_of(&dir)))
+            .expect("the evaluation must run");
+
+        assert!(evaluated.success && evaluated.ran);
+        assert_eq!(evaluated.sandboxes.len(), TWO);
+        assert!(
+            evaluated.sandboxes.iter().all(|path| path.is_dir() == keep),
+            "worker keep_sandbox={keep}"
+        );
+    }
+}
+
+#[test]
 fn the_two_charges_are_merged_as_one_and_the_first_reads_the_input() {
     let dir = workspace("two-steps-merge");
     let runtime = runtime_of(&dir, CLEAN_LOG, true);

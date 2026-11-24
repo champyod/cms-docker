@@ -73,7 +73,8 @@ fn build_worker(settings: &Settings) -> Result<Worker, StartError> {
         settings.compilation_limits,
         settings.max_file_size,
         settings.trusted_limits,
-    );
+    )
+    .with_keep_sandbox(settings.keep_sandbox);
     let cache = FsCache::at(settings.shared_file_dir()).map_err(StartError::Cache)?;
     let runner = Runner::new(runtime, cache);
     let worker = Worker::new(
@@ -191,6 +192,7 @@ mod tests {
             cache_dir: sandbox.path.join("cache"),
             temp_dir: sandbox.path.join("tmp"),
             sandbox_program: PathBuf::from("isolate"),
+            keep_sandbox: false,
             max_file_size: None,
             compilation_limits: CompilationLimits::default(),
             trusted_limits: TrustedLimits::new(1, Duration::from_secs(1), 1024),

@@ -107,7 +107,7 @@ impl Batch {
             )?;
             evaluation.absorb(judged);
         }
-        let keep = !evaluation.success;
+        let keep = runtime.keep_sandbox || !evaluation.success;
         run.close(keep, job.archive_sandbox)?
             .record_first(&mut evaluation.sandboxes, &mut evaluation.sandbox_digests);
         Ok(evaluation)

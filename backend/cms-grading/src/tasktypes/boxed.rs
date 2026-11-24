@@ -41,6 +41,8 @@ use super::{CompilationLimits, TaskError};
 pub struct Runtime {
     program: PathBuf,
     temp_dir: PathBuf,
+    /// Successful boxes are retained only when the worker asks, independently of archiving.
+    pub(super) keep_sandbox: bool,
     /// The three numbers a compilation is held to.
     pub compilation: CompilationLimits,
     /// The largest file an evaluation may create, in bytes, or `None` for a file
@@ -74,10 +76,18 @@ impl Runtime {
         Self {
             program: program.into(),
             temp_dir: temp_dir.into(),
+            keep_sandbox: false,
             compilation,
             file_size,
             trusted,
         }
+    }
+
+    /// Keeps successful boxes when the worker is configured to retain them.
+    #[must_use]
+    pub fn with_keep_sandbox(mut self, keep_sandbox: bool) -> Self {
+        self.keep_sandbox = keep_sandbox;
+        self
     }
 
     /// A box named `name` and the files it is handed, over one directory, which the
