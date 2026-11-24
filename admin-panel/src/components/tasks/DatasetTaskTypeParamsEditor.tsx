@@ -26,7 +26,7 @@ interface EditorProps {
 const CONTROL_CLASS = 'w-full px-3 py-2 bg-muted/40 border border-border rounded-lg text-foreground focus:outline-none focus:border-ring focus-visible:ring-2 focus-visible:ring-ring/50';
 const CODE_CLASS = 'w-full px-4 py-2.5 bg-muted/40 border border-border rounded-lg text-foreground font-mono text-sm focus:outline-none focus:border-ring focus-visible:ring-2 focus-visible:ring-ring/50';
 const LABEL_CLASS = 'text-xs font-bold text-muted-foreground uppercase mb-1.5 block';
-const TOGGLE_ACTIVE = 'px-3 py-1 rounded-lg text-xs font-semibold bg-primary/15 text-primary';
+const TOGGLE_ACTIVE = 'px-3 py-1 rounded-lg text-xs font-semibold bg-foreground text-background';
 const TOGGLE_IDLE = 'px-3 py-1 rounded-lg text-xs text-muted-foreground hover:bg-muted';
 const CODE_PLACEHOLDER = 'e.g. ["alone", ["input.txt", "output.txt"], "diff"]';
 const PASTE_NOTICE = 'Pasted content applied without lint. Edit manually to re-lint.';
@@ -109,7 +109,7 @@ function FieldList({ taskType, fields, pastedNotice, onFieldChange }: FieldListP
   if (defs.length === 0) return <p className="text-xs text-destructive">{lintTaskTypeFields(fields, taskType)}</p>;
   return (
     <>
-      {pastedNotice && <p className="text-xs text-info mb-3">{PASTE_NOTICE}</p>}
+      {pastedNotice && <p className="text-xs text-muted-foreground mb-3">{PASTE_NOTICE}</p>}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         {defs.map((def) => (
           <label key={def.key} className="block">
