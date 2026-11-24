@@ -349,6 +349,7 @@ them at once. The split is now evidence-driven, not scheduled by taste:
 | S-5e3f worker keep | `KEEP_SANDBOX` at every grading close, independent of archiving | **merged** `8233f065` (see note) |
 | S-6a outbound client | `cms-svc::Client` connect/call/echo, correlation ids, secret omission | **merged** `9a4a4cfd` (see note) |
 | S-6b checker | all-services rows, 90-second liveness rounds, `cms-checker` binary and container entrypoint | **merged** `901a35af` (see note) |
+| S-6c1 score details | exact `score_details` / `public_score_details` JSON for Sum and Group | **merged** `aaa394d5` (see note) |
 | S-5e2a task registry | `TaskType::of(key, params)`; the class-name key vs the human label | **merged** `dd37dd47` |
 | S-5e1 method context | `Method<C>` + generic `dispatch`/`Registry`/`Host`; the refactor that unblocks the worker | **merged** `e07a3ec2` |
 | S-8b submissions_status | the dashboard's status counts; the reconciliation bucket | **merged** `d69cc587` |
@@ -878,6 +879,22 @@ fmt, clippy and `cargo metadata --locked` clean. Checker compose 8/0, render-exp
 
 Merged gate: **166 targets, 1069 passed, 0 failed, 2 ignored**; fmt, clippy and
 `cargo metadata --locked` clean.
+
+### S-6c1: the score documents are pinned
+
+`Scored::details_json` and `Scored::public_details_json` serialize the stored
+documents with exactly the keys the reference writes. Sum rows carry idx, outcome,
+text, time and memory; Group testcase rows additionally carry time_limit,
+time_limit_was_exceeded and both feedback flags; a hidden row is only `{"idx": …}`,
+and a public subtask with any hidden testcase carries no score fields. Absent
+measurements serialize as null. Six exact-document tests cover both score types,
+both public/private shapes and the empty arrays.
+
+Merged as `aaa394d5`. Lane gate: **58 targets, 286 passed, 0 failed**, fmt, clippy
+and `cargo metadata --locked` clean; one removed-comment scan was zero.
+
+Merged gate: **167 targets, 1075 passed, 0 failed, 2 ignored**.
+
 
 
 
