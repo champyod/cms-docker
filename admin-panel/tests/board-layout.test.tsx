@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
-import { BoardPage } from '@/components/patterns/BoardPage';
+import { BoardPage, boardSection } from '@/components/patterns/BoardPage';
 
 const crumbs = [{ label: 'Home', href: '/' }];
 
@@ -13,16 +13,33 @@ describe('BoardPage', () => {
         title="Security"
         sections={[
           { key: 'bans', title: 'Banned addresses', description: 'Blocked at the proxy', rows: <span>1.2.3.4</span> },
-          { key: 'lockouts', title: 'Open lockouts', empty: <span>No lockouts</span>, rows: <span>never shown</span> },
+          { key: 'lockouts', title: 'Open lockouts', isEmpty: true, empty: <span>No lockouts</span> },
         ]}
       />
     );
 
     expect(html).toContain('Banned addresses');
     expect(html).toContain('Blocked at the proxy');
+    expect(html).toContain('1.2.3.4');
     expect(html).toContain('No lockouts');
-    // a section that declares its empty state does not render its rows as well
-    expect(html).not.toContain('never shown');
+  });
+
+  it('chooses exactly one body, so a section cannot pass rows and empty together', () => {
+    const html = renderToStaticMarkup(
+      <BoardPage
+        breadcrumbs={crumbs}
+        title="Security"
+        sections={[
+          { key: 'empty', title: 'No rows', ...boardSection(true, <span>empty body</span>, <span>row body</span>) },
+          { key: 'rows', title: 'Has rows', ...boardSection(false, <span>unused empty</span>, <span>used row</span>) },
+        ]}
+      />
+    );
+
+    expect(html).toContain('empty body');
+    expect(html).not.toContain('row body');
+    expect(html).toContain('used row');
+    expect(html).not.toContain('unused empty');
   });
 
   it('keeps the heading level for every section, so a board does not drift into five layouts', () => {

@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation';
 
 import { searchAll } from '@/app/actions/search';
 import { Text } from '@/components/core/Typography';
-import { BoardPage, type BoardSection } from '@/components/patterns/BoardPage';
+import { BoardPage, boardSection, type BoardSection } from '@/components/patterns/BoardPage';
 import { SearchResultCard } from '@/components/search/SearchComponents';
 import { getDictionary } from '@/i18n';
 import { buildRoute } from '@/lib/navigation/routes';
@@ -63,7 +63,7 @@ export default async function SearchPage({
       key: 'users',
       title: copy.kinds.users,
       count: results.users.length,
-      rows: (
+      ...boardSection(results.users.length === 0, <Text variant="muted">{copy.empty.users}</Text>, (
         <ResultGrid>
           {results.users.map((user) => (
             <Link key={user.id} href={buildRoute(locale, 'people.user-tabs.profile', { id: user.id })}>
@@ -71,14 +71,13 @@ export default async function SearchPage({
             </Link>
           ))}
         </ResultGrid>
-      ),
-      empty: <Text variant="muted">{copy.empty.users}</Text>,
+      )),
     },
     {
       key: 'tasks',
       title: copy.kinds.tasks,
       count: results.tasks.length,
-      rows: (
+      ...boardSection(results.tasks.length === 0, <Text variant="muted">{copy.empty.tasks}</Text>, (
         <ResultGrid>
           {results.tasks.map((task) => (
             <Link key={task.id} href={buildRoute(locale, 'tasks.record', { id: task.id })}>
@@ -86,14 +85,13 @@ export default async function SearchPage({
             </Link>
           ))}
         </ResultGrid>
-      ),
-      empty: <Text variant="muted">{copy.empty.tasks}</Text>,
+      )),
     },
     {
       key: 'contests',
       title: copy.kinds.contests,
       count: results.contests.length,
-      rows: (
+      ...boardSection(results.contests.length === 0, <Text variant="muted">{copy.empty.contests}</Text>, (
         <ResultGrid>
           {results.contests.map((contest) => (
             <Link key={contest.id} href={buildRoute(locale, 'contests.record', { id: contest.id })}>
@@ -101,14 +99,13 @@ export default async function SearchPage({
             </Link>
           ))}
         </ResultGrid>
-      ),
-      empty: <Text variant="muted">{copy.empty.contests}</Text>,
+      )),
     },
     {
       key: 'admins',
       title: copy.kinds.admins,
       count: results.admins.length,
-      rows: (
+      ...boardSection(results.admins.length === 0, <Text variant="muted">{copy.empty.admins}</Text>, (
         <ResultGrid>
           {results.admins.map((admin) => (
             // Why no link: an administrator has no page of its own, so a card that looks pressable
@@ -116,8 +113,7 @@ export default async function SearchPage({
             <SearchResultCard key={admin.id} title={admin.username} subtitle={admin.name} className="cursor-default" />
           ))}
         </ResultGrid>
-      ),
-      empty: <Text variant="muted">{copy.empty.admins}</Text>,
+      )),
     },
   ];
 

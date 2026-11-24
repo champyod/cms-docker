@@ -2,7 +2,7 @@ import { readBannedAddresses, readLoginActivity, readLoginLockouts } from '@/app
 import { readLoginExemptions } from '@/app/actions/securityExemptions';
 import { InlineAlert } from '@/components/core/InlineAlert';
 import { Text } from '@/components/core/Typography';
-import { BoardPage, type BoardSection } from '@/components/patterns/BoardPage';
+import { BoardPage, boardSection, type BoardSection } from '@/components/patterns/BoardPage';
 import { BannedAddressList } from '@/components/security/BannedAddressList';
 import { CaptchaStatusSummary } from '@/components/security/CaptchaStatusSummary';
 import { ExemptionsPanel } from '@/components/security/ExemptionsPanel';
@@ -53,31 +53,29 @@ export default async function SecurityBlocksPage({
           below is applied when the agent next runs.
         </InlineAlert>
       ),
-      rows: (
-        <>
-          <BannedAddressList bans={banned.bans} />
-          <QueueUnbanForm jailNames={banned.jailNames} />
-        </>
-      ),
-      empty: (
+      ...boardSection(banned.bans.length === 0, (
         <>
           <Text variant="muted">{dict.security.blocks.emptyBans}</Text>
           <QueueUnbanForm jailNames={banned.jailNames} />
         </>
-      ),
+      ), (
+        <>
+          <BannedAddressList bans={banned.bans} />
+          <QueueUnbanForm jailNames={banned.jailNames} />
+        </>
+      )),
     },
     {
       key: 'exemptions',
       title: 'Permanent exemptions',
       description:
         'A standing lift: the chosen account or address is never locked out or challenged until it is revoked. This is a login-layer exemption, separate from the host bans fail2ban applies.',
-      rows: <ExemptionsPanel exemptions={exemptions} />,
-      empty: (
+      ...boardSection(exemptions.length === 0, (
         <>
           <Text variant="muted">{dict.security.blocks.emptyExemptions}</Text>
           <ExemptionsPanel exemptions={[]} />
         </>
-      ),
+      ), <ExemptionsPanel exemptions={exemptions} />),
     },
     {
       key: 'activity',
@@ -90,16 +88,14 @@ export default async function SecurityBlocksPage({
           {activity.error}
         </InlineAlert>
       ),
-      rows: activity.ok ? <LoginActivityTable missing={dict.common.notSet} rows={activity.rows} labels={labels} /> : null,
-      empty: activity.ok ? <Text variant="muted">{dict.security.blocks.emptyActivity}</Text> : undefined,
+      ...boardSection(activity.ok && activity.rows.length === 0, <Text variant="muted">{dict.security.blocks.emptyActivity}</Text>, activity.ok ? <LoginActivityTable missing={dict.common.notSet} rows={activity.rows} labels={labels} /> : null),
     },
     {
       key: 'lockouts',
       title: 'Login lockouts',
       description:
         'The captcha hard limit: after repeated failed passwords the contest and admin web servers refuse the account and address for the lockout window. Lifting one clears the counter and closes the record.',
-      rows: <LockoutList lockouts={lockouts} />,
-      empty: <Text variant="muted">{dict.security.blocks.emptyLockouts}</Text>,
+      ...boardSection(lockouts.length === 0, <Text variant="muted">{dict.security.blocks.emptyLockouts}</Text>, <LockoutList lockouts={lockouts} />),
     },
   ];
 

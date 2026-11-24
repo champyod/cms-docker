@@ -4,21 +4,26 @@ import { SectionCard } from '@/components/core/SectionCard';
 import { PageSurface } from '@/components/core/PageSurface';
 import type { PageSlots } from '@/components/patterns/page-types';
 
-export interface BoardSection {
+export type BoardSectionBody =
+  | { readonly isEmpty?: false; readonly rows: ReactNode; readonly empty?: never }
+  | { readonly isEmpty: true; readonly empty: ReactNode; readonly rows?: never };
+
+export function boardSection(isEmpty: boolean, empty: ReactNode, rows: ReactNode): BoardSectionBody {
+  return isEmpty ? { isEmpty: true, empty } : { rows };
+}
+
+export type BoardSection = BoardSectionBody & {
   /** Stable key, used to report which section changed. */
   readonly key: string;
   readonly title: string;
-  /** What this section answers, in one line — a board of five untitled lists is a wall. */
+  /** What this section answers, in one line: a board of five untitled lists is a wall. */
   readonly description?: string;
   /** A count in its own slot: inside the title it joins the heading's accessible name. */
   readonly count?: number;
   /** The section's own state, when it has one worth reading before its rows. */
   readonly state?: ReactNode;
-  /** What empty means for this section specifically: "no blocks" differs from "not loaded". */
-  readonly empty?: ReactNode;
-  readonly rows: ReactNode;
   readonly actions?: ReactNode;
-}
+};
 
 export interface BoardPageProps extends Omit<PageSlots, 'children'> {
   /** The page's own state, above every section. */
@@ -60,9 +65,7 @@ export function BoardPage({
             actions={section.actions}
           >
             {section.state}
-            {/* A section that names its empty state renders it instead of its rows: the page knows
-                whether the section is empty, and passing `empty` is how it says so. */}
-            {section.empty ?? section.rows}
+            {section.isEmpty === true ? section.empty : section.rows}
           </SectionCard>
         ))}
       </div>
