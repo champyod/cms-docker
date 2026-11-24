@@ -348,6 +348,7 @@ them at once. The split is now evidence-driven, not scheduled by taste:
 | S-5e3e worker deployment | Dockerfile build/copy, compose command/env/healthcheck and config-sync sandbox rendering | **merged** `6bdfee9c` (see note) |
 | S-5e3f worker keep | `KEEP_SANDBOX` at every grading close, independent of archiving | **merged** `8233f065` (see note) |
 | S-6a outbound client | `cms-svc::Client` connect/call/echo, correlation ids, secret omission | **merged** `9a4a4cfd` (see note) |
+| S-6b checker | all-services rows, 90-second liveness rounds, `cms-checker` binary and container entrypoint | **merged** `901a35af` (see note) |
 | S-5e2a task registry | `TaskType::of(key, params)`; the class-name key vs the human label | **merged** `dd37dd47` |
 | S-5e1 method context | `Method<C>` + generic `dispatch`/`Registry`/`Host`; the refactor that unblocks the worker | **merged** `e07a3ec2` |
 | S-8b submissions_status | the dashboard's status counts; the reconciliation bucket | **merged** `d69cc587` |
@@ -859,6 +860,25 @@ for `cms-svc`, fmt, clippy and `cargo metadata --locked` clean, zero removed
 comments.
 
 Merged gate: **163 targets, 1046 passed, 0 failed, 2 ignored**.
+
+### S-6b: the Checker runs Rust
+
+`cms-svc::all_services` exposes every `CMS_SERVICES` row without the local-host
+filter. `Checker::check_once` dials each peer, echoes `Coord timestamp`, keeps a
+working client for the next round, and records a dead or mis-shapen peer as that
+peer's failure. `cms-checker` binds `CHECKER_SERVICE_PORT` on `0.0.0.0`, serves
+`echo`/`quit`, runs a round immediately and every 90 seconds stop-aware, and refuses
+a missing or malformed `CMS_SERVICES` by name. Compose runs the binary with
+`CMS_SERVICES` and `RPC_SECRET`; a configurable checker port reaches both the process
+and the published target. The image builds and ships the binary.
+
+Four commits, merged as `901a35af`. Lane gate: **16 targets, 177 passed, 0 failed**;
+fmt, clippy and `cargo metadata --locked` clean. Checker compose 8/0, render-expose
+11/0, config-sync 95/0, zero removed comments.
+
+Merged gate: **166 targets, 1069 passed, 0 failed, 2 ignored**; fmt, clippy and
+`cargo metadata --locked` clean.
+
 
 
 
