@@ -11,12 +11,14 @@ use chrono::NaiveDateTime;
 use cms_proto::Operation;
 
 pub mod operation;
+pub mod plan;
 
 pub use operation::{
     submission_to_compile, submission_to_evaluate, submission_to_evaluate_on_testcase,
     user_test_to_compile, user_test_to_evaluate, MAX_COMPILATION_TRIES, MAX_EVALUATION_TRIES,
     MAX_USER_TEST_COMPILATION_TRIES, MAX_USER_TEST_EVALUATION_TRIES,
 };
+pub use plan::{submission_operations, user_test_operations};
 
 #[cfg(test)]
 mod support;
