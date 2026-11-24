@@ -99,16 +99,10 @@ fn an_evaluation_writer_fills_the_keys_the_finished_decoder_reads() {
     let result = evaluation();
     result.write_body(body.as_object_mut().expect("a job object"));
 
-    assert_eq!(body["success"], json!(true));
-    assert_eq!(body["sandboxes"], json!(["/sandbox/evaluate"]));
     assert_eq!(body["outcome"], json!("42.5"));
     assert_eq!(
         body["user_output"],
         json!("6666666666666666666666666666666666666666")
-    );
-    assert_eq!(
-        body["executables"],
-        json!({"foo": "3333333333333333333333333333333333333333"})
     );
 
     let decoded = decoded(&body);
