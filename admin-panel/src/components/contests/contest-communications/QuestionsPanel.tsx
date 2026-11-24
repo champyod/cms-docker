@@ -92,9 +92,9 @@ export function QuestionsPanel({ questions, replyingTo, replySubject, replyText,
               <div className="mt-1 text-sm text-muted-foreground">{q.text}</div>
               <div className="mt-2 text-xs text-muted-foreground">From: {q.participations?.users?.username} at {formatTime(q.question_timestamp)}</div>
               {q.reply_timestamp && (
-                <div className="mt-3 rounded-lg border-l-2 border-primary bg-primary/10 p-2">
+                <div className="mt-3 rounded-lg border-l-2 border-border bg-muted/60 p-2">
                   <div className="flex items-center gap-2">
-                    <div className="text-sm font-medium text-primary">{q.reply_subject}</div>
+                    <div className="text-sm font-medium text-foreground">{q.reply_subject}</div>
                     <ResolutionBadge kind={q.resolution_kind} dict={dict} />
                   </div>
                   <div className="text-sm text-muted-foreground">{q.reply_text}</div>
