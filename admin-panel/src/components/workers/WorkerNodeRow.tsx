@@ -93,7 +93,7 @@ export function WorkerNodeRow(props: WorkerNodeRowProps): ReactElement {
             <button
               onClick={() => setExpanded((value) => !value)}
               aria-label="Toggle worker log"
-              className="ml-auto inline-flex items-center gap-1 text-info hover:text-info/80"
+              className="ml-auto inline-flex items-center gap-1 text-muted-foreground hover:text-foreground underline underline-offset-2"
             >
               {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
               log
