@@ -30,7 +30,7 @@ DONE WHEN:
 |---|---|---|
 | Page declares an archetype | done | `design:archetypes`: 76 declared, 0 undeclared of 76 pages |
 | Facts from the slot list | done at inventory level | `design:inventory`: 53 of 53 |
-| Status colour only for status | gate green, debt being reduced | `design:colour`: 249 uses in 108 files; baseline 321 |
+| Status colour only for status | gate green, debt being reduced | `design:colour`: 247 uses in 108 files; baseline 321 |
 | Raw controls use primitives | gate green, debt 228 | `design:controls` |
 | Type scale, density, focus ring | done | `design:usage`, `design:token-coverage`, `design:modes` |
 | Four modes, both densities | token level done; pixel level blocked | needs an authenticated browser harness and a fixture server |
@@ -64,6 +64,7 @@ DONE WHEN:
 | `a5e10c98` (merge) | `ContestTasksSection` task avatar neutral; debt 258 to 256. Swept into the grading lane merge; see Incident. |
 | `9797365c` | `ContainerRow` name hover and Reset link stop using primary; debt 256 to 253, raw controls 229 to 228 |
 | `a10ca5db` | `RankingOverrideForm` queued chips are neutral; debt 253 to 249 |
+| `03d49755` | `WorkerNodeRow` log toggle stops using info; debt 249 to 247 |
 
 Backend commits by another writer are interleaved: `947168fc`, `bd6b8ba1`, `11e28781`,
 `52818b79`, `9f4564b5`. Do not touch them.
@@ -71,7 +72,7 @@ Backend commits by another writer are interleaved: `947168fc`, `bd6b8ba1`, `11e2
 ## Current step
 
 S12, status-colour debt reduction, one component at a time. The latest measured count is
-249 uses in 108 files, and `admin-panel/scripts/status-colour-baseline.json` is 249.
+247 uses in 108 files, and `admin-panel/scripts/status-colour-baseline.json` is 247.
 The epic `docs/design/epic-frontend-system.md` now records 313.
 
 Top remaining offenders:
@@ -90,7 +91,7 @@ decision, not a blind colour removal.
 
 - **Pixel-level measurement is blocked.** It needs an authenticated browser session, a
   fixture server, and a new dev dependency. That is an operator decision.
-- **S12 is not zero.** 249 uses in 108 files. The gate holds the line but the debt is real.
+- **S12 is not zero.** 247 uses in 108 files. The gate holds the line but the debt is real.
 - **Epic S12 record is stale.** It says 325; the measured count is 321.
 - **Epic lives under `docs/`.** `docs/` is end-user only by the workspace rule; this
   maintainer epic belongs under `dev/`. Moving it is a separate file-structure step.
