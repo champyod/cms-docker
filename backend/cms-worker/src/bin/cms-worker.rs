@@ -191,6 +191,7 @@ mod tests {
             cache_dir: sandbox.path.join("cache"),
             temp_dir: sandbox.path.join("tmp"),
             sandbox_program: PathBuf::from("isolate"),
+            keep_sandbox: false,
             max_file_size: None,
             compilation_limits: CompilationLimits::default(),
             trusted_limits: TrustedLimits::new(1, Duration::from_secs(1), 1024),

@@ -34,6 +34,7 @@ const DATABASE_URL_VARIABLE: &str = "DATABASE_URL";
 const CACHE_DIR_VARIABLE: &str = "CMS_CACHE_DIR";
 const TEMP_DIR_VARIABLE: &str = "CMS_TEMP_DIR";
 const SANDBOX_PROGRAM_VARIABLE: &str = "CMS_SANDBOX_PROGRAM";
+const KEEP_SANDBOX_VARIABLE: &str = "KEEP_SANDBOX";
 const MAX_FILE_SIZE_VARIABLE: &str = "MAX_FILE_SIZE";
 const COMPILATION_PROCESSES_VARIABLE: &str = "COMPILATION_SANDBOX_MAX_PROCESSES";
 const COMPILATION_TIME_VARIABLE: &str = "COMPILATION_SANDBOX_MAX_TIME_S";
@@ -75,6 +76,8 @@ pub struct Settings {
     pub temp_dir: PathBuf,
     /// The isolation program used to launch a box.
     pub sandbox_program: PathBuf,
+    /// Whether successful sandbox boxes are kept for inspection.
+    pub keep_sandbox: bool,
     /// The largest file an evaluation may create, or no bound when set to zero.
     pub max_file_size: Option<u64>,
     /// The limits applied to every compilation.
@@ -102,6 +105,7 @@ impl Settings {
                 SANDBOX_PROGRAM_VARIABLE,
                 DEFAULT_SANDBOX_PROGRAM,
             )?),
+            keep_sandbox: keep_sandbox()?,
             max_file_size: max_file_size()?,
             compilation_limits: compilation_limits()?,
             trusted_limits: trusted_limits()?,
@@ -177,6 +181,19 @@ fn bind_address() -> Result<SocketAddr, SettingsError> {
         "it is not a port between 0 and 65535",
     )?;
     Ok(SocketAddr::new(address, port))
+}
+
+fn keep_sandbox() -> Result<bool, SettingsError> {
+    let value = read_text(KEEP_SANDBOX_VARIABLE, Some("false"))?;
+    match value.to_ascii_lowercase().as_str() {
+        "true" | "1" => Ok(true),
+        "false" | "0" => Ok(false),
+        _ => Err(invalid(
+            KEEP_SANDBOX_VARIABLE,
+            value,
+            "it is not true, false, 1 or 0",
+        )),
+    }
 }
 
 fn max_file_size() -> Result<Option<u64>, SettingsError> {
@@ -311,7 +328,8 @@ mod tests {
 
     const SECRET_VARIABLE: &str = "RPC_SECRET";
     const DATABASE_URL_VARIABLE: &str = "DATABASE_URL";
-    const VARIABLES: [&str; 15] = [
+    const KEEP_SANDBOX_VARIABLE: &str = "KEEP_SANDBOX";
+    const VARIABLES: [&str; 16] = [
         "WORKER_SHARD",
         "WORKER_BIND_ADDR",
         "WORKER_PORT",
@@ -320,6 +338,7 @@ mod tests {
         "CMS_CACHE_DIR",
         "CMS_TEMP_DIR",
         "CMS_SANDBOX_PROGRAM",
+        KEEP_SANDBOX_VARIABLE,
         "MAX_FILE_SIZE",
         "COMPILATION_SANDBOX_MAX_PROCESSES",
         "COMPILATION_SANDBOX_MAX_TIME_S",
@@ -386,6 +405,7 @@ mod tests {
         assert_eq!(settings.cache_dir, PathBuf::from("/var/local/cache/cms"));
         assert_eq!(settings.temp_dir, PathBuf::from("/tmp"));
         assert_eq!(settings.sandbox_program, PathBuf::from("isolate"));
+        assert!(!settings.keep_sandbox);
         assert_eq!(settings.max_file_size, Some(1_048_576 * 1024));
         assert_eq!(settings.compilation_limits.processes, Some(1000));
         assert_eq!(
@@ -471,6 +491,37 @@ mod tests {
         let settings = Settings::from_env().expect("zero is a valid file-size setting");
 
         assert_eq!(settings.max_file_size, None);
+    }
+
+    #[test]
+    fn keep_sandbox_accepts_the_reference_boolean_forms() {
+        for (value, expected) in [
+            ("true", true),
+            ("TRUE", true),
+            ("TrUe", true),
+            ("1", true),
+            ("false", false),
+            ("FALSE", false),
+            ("FaLsE", false),
+            ("0", false),
+        ] {
+            let _serial = serial_environment();
+            let environment = Environment::clean();
+            environment.set(SECRET_VARIABLE, SECRET);
+            environment.set(KEEP_SANDBOX_VARIABLE, value);
+
+            let settings = Settings::from_env().expect("the boolean form is valid");
+
+            assert_eq!(settings.keep_sandbox, expected, "{value}");
+        }
+    }
+
+    #[test]
+    fn malformed_keep_sandbox_is_refused_by_name_and_value() {
+        let message = refusal_for(KEEP_SANDBOX_VARIABLE, "yes");
+
+        assert!(message.contains(KEEP_SANDBOX_VARIABLE), "{message}");
+        assert!(message.contains("yes"), "{message}");
     }
 
     #[test]
