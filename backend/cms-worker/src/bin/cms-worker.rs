@@ -41,20 +41,7 @@ fn main() -> ExitCode {
 /// Starts the worker and reports the exit its stop asked for.
 fn run() -> Result<ExitCode, StartError> {
     let settings = Settings::from_env().map_err(StartError::Settings)?;
-    let runtime = Runtime::new(
-        settings.sandbox_program,
-        settings.temp_dir,
-        settings.compilation_limits,
-        settings.max_file_size,
-        settings.trusted_limits,
-    );
-    let cache = FsCache::at(settings.cache_dir).map_err(StartError::Cache)?;
-    let runner = Runner::new(runtime, cache);
-    let worker = Worker::new(
-        settings.shard,
-        TASK_TYPES.into_iter().map(str::to_owned).collect(),
-        runner,
-    );
+    let worker = build_worker(&settings)?;
     // No backdoor: the worker answers no backdoor method, so the flag could only ever refuse one.
     let config = GateConfig {
         secret: Some(&settings.secret),
@@ -74,6 +61,24 @@ fn run() -> Result<ExitCode, StartError> {
     } else {
         ExitCode::SUCCESS
     })
+}
+
+/// Builds the runtime, store and typed runner one worker shares across requests.
+fn build_worker(settings: &Settings) -> Result<Worker, StartError> {
+    let runtime = Runtime::new(
+        settings.sandbox_program.clone(),
+        settings.temp_dir.clone(),
+        settings.compilation_limits,
+        settings.max_file_size,
+        settings.trusted_limits,
+    );
+    let cache = FsCache::at(settings.cache_dir.clone()).map_err(StartError::Cache)?;
+    let runner = Runner::new(runtime, cache);
+    Ok(Worker::new(
+        settings.shard,
+        TASK_TYPES.into_iter().map(str::to_owned).collect(),
+        runner,
+    ))
 }
 
 /// Why the process did not start or keep serving.
@@ -108,5 +113,159 @@ impl std::error::Error for StartError {
             Self::Stop(_) => None,
             Self::Host(error) => Some(error),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+    use std::io::{Read, Write};
+    use std::net::{SocketAddr, TcpStream};
+    use std::path::PathBuf;
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::mpsc;
+    use std::thread;
+    use std::time::Duration;
+
+    use cms_grading::steps::TrustedLimits;
+    use cms_grading::tasktypes::CompilationLimits;
+    use cms_proto::{GateConfig, Shard};
+    use cms_svc::{service, Host, RunOutcome};
+    use serde_json::{json, Value};
+
+    use super::build_worker;
+    use cms_worker::api::Worker;
+    use cms_worker::settings::Settings;
+
+    const SECRET: &str = "worker host test secret";
+    const TIMEOUT: Duration = Duration::from_secs(5);
+    static SANDBOX_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
+    struct Sandbox {
+        path: PathBuf,
+    }
+
+    impl Sandbox {
+        fn new() -> Self {
+            loop {
+                let sequence = SANDBOX_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+                let path = std::env::temp_dir()
+                    .join(format!("cms-worker-{}-{sequence}", std::process::id()));
+                match fs::create_dir(&path) {
+                    Ok(()) => return Self { path },
+                    Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                    Err(error) => panic!("cannot create {}: {error}", path.display()),
+                }
+            }
+        }
+    }
+
+    impl Drop for Sandbox {
+        fn drop(&mut self) {
+            fs::remove_dir_all(&self.path).expect("the test sandbox is removable");
+        }
+    }
+
+    fn connect(addr: SocketAddr) -> TcpStream {
+        let stream = TcpStream::connect(addr).expect("the host is listening");
+        stream
+            .set_read_timeout(Some(TIMEOUT))
+            .expect("a read deadline can be set on the test socket");
+        stream
+    }
+
+    fn wire(envelope: &Value) -> Vec<u8> {
+        let mut framed = serde_json::to_vec(envelope).expect("an envelope is JSON");
+        framed.extend_from_slice(b"\r\n");
+        framed
+    }
+
+    fn send(stream: &mut TcpStream, bytes: &[u8]) {
+        stream
+            .write_all(bytes)
+            .expect("the host is still reading this connection");
+    }
+
+    fn read_reply(stream: &mut TcpStream) -> Value {
+        let mut received = Vec::new();
+        while !received.ends_with(b"\r\n") {
+            let mut byte = [0_u8; 1];
+            match stream.read(&mut byte) {
+                Ok(0) => panic!(
+                    "the connection closed after {} bytes, before a whole reply",
+                    received.len()
+                ),
+                Ok(_) => received.push(byte[0]),
+                Err(error) => panic!("no reply arrived: {error}"),
+            }
+        }
+        serde_json::from_slice(&received[..received.len() - 2]).expect("the reply is JSON")
+    }
+
+    #[test]
+    fn echo_replies_and_quit_stops_the_host() {
+        let sandbox = Sandbox::new();
+        let settings = Settings {
+            shard: Shard::new(0),
+            bind_address: "127.0.0.1:0".parse().expect("the test address is valid"),
+            secret: SECRET.to_owned(),
+            cache_dir: sandbox.path.join("cache"),
+            temp_dir: sandbox.path.join("tmp"),
+            sandbox_program: PathBuf::from("isolate"),
+            max_file_size: None,
+            compilation_limits: CompilationLimits::default(),
+            trusted_limits: TrustedLimits::new(1, Duration::from_secs(1), 1024),
+        };
+        let worker = build_worker(&settings).expect("the test cache can be opened");
+        let config = GateConfig {
+            secret: Some(SECRET),
+            is_backdoor_enabled: false,
+        };
+        let host = Host::bind("127.0.0.1:0", Worker::methods(), worker, config)
+            .expect("an ephemeral port is bindable");
+        let addr = host
+            .local_addr()
+            .expect("a bound listener reports its address");
+        service::attach_stop(host.stop_handle()).expect("the test stop slot is usable");
+        let (finished, receiver) = mpsc::channel();
+        thread::spawn(move || {
+            let outcome = host.run();
+            finished.send(outcome).expect("the test waits for the host");
+        });
+        let mut stream = connect(addr);
+
+        send(
+            &mut stream,
+            &wire(&json!({
+                "__id": "echo-1",
+                "__secret": SECRET,
+                "__method": "echo",
+                "__data": {"string": "worker smoke"},
+            })),
+        );
+        let reply = read_reply(&mut stream);
+        assert_eq!(reply["__id"], json!("echo-1"));
+        assert_eq!(reply["__data"], json!("worker smoke"));
+        assert_eq!(reply["__error"], Value::Null);
+
+        send(
+            &mut stream,
+            &wire(&json!({
+                "__id": "quit-1",
+                "__secret": SECRET,
+                "__method": "quit",
+                "__data": {"reason": "smoke test complete", "fatal": false},
+            })),
+        );
+        let quit_reply = read_reply(&mut stream);
+        assert_eq!(quit_reply["__id"], json!("quit-1"));
+        assert_eq!(quit_reply["__data"], Value::Null);
+        assert_eq!(quit_reply["__error"], Value::Null);
+
+        let outcome = receiver
+            .recv_timeout(TIMEOUT)
+            .expect("quit stops the host without a panic")
+            .expect("the host keeps accepting until quit");
+        assert_eq!(outcome, RunOutcome::Stopped);
     }
 }
