@@ -94,6 +94,10 @@ pub struct Answer {
     pub sandboxes: Vec<PathBuf>,
     /// The answer handed on, absent where there was none.
     pub origin: Option<Origin>,
+    /// Whether a run did what it was asked to, false where no run was made.
+    pub ran: bool,
+    /// The digest of a run's answer, absent unless the job asked for it.
+    pub user_output: Option<FileDigest>,
     /// The words a checker is given after the three files, saying which kind of
     /// testcase it is judging, and empty where no answer was handed on to give it.
     pub extra_args: Vec<String>,
@@ -145,13 +149,14 @@ impl BatchAndOutput {
     pub fn compile(
         &self,
         job: &CompilationJob,
-        toolchain: &dyn Toolchain,
+        toolchain: Option<&dyn Toolchain>,
         runtime: &Runtime,
         store: Box<dyn Cache>,
     ) -> Result<Compilation, TaskError> {
         if !carries_source(&job.files) {
             return Ok(no_compilation());
         }
+        let toolchain = toolchain.ok_or(TaskError::NoLanguage)?;
         self.batch.compile(job, toolchain, runtime, store)
     }
 
@@ -179,7 +184,7 @@ impl BatchAndOutput {
     pub fn evaluate(
         &self,
         job: &EvaluationJob,
-        toolchain: &dyn Toolchain,
+        toolchain: Option<&dyn Toolchain>,
         runtime: &Runtime,
         store: Box<dyn Cache>,
     ) -> Result<Answer, TaskError> {
@@ -206,6 +211,7 @@ impl BatchAndOutput {
             return Ok(Answer::carried(answer, kind, judged));
         }
         if kind == BATCH && !job.executables.is_empty() {
+            let toolchain = toolchain.ok_or(TaskError::NoLanguage)?;
             let run =
                 self.batch
                     .evaluate_with(job, toolchain, runtime, store, &[BATCH.to_owned()])?;

@@ -63,14 +63,17 @@ fn a_submission_carrying_a_source_is_compiled_the_way_a_batch_one_is() {
     let compiled = mixed("1.in")
         .compile(
             &compilation(&[(SOURCE, SOURCE_DIGEST)]),
-            &StubToolchain,
+            Some(&StubToolchain),
             &runtime,
             Box::new(store.clone()),
         )
         .expect("the compilation must run");
 
     assert!(compiled.success);
-    assert_eq!(compiled.text, vec!["Compilation succeeded"]);
+    assert_eq!(
+        compiled.text,
+        Some(vec!["Compilation succeeded".to_owned()])
+    );
     assert_eq!(
         compiled.sandboxes.len(),
         1,
@@ -90,7 +93,7 @@ fn a_submission_of_answers_alone_is_compiled_without_a_box() {
     let compiled = mixed("1.in")
         .compile(
             &compilation(&[(ANSWER, ANSWER_DIGEST)]),
-            &StubToolchain,
+            None,
             &runtime,
             Box::new(store_of(&dir)),
         )
@@ -98,7 +101,10 @@ fn a_submission_of_answers_alone_is_compiled_without_a_box() {
 
     assert!(compiled.success);
     assert_eq!(compiled.compilation_success, Some(true));
-    assert_eq!(compiled.text, vec!["No compilation needed"]);
+    assert_eq!(
+        compiled.text,
+        Some(vec!["No compilation needed".to_owned()])
+    );
     assert!(
         compiled.sandboxes.is_empty() && compiled.executables.is_empty(),
         "an answer is not a source, so no box is made"
@@ -119,7 +125,7 @@ fn a_carried_answer_wins_over_the_run_and_says_which_kind_of_testcase_it_is() {
             &[(EXECUTABLE, PROGRAM_DIGEST)],
         );
         let judged = task
-            .evaluate(&job, &StubToolchain, &runtime, Box::new(store_of(&dir)))
+            .evaluate(&job, None, &runtime, Box::new(store_of(&dir)))
             .expect("the evaluation must be decided");
 
         assert!(judged.success);
@@ -140,7 +146,7 @@ fn a_testcase_the_dataset_listed_as_output_only_is_never_run() {
     let runtime = runtime_of(&dir, "0", CLEAN_LOG, &answered());
     let job = evaluation(TESTCASE, &[], &[(EXECUTABLE, PROGRAM_DIGEST)]);
     let judged = mixed("1.in")
-        .evaluate(&job, &StubToolchain, &runtime, Box::new(store_of(&dir)))
+        .evaluate(&job, None, &runtime, Box::new(store_of(&dir)))
         .expect("the evaluation must be decided");
 
     assert!(judged.success);
@@ -159,7 +165,12 @@ fn a_testcase_nobody_carried_an_answer_for_runs_the_executable() {
     let runtime = runtime_of(&dir, "0", CLEAN_LOG, &answered());
     let job = evaluation(TESTCASE, &[], &[(EXECUTABLE, PROGRAM_DIGEST)]);
     let judged = mixed("2.in")
-        .evaluate(&job, &StubToolchain, &runtime, Box::new(store_of(&dir)))
+        .evaluate(
+            &job,
+            Some(&StubToolchain),
+            &runtime,
+            Box::new(store_of(&dir)),
+        )
         .expect("the evaluation must run");
 
     assert!(judged.success);
@@ -191,7 +202,12 @@ fn a_run_that_wrote_no_answer_hands_nothing_on_and_says_why() {
     let runtime = runtime_of(&dir, "0", CLEAN_LOG, NOTHING);
     let job = evaluation(TESTCASE, &[], &[(EXECUTABLE, PROGRAM_DIGEST)]);
     let judged = mixed("2.in")
-        .evaluate(&job, &StubToolchain, &runtime, Box::new(store_of(&dir)))
+        .evaluate(
+            &job,
+            Some(&StubToolchain),
+            &runtime,
+            Box::new(store_of(&dir)),
+        )
         .expect("the evaluation must run");
 
     assert!(judged.success, "the box worked, so the run is judged");
@@ -212,8 +228,12 @@ fn the_refusals_are_asked_before_anything_runs() {
     let refused = |job: &EvaluationJob, label: &str| {
         let dir = workspace(label);
         let runtime = runtime_of(&dir, "0", CLEAN_LOG, &answered());
-        let decision =
-            mixed("2.in").evaluate(job, &StubToolchain, &runtime, Box::new(store_of(&dir)));
+        let decision = mixed("2.in").evaluate(
+            job,
+            Some(&StubToolchain),
+            &runtime,
+            Box::new(store_of(&dir)),
+        );
         (dir, decision)
     };
 

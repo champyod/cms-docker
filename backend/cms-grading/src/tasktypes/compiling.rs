@@ -49,8 +49,8 @@ pub struct Compilation {
     /// Whether the compilation produced an executable, `None` when the box did
     /// not work and there is nothing to say either way.
     pub compilation_success: Option<bool>,
-    /// The sentence a report shows, empty when there is nothing to show.
-    pub text: Vec<String>,
+    /// The sentences a report shows, absent when no compilation was attempted.
+    pub text: Option<Vec<String>>,
     /// What the compilation was charged, absent when no run was measured.
     pub stats: Option<ExecutionStats>,
     /// The files the report stores, by name, as digests.
@@ -188,13 +188,15 @@ fn file_diagnostics(run: &Run, number: usize, into: &mut DigestMap) -> Result<()
 /// What a compilation's figures say, and nothing at all where there was no run.
 fn decide(stats: Option<&ExecutionStats>) -> Compilation {
     let (success, compilation_success, text) = match stats {
-        None => (false, None, Vec::new()),
+        None => (false, None, None),
         Some(stats) => match stats.exit_status {
-            ExitStatus::Ok => (true, Some(true), said("success")),
-            ExitStatus::NonzeroReturn => (true, Some(false), said("fail")),
-            ExitStatus::Timeout | ExitStatus::TimeoutWall => (true, Some(false), said("timeout")),
-            ExitStatus::Signal => (true, Some(false), killed_by(stats)),
-            ExitStatus::SandboxError | ExitStatus::MemoryLimit => (false, None, Vec::new()),
+            ExitStatus::Ok => (true, Some(true), Some(said("success"))),
+            ExitStatus::NonzeroReturn => (true, Some(false), Some(said("fail"))),
+            ExitStatus::Timeout | ExitStatus::TimeoutWall => {
+                (true, Some(false), Some(said("timeout")))
+            }
+            ExitStatus::Signal => (true, Some(false), Some(killed_by(stats))),
+            ExitStatus::SandboxError | ExitStatus::MemoryLimit => (false, None, None),
         },
     };
     Compilation {

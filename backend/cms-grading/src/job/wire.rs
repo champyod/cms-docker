@@ -61,7 +61,7 @@ impl Compilation {
         write_run(
             body,
             self.success,
-            &self.text,
+            self.text.as_deref(),
             &self.sandboxes,
             self.stats.as_ref(),
         );
@@ -80,7 +80,7 @@ impl Evaluation {
         write_run(
             body,
             self.success,
-            &self.text,
+            self.text.as_deref(),
             &self.sandboxes,
             self.stats.as_ref(),
         );
@@ -101,7 +101,7 @@ impl Evaluation {
 fn write_run(
     body: &mut Map<String, Value>,
     success: bool,
-    text: &[String],
+    text: Option<&[String]>,
     sandboxes: &[PathBuf],
     stats: Option<&ExecutionStats>,
 ) {

@@ -45,7 +45,10 @@ fn an_output_only_submission_is_compiled_without_a_box() {
     let compiled = output_only().compile();
     assert!(compiled.success);
     assert_eq!(compiled.compilation_success, Some(true));
-    assert_eq!(compiled.text, vec!["No compilation needed"]);
+    assert_eq!(
+        compiled.text,
+        Some(vec!["No compilation needed".to_owned()])
+    );
     assert!(
         compiled.sandboxes.is_empty() && compiled.executables.is_empty(),
         "there is no source to compile, so no box is made and none is kept"

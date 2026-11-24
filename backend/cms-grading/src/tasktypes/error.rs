@@ -50,6 +50,8 @@ pub enum TaskError {
         /// The value the declaration refused.
         value: Value,
     },
+    /// A task that compiles or runs a program was given no toolchain.
+    NoLanguage,
     /// The dataset holds no manager of the name a grader compilation needs.
     MissingManager {
         /// The manager the compilation needs and the dataset does not hold.
@@ -106,6 +108,7 @@ impl fmt::Display for TaskError {
                 accepts,
                 value,
             } => write!(f, "parameter `{name}` {accepts}, not {value}"),
+            Self::NoLanguage => write!(f, "the job needs a language, but no toolchain was given"),
             Self::MissingManager { name } => {
                 write!(f, "the dataset is missing manager `{name}`")
             }

@@ -34,18 +34,22 @@ pub(super) fn judge(
 ) -> Result<(), TaskError> {
     if !evaluation.ran {
         evaluation.outcome = Some(NO_CREDIT);
-        evaluation.text = evaluation
-            .stats
-            .as_ref()
-            .map_or_else(Vec::new, what_went_wrong);
+        evaluation.text = Some(
+            evaluation
+                .stats
+                .as_ref()
+                .map_or_else(Vec::new, what_went_wrong),
+        );
         return Ok(());
     }
     if !second.files().path(OUTPUT).is_file() {
         evaluation.outcome = Some(NO_CREDIT);
-        evaluation.text = EVALUATION_MESSAGES
-            .get("nooutput")
-            .message()
-            .reported_naming(OUTPUT);
+        evaluation.text = Some(
+            EVALUATION_MESSAGES
+                .get("nooutput")
+                .message()
+                .reported_naming(OUTPUT),
+        );
         return Ok(());
     }
     if job.get_output.unwrap_or(false) {
@@ -53,7 +57,7 @@ pub(super) fn judge(
     }
     if job.only_execution.unwrap_or(false) {
         evaluation.outcome = Some(NO_CREDIT);
-        evaluation.text = vec![EXECUTED.to_owned()];
+        evaluation.text = Some(vec![EXECUTED.to_owned()]);
         return Ok(());
     }
     evaluation.output_file = Some(OutputFile {
@@ -75,7 +79,7 @@ pub(super) fn decide(first: &ExecutionStats, second: &ExecutionStats) -> Evaluat
         success,
         ran: clean(first) && clean(second),
         outcome: None,
-        text: Vec::new(),
+        text: if success { Some(Vec::new()) } else { None },
         admin_text: None,
         stats: if success {
             Some(first.merged_with(second, true))
