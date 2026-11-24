@@ -104,7 +104,7 @@ export function StatementsSection({ statements, expanded, onToggle, onUpload, on
     <SectionCard
       className="border-border"
       title="Statements"
-      icon={<FileText className="w-5 h-5 text-success" />}
+      icon={<FileText className="w-5 h-5 text-muted-foreground" />}
       count={statements.length}
       expanded={expanded}
       onToggle={onToggle}
@@ -116,9 +116,9 @@ export function StatementsSection({ statements, expanded, onToggle, onUpload, on
         ) : (
           <>
             <div className="flex flex-wrap items-center gap-2">
-              <button type="button" onClick={() => setActiveLanguage(null)} className={cn('rounded-full px-3 py-1 text-xs font-medium border transition-colors', activeLanguage === null ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted text-muted-foreground border-border hover:bg-accent')}>All</button>
+              <button type="button" onClick={() => setActiveLanguage(null)} className={cn('rounded-full px-3 py-1 text-xs font-medium border transition-colors', activeLanguage === null ? 'bg-foreground text-background border-foreground' : 'bg-muted text-muted-foreground border-border hover:bg-accent')}>All</button>
               {languages.map((lang) => (
-                <button key={lang} type="button" onClick={() => setActiveLanguage(lang)} className={cn('rounded-full px-3 py-1 text-xs font-mono border transition-colors', activeLanguage === lang ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted text-muted-foreground border-border hover:bg-accent')}>{lang}</button>
+                <button key={lang} type="button" onClick={() => setActiveLanguage(lang)} className={cn('rounded-full px-3 py-1 text-xs font-mono border transition-colors', activeLanguage === lang ? 'bg-foreground text-background border-foreground' : 'bg-muted text-muted-foreground border-border hover:bg-accent')}>{lang}</button>
               ))}
             </div>
             <ResponsiveTable
