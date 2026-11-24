@@ -12,10 +12,11 @@ mod judge;
 use std::str::FromStr;
 
 use cms_grading::stage::FileDigest;
-use cms_grading::tasktypes::{OutputSource, TaskError};
+use cms_grading::tasktypes::{eval_output, OutputSource, TaskError};
 
 use judge::{
-    check_box_made, job, judged, staged, workspace, written, ABSENT, CHECKER, SCORED, UNSCORED,
+    check_box_made, job, judged, staged, workspace, written, ABSENT, ANSWER_FILENAME, CHECKER,
+    CLEAN_LOG, SCORED, UNSCORED,
 };
 
 #[test]
@@ -73,6 +74,37 @@ fn a_named_checker_decides_the_answer_in_a_box_of_its_own() {
 }
 
 #[test]
+fn a_successful_checker_box_is_kept_only_when_the_worker_asks() {
+    for keep in [false, true] {
+        let label = if keep {
+            "judge-checker-kept"
+        } else {
+            "judge-checker-removed"
+        };
+        let dir = workspace(label);
+        let runtime = judge::runtime_of(&dir, "0", CLEAN_LOG, SCORED).with_keep_sandbox(keep);
+        let decided = eval_output(
+            &job(true),
+            Some(CHECKER),
+            OutputSource::Path(written(&dir, b"the answer")),
+            ANSWER_FILENAME,
+            &[],
+            &runtime,
+            judge::store(&dir),
+        )
+        .expect("the checker must run");
+
+        assert!(decided.success);
+        assert_eq!(decided.sandboxes.len(), 1);
+        assert_eq!(
+            decided.sandboxes[0].is_dir(),
+            keep,
+            "worker keep_sandbox={keep}"
+        );
+    }
+}
+
+#[test]
 fn a_checker_that_printed_no_score_is_a_failure_to_check() {
     let dir = workspace("judge-unscored");
 
@@ -91,6 +123,10 @@ fn a_checker_that_printed_no_score_is_a_failure_to_check() {
         undecided.sandboxes.len(),
         1,
         "the box that failed is named, or it cannot be found"
+    );
+    assert!(
+        undecided.sandboxes[0].is_dir(),
+        "a checker that returned no verdict keeps its box"
     );
 }
 

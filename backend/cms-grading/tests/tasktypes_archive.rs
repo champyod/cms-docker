@@ -155,28 +155,35 @@ fn a_batch_and_output_submission_without_sources_has_no_archive() {
 
 #[test]
 fn an_archived_evaluation_and_checker_are_keyed_by_their_own_paths() {
-    let dir = workspace("archive-evaluate-checker");
-    let store = store_of(&dir);
-    let verdict = "if [ -n \"$out\" ]; then printf 'the answer' > \"$home/${out##*/}\"; \
-                   else printf '1.0\\n'; printf 'Output is correct\\n' >&2; fi\n:";
-    let runtime = runtime_of(&dir, "0", CLEAN_LOG, verdict);
-    let mut job = evaluate_job(digests(&[(EXECUTABLE, PROGRAM_DIGEST)]));
-    job.managers = digests(&[("checker", GRADER_DIGEST)]);
-    job.archive_sandbox = true;
-    let comparator =
-        Batch::new(&json!(["alone", ["", ""], "comparator"])).expect("three parameters are a task");
+    for keep in [false, true] {
+        let label = if keep {
+            "archive-evaluate-checker-kept"
+        } else {
+            "archive-evaluate-checker-removed"
+        };
+        let dir = workspace(label);
+        let store = store_of(&dir);
+        let verdict = "if [ -n \"$out\" ]; then printf 'the answer' > \"$home/${out##*/}\"; \
+                       else printf '1.0\\n'; printf 'Output is correct\\n' >&2; fi\n:";
+        let runtime = runtime_of(&dir, "0", CLEAN_LOG, verdict).with_keep_sandbox(keep);
+        let mut job = evaluate_job(digests(&[(EXECUTABLE, PROGRAM_DIGEST)]));
+        job.managers = digests(&[("checker", GRADER_DIGEST)]);
+        job.archive_sandbox = true;
+        let comparator = Batch::new(&json!(["alone", ["", ""], "comparator"]))
+            .expect("three parameters are a task");
 
-    let evaluated = comparator
-        .evaluate(&job, &StubToolchain, &runtime, Box::new(store.clone()))
-        .expect("the evaluation and check must run");
+        let evaluated = comparator
+            .evaluate(&job, &StubToolchain, &runtime, Box::new(store.clone()))
+            .expect("the evaluation and check must run");
 
-    assert!(evaluated.success);
-    assert_eq!(evaluated.sandboxes.len(), 2);
-    assert_archived(&store, &evaluated.sandboxes, &evaluated.sandbox_digests);
-    assert!(evaluated.sandboxes.iter().all(|path| !path.exists()));
-    let mut body = Map::new();
-    evaluated.write_body(&mut body);
-    assert_body_pair(&body, &evaluated.sandboxes, &evaluated.sandbox_digests);
+        assert!(evaluated.success);
+        assert_eq!(evaluated.sandboxes.len(), 2);
+        assert_archived(&store, &evaluated.sandboxes, &evaluated.sandbox_digests);
+        assert!(evaluated.sandboxes.iter().all(|path| path.is_dir() == keep));
+        let mut body = Map::new();
+        evaluated.write_body(&mut body);
+        assert_body_pair(&body, &evaluated.sandboxes, &evaluated.sandbox_digests);
+    }
 }
 
 #[test]
@@ -216,14 +223,16 @@ fn a_batch_and_output_run_carries_its_archive_digest_to_the_body() {
 
 #[test]
 fn output_only_checker_archives_follow_the_job_flag() {
-    for (archive, label) in [
-        (true, "archive-output-only"),
-        (false, "archive-output-only-off"),
+    for (archive, keep, label) in [
+        (true, false, "archive-output-only"),
+        (true, true, "archive-output-only-kept"),
+        (false, false, "archive-output-only-off"),
+        (false, true, "archive-output-only-off-kept"),
     ] {
         let dir = workspace(label);
         let store = store_of(&dir);
         let verdict = "printf '1.0\\n'; printf 'Output is correct\\n' >&2\n:";
-        let runtime = runtime_of(&dir, "0", CLEAN_LOG, verdict);
+        let runtime = runtime_of(&dir, "0", CLEAN_LOG, verdict).with_keep_sandbox(keep);
         let task = TaskType::of("OutputOnly", &json!(["comparator"]))
             .expect("an OutputOnly comparator task");
         let mut job = evaluate_job(DigestMap::new());
@@ -239,11 +248,10 @@ fn output_only_checker_archives_follow_the_job_flag() {
         assert_eq!(evaluated.sandboxes.len(), 1);
         if archive {
             assert_archived(&store, &evaluated.sandboxes, &evaluated.sandbox_digests);
-            assert!(!evaluated.sandboxes[0].exists());
         } else {
             assert!(evaluated.sandbox_digests.is_empty());
-            assert!(!evaluated.sandboxes[0].exists());
         }
+        assert_eq!(evaluated.sandboxes[0].is_dir(), keep);
         let mut body = Map::new();
         evaluated.write_body(&mut body);
         assert_body_pair(&body, &evaluated.sandboxes, &evaluated.sandbox_digests);
