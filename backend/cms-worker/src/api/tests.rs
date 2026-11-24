@@ -17,7 +17,8 @@ use cms_grading::tasktypes::{CompilationLimits, Runtime};
 use cms_proto::{key_set_for, JobKey, JobKind, Shard, OPERATION_KEYS};
 use serde_json::{json, Map, Value};
 
-use crate::api::{execute_job_group, Worker};
+use crate::api::{execute_job_group, precache_files, Worker};
+use crate::precache::Precache;
 use crate::service::Job;
 
 /// The shard every API test asks its worker to stamp.
@@ -223,11 +224,57 @@ fn a_busy_worker_returns_the_reference_sentence() {
 }
 
 #[test]
+fn a_worker_without_precache_refuses_the_call_without_panicking() {
+    let worker = worker("precache-unavailable");
+    let refusal = precache_files(&json!({"contest_id": 7}), &worker)
+        .expect_err("a worker without DATABASE_URL refuses precaching");
+
+    assert!(refusal.contains("DATABASE_URL"), "{refusal}");
+}
+
+#[test]
+fn a_malformed_contest_id_is_refused_by_name() {
+    let worker = worker("precache-malformed-id");
+    for data in [
+        json!({}),
+        json!({"contest_id": null}),
+        json!({"contest_id": "7"}),
+        json!({"contest_id": 7.5}),
+        json!({"contest_id": 2147483648_i64}),
+    ] {
+        let refusal = precache_files(&data, &worker).expect_err("a malformed id is refused");
+        assert!(refusal.contains("contest_id"), "{refusal}");
+    }
+}
+
+#[test]
+fn a_held_precache_lock_answers_null_without_opening_the_database() {
+    let dir = workspace("precache-lock-rpc");
+    let precache = Precache::new("not-a-database-url", dir.join("tmp"), dir.join("cache"))
+        .expect("a shared cache can be opened without connecting");
+    let held = precache
+        .file_cache()
+        .precache_lock()
+        .expect("the lock file can be opened")
+        .expect("the first lock is taken");
+    let worker = worker("precache-lock-rpc-worker").with_precache(precache);
+
+    assert_eq!(
+        precache_files(&json!({"contest_id": 7}), &worker),
+        Ok(Value::Null)
+    );
+    drop(held);
+}
+
+#[test]
 fn the_method_table_keeps_echo_and_quit_beside_the_worker_method() {
     let worker = worker("method-table");
     let methods = Worker::methods();
     let names: Vec<&str> = methods.iter().map(|method| method.name).collect();
-    assert_eq!(names, ["echo", "quit", "execute_job_group"]);
+    assert_eq!(
+        names,
+        ["echo", "quit", "execute_job_group", "precache_files"]
+    );
     let echo = methods
         .iter()
         .find(|method| method.name == "echo")

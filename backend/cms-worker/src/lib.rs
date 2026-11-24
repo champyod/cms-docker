@@ -41,6 +41,7 @@
 
 pub mod api;
 pub mod edge;
+pub mod precache;
 pub mod run;
 pub mod service;
 pub mod settings;

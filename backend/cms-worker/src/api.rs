@@ -27,6 +27,7 @@ use cms_proto::{JobGroup, JobKey, Method, Shard};
 use serde_json::{json, Map, Value};
 
 use crate::edge::JobResult;
+use crate::precache::Precache;
 use crate::run::Runner;
 use crate::service::{Job, Service, ServiceError};
 
@@ -35,6 +36,15 @@ mod tests;
 
 /// The name the worker's group method is served under.
 const EXECUTE_JOB_GROUP_METHOD: &str = "execute_job_group";
+
+/// The name the worker's contest-precache method is served under.
+const PRECACHE_FILES_METHOD: &str = "precache_files";
+
+/// The only argument the contest-precache method reads.
+const CONTEST_ID_ARGUMENT: &str = "contest_id";
+
+/// Said when a worker was built without a database URL.
+const PRECACHE_UNAVAILABLE: &str = "precache_files() is unavailable because DATABASE_URL is unset";
 
 /// The only key in a job-group envelope.
 const JOBS_KEY: &str = "jobs";
@@ -58,6 +68,7 @@ const BUSY_REFUSAL: &str = concat!(
 pub struct Worker {
     service: Service,
     runner: Runner,
+    precache: Option<Precache>,
 }
 
 impl Worker {
@@ -67,7 +78,15 @@ impl Worker {
         Self {
             service: Service::new(shard, task_types),
             runner,
+            precache: None,
         }
+    }
+
+    /// Adds database-backed contest precaching to this worker.
+    #[must_use]
+    pub fn with_precache(mut self, precache: Precache) -> Self {
+        self.precache = Some(precache);
+        self
     }
 
     /// The methods this worker answers, with the base methods first.
@@ -79,8 +98,32 @@ impl Worker {
             is_callable: true,
             handler: execute_job_group,
         });
+        methods.push(Method {
+            name: PRECACHE_FILES_METHOD,
+            is_callable: true,
+            handler: precache_files,
+        });
         methods
     }
+}
+
+/// Precaches one contest's files and answers the reference's null result.
+///
+/// # Errors
+///
+/// Refuses a missing or malformed `contest_id`, a worker built without
+/// [`PRECACHE_UNAVAILABLE`], or a database or cache refusal from [`Precache::run`].
+pub fn precache_files(data: &Value, worker: &Worker) -> Result<Value, String> {
+    let contest_id = data
+        .get(CONTEST_ID_ARGUMENT)
+        .and_then(Value::as_i64)
+        .and_then(|value| i32::try_from(value).ok())
+        .ok_or_else(|| {
+            format!("{PRECACHE_FILES_METHOD}() requires an integer `{CONTEST_ID_ARGUMENT}`")
+        })?;
+    let precache = worker.precache.as_ref().ok_or(PRECACHE_UNAVAILABLE)?;
+    precache.run(contest_id)?;
+    Ok(Value::Null)
 }
 
 /// Runs one job group and returns its bodies with the results written into them.
