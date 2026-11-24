@@ -14,6 +14,11 @@
 //! that turns a tombstone into a result, and the request is charged to the clock
 //! and the worker released whichever way it left.
 //!
+//! [`run`] is the typed-job path inside that loop: it reads the wire body
+//! through the grading crate, resolves the job's language, dispatches the selected
+//! phase with the worker's runtime and cache, and writes the result back through
+//! the same grading crate.
+//!
 //! # Errors
 //!
 //! [`cms_db::CacheError`], [`edge::JobError`] and [`service::ServiceError`], and
@@ -26,4 +31,5 @@
 #![forbid(unsafe_code)]
 
 pub mod edge;
+pub mod run;
 pub mod service;
