@@ -339,6 +339,7 @@ them at once. The split is now evidence-driven, not scheduled by taste:
 | crate (ARCHITECTURE.md) | contents | state |
 |---|---|---|
 | `cms-sandbox` (:24) | `sandbox/` 1,641 + `measure` + `stats` | **extracted** (`60271227`) |
+| S-5e2b job body bridge | `from_body` readers + `write_body` writers; the input/result seam the worker loop needs | **merged** `b6a0ba5e` (see note) |
 | S-5e2a task registry | `TaskType::of(key, params)`; the class-name key vs the human label | **merged** `dd37dd47` |
 | S-5e1 method context | `Method<C>` + generic `dispatch`/`Registry`/`Host`; the refactor that unblocks the worker | **merged** `e07a3ec2` |
 | S-8b submissions_status | the dashboard's status counts; the reconciliation bucket | **merged** `d69cc587` |
@@ -651,3 +652,13 @@ CMS_DB_TEST_URL='postgres://cmsuser:…@127.0.0.1:15444/cmsdb_test' cargo test -
 **153 targets, 933 passed, 0 failed.** The gate is not weakened: `schema_check.rs` still
 compares statements against the frozen dump, and the version check that made this visible is
 the reason a 16 server cannot silently pass.
+
+### S-5e2b landed inside another writer's commit
+
+The bridge is on the landing branch, but its merge commit is `b6a0ba5e` — subject
+`refactor(stats): colour only state counts`, authored by a concurrent writer in the shared
+worktree while this lane's merge was staged. Its two parents are `8e3758d2` and `52818b79`
+(the lane tip), and `git diff --stat 52818b79 b6a0ba5e -- backend/` is empty, so the backend
+tree is exactly this lane's and nothing of it was lost or altered. The subject does not
+describe it; rewriting a shared commit is not this lane's to do, so the fact is recorded
+here instead. Gate on the merged tree: 155 targets, 955 passed, 0 failed.
