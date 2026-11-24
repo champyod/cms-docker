@@ -237,5 +237,104 @@ assert_grep "$TEST_ROOT/sync-output.log" 'ResourceService shard 1' \
   "the failure names the shard it cannot address"
 
 echo ""
+echo "=== Test 15: .env carries distinct [sandbox] worker limits ==="
+setup_test_root
+sed \
+  -e 's/^max_file_size = .*/max_file_size = 2_097_152/' \
+  -e 's/^compilation_sandbox_max_processes = .*/compilation_sandbox_max_processes = 17/' \
+  -e 's/^compilation_sandbox_max_time_s = .*/compilation_sandbox_max_time_s = 2.5/' \
+  -e 's/^compilation_sandbox_max_memory_kib = .*/compilation_sandbox_max_memory_kib = 262_144/' \
+  -e 's/^trusted_sandbox_max_processes = .*/trusted_sandbox_max_processes = 23/' \
+  -e 's/^trusted_sandbox_max_time_s = .*/trusted_sandbox_max_time_s = 7.25/' \
+  -e 's/^trusted_sandbox_max_memory_kib = .*/trusted_sandbox_max_memory_kib = 8_388_608/' \
+  "$TEST_ROOT/config/cms.sample.toml" > "$TEST_ROOT/config/cms.toml"
+run_sync
+assert_exit 0 $? "real run with [sandbox] worker limits exits 0"
+assert_grep "$TEST_ROOT/.env" '^MAX_FILE_SIZE=2097152$' ".env MAX_FILE_SIZE is [sandbox] max_file_size"
+assert_grep "$TEST_ROOT/.env" '^COMPILATION_SANDBOX_MAX_PROCESSES=17$' ".env compilation process limit is distinct"
+assert_grep "$TEST_ROOT/.env" '^COMPILATION_SANDBOX_MAX_TIME_S=2.5$' ".env compilation time limit is distinct"
+assert_grep "$TEST_ROOT/.env" '^COMPILATION_SANDBOX_MAX_MEMORY_KIB=262144$' ".env compilation memory limit is distinct"
+assert_grep "$TEST_ROOT/.env" '^TRUSTED_SANDBOX_MAX_PROCESSES=23$' ".env trusted process limit is distinct"
+assert_grep "$TEST_ROOT/.env" '^TRUSTED_SANDBOX_MAX_TIME_S=7.25$' ".env trusted time limit is distinct"
+assert_grep "$TEST_ROOT/.env" '^TRUSTED_SANDBOX_MAX_MEMORY_KIB=8388608$' ".env trusted memory limit is distinct"
+worker_blocks="$(grep -c '^### \[worker\] ###$' "$TEST_ROOT/.env")"
+if [[ "$worker_blocks" -eq 2 ]]; then
+  pass "sandbox limits add one [worker] block beside config.toml's worker block"
+else
+  fail "expected two [worker] blocks with [sandbox], got $worker_blocks"
+fi
+if [[ "$(grep -c '^RPC_SECRET=.' "$TEST_ROOT/.env")" -eq 1 ]]; then
+  pass "worker rendering leaves the single RPC_SECRET line untouched"
+else
+  fail "worker rendering changed the RPC_SECRET line count"
+fi
+if grep -q '^DATABASE_URL=' "$TEST_ROOT/.env"; then
+  fail "worker rendering invented a root DATABASE_URL"
+else
+  pass "worker rendering leaves DATABASE_URL to compose"
+fi
+
+echo ""
+echo "=== Test 16: no [sandbox] table adds no worker env block ==="
+setup_test_root
+awk '
+  /^\[sandbox\][[:space:]]*$/ { skip = 1; next }
+  /^\[/ { skip = 0 }
+  !skip { print }
+' "$TEST_ROOT/config/cms.sample.toml" > "$TEST_ROOT/config/cms.toml"
+run_sync
+assert_exit 0 $? "real run without [sandbox] exits 0"
+worker_blocks="$(grep -c '^### \[worker\] ###$' "$TEST_ROOT/.env")"
+if [[ "$worker_blocks" -eq 1 ]]; then
+  pass "no extra [worker] block without [sandbox]"
+else
+  fail "expected only config.toml's [worker] block without [sandbox], got $worker_blocks"
+fi
+for worker_variable in COMPILATION_SANDBOX_MAX_PROCESSES \
+  COMPILATION_SANDBOX_MAX_TIME_S COMPILATION_SANDBOX_MAX_MEMORY_KIB \
+  TRUSTED_SANDBOX_MAX_PROCESSES TRUSTED_SANDBOX_MAX_TIME_S \
+  TRUSTED_SANDBOX_MAX_MEMORY_KIB; do
+  if grep -q "^${worker_variable}=" "$TEST_ROOT/.env"; then
+    fail "${worker_variable} emitted without a [sandbox] key"
+  else
+    pass "no ${worker_variable} without a [sandbox] key"
+  fi
+done
+if [[ "$(grep -c '^MAX_FILE_SIZE=' "$TEST_ROOT/.env")" -eq 1 ]]; then
+  pass "no second MAX_FILE_SIZE without [sandbox]"
+else
+  fail "worker rendering added MAX_FILE_SIZE without [sandbox]"
+fi
+
+echo ""
+echo "=== Test 17: a partial [sandbox] table invents no missing limits ==="
+setup_test_root
+awk '
+  /^\[sandbox\][[:space:]]*$/ { in_sandbox = 1; print; next }
+  /^\[/ { in_sandbox = 0 }
+  in_sandbox && /^max_file_size[[:space:]]*=/ { print; next }
+  in_sandbox { next }
+  { print }
+' "$TEST_ROOT/config/cms.sample.toml" > "$TEST_ROOT/config/cms.toml"
+run_sync
+assert_exit 0 $? "real run with one [sandbox] key exits 0"
+assert_grep "$TEST_ROOT/.env" '^MAX_FILE_SIZE=1048576$' ".env keeps the one present sandbox value"
+if [[ "$(grep -c '^MAX_FILE_SIZE=' "$TEST_ROOT/.env")" -eq 2 ]]; then
+  pass "the present sandbox key appends its MAX_FILE_SIZE line"
+else
+  fail "the present sandbox key did not append MAX_FILE_SIZE"
+fi
+for worker_variable in COMPILATION_SANDBOX_MAX_PROCESSES \
+  COMPILATION_SANDBOX_MAX_TIME_S COMPILATION_SANDBOX_MAX_MEMORY_KIB \
+  TRUSTED_SANDBOX_MAX_PROCESSES TRUSTED_SANDBOX_MAX_TIME_S \
+  TRUSTED_SANDBOX_MAX_MEMORY_KIB; do
+  if grep -q "^${worker_variable}=" "$TEST_ROOT/.env"; then
+    fail "${worker_variable} invented for an absent [sandbox] key"
+  else
+    pass "no invented ${worker_variable} for an absent key"
+  fi
+done
+
+echo ""
 echo "=== Results: $PASS passed, $FAIL failed ==="
 [[ "$FAIL" -eq 0 ]]

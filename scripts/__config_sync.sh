@@ -1924,6 +1924,39 @@ render_resource_service_env() {
   } >> "$MERGED_ENV"
 }
 
+# --- The worker's sandbox limits, rendered from config/cms.toml ---
+render_worker_env() {
+  local file="config/cms.toml" index key variable value
+  local -a keys=(
+    max_file_size
+    compilation_sandbox_max_processes compilation_sandbox_max_time_s compilation_sandbox_max_memory_kib
+    trusted_sandbox_max_processes trusted_sandbox_max_time_s trusted_sandbox_max_memory_kib
+  )
+  local -a variables=(
+    MAX_FILE_SIZE
+    COMPILATION_SANDBOX_MAX_PROCESSES COMPILATION_SANDBOX_MAX_TIME_S COMPILATION_SANDBOX_MAX_MEMORY_KIB
+    TRUSTED_SANDBOX_MAX_PROCESSES TRUSTED_SANDBOX_MAX_TIME_S TRUSTED_SANDBOX_MAX_MEMORY_KIB
+  )
+  [[ -f "$file" ]] || return 0
+  toml_section_exists "$file" sandbox || return 0
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    echo "Would write worker env from [sandbox] in ${file}"
+    return 0
+  fi
+  {
+    echo "### [worker] ###"
+    for index in "${!keys[@]}"; do
+      key="${keys[$index]}"
+      toml_key_in_section "$file" sandbox "$key" || continue
+      value="$(toml_value_in_section "$file" sandbox "$key")"
+      # WHY strip TOML digit separators: the Rust env parser accepts plain decimal only.
+      value="${value//_/}"
+      printf '%s=%s\n' "${variables[$index]}" "$(env_quote "$value")"
+    done
+    echo ""
+  } >> "$MERGED_ENV"
+}
+
 # --- Main ---
 SECRETS_CHANGED=0
 
@@ -2170,6 +2203,8 @@ main() {
    # WHY after the logger: the same table names both addresses, and the logger's refusal
    # already reports a cms.toml that has no [services] at all.
    render_resource_service_env
+   # WHY after injection: the sandbox limits exist only in the rendered cms.toml.
+   render_worker_env
  
   # Ensure backups/.gitkeep exists (monitor mount needs host dir) and that the
   # monitor's uid can write it — a directory created here belongs to the
