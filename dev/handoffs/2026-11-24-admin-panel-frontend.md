@@ -51,6 +51,8 @@ DONE WHEN:
 | `a4bd22bd` | `DeployStatusPanel` phase badge through `Badge`; debt 338 to 325 |
 | `8e3758d2` | Epic S12 record updated to 325 |
 | `b6a0ba5e` | `StatsCard` colour only state counts; total and uptime neutral; debt 325 to 321 |
+| `b5a0f015` | This handoff document |
+| `d630bf93` | Commit-message gate rejects process facts in bodies |
 
 Backend commits by another writer are interleaved: `947168fc`, `bd6b8ba1`, `11e28781`,
 `52818b79`, `9f4564b5`. Do not touch them.
