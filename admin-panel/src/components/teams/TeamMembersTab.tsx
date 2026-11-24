@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { ExternalLink, RotateCcw, Users } from 'lucide-react';
 
 import { BulkActionBar } from '@/components/core/BulkActionBar';
+import { Badge } from '@/components/core/Badge';
 import { Button } from '@/components/core/Button';
 import { EmptyState } from '@/components/core/EmptyState';
 import { Input } from '@/components/core/Input';
@@ -74,7 +75,7 @@ function MemberRow({ member, locale, copy, selected, onToggle }: {
             aria-label={`${copy.members.selectRow} ${member.username ?? ''}`}
           />
         )}
-        <div className="w-8 h-8 rounded-full bg-primary/15 flex items-center justify-center text-xs font-bold text-primary">
+        <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-xs font-bold text-muted-foreground">
           {(member.username ?? missing).substring(0, 2).toUpperCase()}
         </div>
         <div>
@@ -84,9 +85,9 @@ function MemberRow({ member, locale, copy, selected, onToggle }: {
       </div>
       <div className="flex items-center gap-2">
         {member.contests.slice(0, 3).map((contest, index) => (
-          <span key={`${contest.id ?? contest.name ?? 'contest'}-${index}`} className="text-xs px-2 py-0.5 bg-primary/10 text-primary rounded-full">
+          <Badge key={`${contest.id ?? contest.name ?? 'contest'}-${index}`} variant="neutral" className="normal-case tracking-normal font-medium">
             {contest.name ?? missing}
-          </span>
+          </Badge>
         ))}
         {member.contests.length > 3 && (
           <span className="text-xs text-muted-foreground">
@@ -94,7 +95,7 @@ function MemberRow({ member, locale, copy, selected, onToggle }: {
           </span>
         )}
         {href && (
-          <Link href={href} className="inline-flex size-11 shrink-0 items-center justify-center text-muted-foreground hover:text-primary transition-colors" aria-label={member.username ?? undefined}>
+          <Link href={href} className="inline-flex size-11 shrink-0 items-center justify-center text-muted-foreground hover:text-foreground transition-colors" aria-label={member.username ?? undefined}>
             <ExternalLink className="w-4 h-4" />
           </Link>
         )}
