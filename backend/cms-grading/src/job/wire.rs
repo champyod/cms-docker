@@ -108,7 +108,21 @@ fn write_run(
     put(body, JobKey::SUCCESS, json!(success));
     put(body, JobKey::TEXT, json!(text));
     put(body, JobKey::SANDBOXES, json!(sandbox_paths(sandboxes)));
-    put(body, JobKey::PLUS, stats.map_or(Value::Null, stats_value));
+    put(body, JobKey::PLUS, plus_value(stats, success));
+}
+
+/// The `plus` metadata: the run's statistics, an empty object when the box worked
+/// but measured nothing, and null only when the box itself failed.
+///
+/// `OutputOnly.compile` writes `{}` for a task that needs no compilation
+/// (`OutputOnly.py:111`) and `{} if box_success else None` after an evaluation
+/// (`:138`), so "nothing measured" and "nothing worked" are different answers.
+fn plus_value(stats: Option<&ExecutionStats>, success: bool) -> Value {
+    match stats {
+        Some(stats) => stats_value(stats),
+        None if success => Value::Object(Map::new()),
+        None => Value::Null,
+    }
 }
 
 fn put(body: &mut Map<String, Value>, key: JobKey, value: Value) {

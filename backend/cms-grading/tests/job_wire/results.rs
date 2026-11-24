@@ -189,12 +189,24 @@ fn absent_result_metadata_is_written_as_null() {
     result.user_output = None;
     result.admin_text = None;
     result.outcome = None;
+    result.success = false;
     result.write_body(body.as_object_mut().expect("a job object"));
 
     assert!(body["plus"].is_null());
     assert!(body["user_output"].is_null());
     assert!(body["admin_text"].is_null());
     assert!(body["outcome"].is_null());
+}
+
+#[test]
+fn a_box_that_worked_but_measured_nothing_reports_an_empty_plus() {
+    let mut body = evaluation_body();
+    let mut result = evaluation();
+    result.stats = None;
+    result.success = true;
+    result.write_body(body.as_object_mut().expect("a job object"));
+
+    assert_eq!(body["plus"], json!({}));
 }
 
 #[test]
