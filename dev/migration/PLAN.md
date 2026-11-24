@@ -346,6 +346,7 @@ them at once. The split is now evidence-driven, not scheduled by taste:
 | S-5e3c worker binary | environment settings, runtime over `fs-cache-shared`, host binding, `echo`/`quit` lifecycle | **merged** `36b9595b` (see note) |
 | S-5e3d worker precache | `precache_files` over `cms_db::FileCache`, shared lock, contest digests and missing-file pass-over | **merged** `1c54022d` (see note) |
 | S-5e3e worker deployment | Dockerfile build/copy, compose command/env/healthcheck and config-sync sandbox rendering | **merged** `6bdfee9c` (see note) |
+| S-5e3f worker keep | `KEEP_SANDBOX` at every grading close, independent of archiving | **merged** `8233f065` (see note) |
 | S-5e2a task registry | `TaskType::of(key, params)`; the class-name key vs the human label | **merged** `dd37dd47` |
 | S-5e1 method context | `Method<C>` + generic `dispatch`/`Registry`/`Host`; the refactor that unblocks the worker | **merged** `e07a3ec2` |
 | S-8b submissions_status | the dashboard's status counts; the reconciliation bucket | **merged** `d69cc587` |
@@ -354,7 +355,7 @@ them at once. The split is now evidence-driven, not scheduled by taste:
 | S-5g messages | `messages.py` table + the `%s` arity contract; the missing-output defect | **merged** `b4966c79` |
 | S-5f write confinement | `allow_writing_only` + the symlink-out refusal the reference gets wrong | **merged** `a92a5e2f` |
 | `cms-grading` (:25) | job model, **scoring**, language + task-type registry — `tasktypes` 3,763 + `job` 710 + `stage` 734 + `languages` + `steps` | **extracted** (`15ff7cfc`) |
-| `cms-svc-worker` (:28) | the service that executes job groups | **library, binary, precache and deployment definition merged** (`6bdfee9c`); actual deploy open |
+| `cms-svc-worker` (:28) | the service that executes job groups | **library, binary, precache, deployment and keep merged** (`8233f065`); actual deploy open |
 
 The extraction was mechanical **because it was measured first**: `sandbox/` referenced
 `crate::tasktypes` and `crate::job` nowhere, while `tasktypes/` referenced `crate::sandbox` in
@@ -821,6 +822,26 @@ database, isolate and healthcheck exercise remain unverified.
 Merged gate: **162 targets, 1022 passed, 0 failed, 2 ignored**; fmt, clippy and
 `cargo metadata --locked` clean. Config-sync tests 95/0, variable-coverage tests 7/0,
 image pins 77/0, compose config 0 and shell syntax 0.
+
+### S-5e3f: the worker honours KEEP_SANDBOX
+
+`Runtime` gained a `keep_sandbox` flag and a `with_keep_sandbox` builder, so every
+existing constructor stayed unchanged. Compilation, evaluation, two-step,
+communication and checker closes now keep a box when the worker asks or the attempt
+failed; `archive_sandbox` remains a separate decision, so a successful kept box can
+still file its digest. The checker box keeps when there is no verdict even without
+the worker flag, as the reference does. `KEEP_SANDBOX` accepts true/false and 1/0 in
+any case and refuses anything else by variable name.
+
+Seven commits, merged as `8233f065`. Lane gate: **64 targets, 335 passed, 0 failed**
+(`cms-grading` 280, `cms-worker` 55), fmt, clippy and `cargo metadata --locked`
+clean, zero removed comments. The negative control changed the compilation expression
+back to `!success` and failed `a_successful_compilation_is_kept_only_when_the_worker_asks`
+at `backend/cms-grading/tests/tasktypes.rs:175`.
+
+Merged gate: **162 targets, 1028 passed, 0 failed, 2 ignored**; fmt, clippy and
+`cargo metadata --locked` clean.
+
 
 
 
