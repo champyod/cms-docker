@@ -345,6 +345,7 @@ them at once. The split is now evidence-driven, not scheduled by taste:
 | S-5e3b worker execution layer | raw body to typed job to result body; `execute_job_group` envelope, shard stamp and error sentences | **merged** `187b4cf7` (see note) |
 | S-5e3c worker binary | environment settings, runtime over `fs-cache-shared`, host binding, `echo`/`quit` lifecycle | **merged** `36b9595b` (see note) |
 | S-5e3d worker precache | `precache_files` over `cms_db::FileCache`, shared lock, contest digests and missing-file pass-over | **merged** `1c54022d` (see note) |
+| S-5e3e worker deployment | Dockerfile build/copy, compose command/env/healthcheck and config-sync sandbox rendering | **merged** `6bdfee9c` (see note) |
 | S-5e2a task registry | `TaskType::of(key, params)`; the class-name key vs the human label | **merged** `dd37dd47` |
 | S-5e1 method context | `Method<C>` + generic `dispatch`/`Registry`/`Host`; the refactor that unblocks the worker | **merged** `e07a3ec2` |
 | S-8b submissions_status | the dashboard's status counts; the reconciliation bucket | **merged** `d69cc587` |
@@ -353,7 +354,7 @@ them at once. The split is now evidence-driven, not scheduled by taste:
 | S-5g messages | `messages.py` table + the `%s` arity contract; the missing-output defect | **merged** `b4966c79` |
 | S-5f write confinement | `allow_writing_only` + the symlink-out refusal the reference gets wrong | **merged** `a92a5e2f` |
 | `cms-grading` (:25) | job model, **scoring**, language + task-type registry — `tasktypes` 3,763 + `job` 710 + `stage` 734 + `languages` + `steps` | **extracted** (`15ff7cfc`) |
-| `cms-svc-worker` (:28) | the service that executes job groups | **library, binary and precache merged** (`1c54022d`); deployment open |
+| `cms-svc-worker` (:28) | the service that executes job groups | **library, binary, precache and deployment definition merged** (`6bdfee9c`); actual deploy open |
 
 The extraction was mechanical **because it was measured first**: `sandbox/` referenced
 `crate::tasktypes` and `crate::job` nowhere, while `tasktypes/` referenced `crate::sandbox` in
@@ -796,5 +797,30 @@ environment passes neither `RPC_SECRET` nor `DATABASE_URL`.
 
 Merged gate: **162 targets, 1022 passed, 0 failed, 2 ignored**; fmt, clippy and
 `cargo metadata --locked` clean, with the same two `TZ=Asia/Bangkok` child probes.
+
+### S-5e3e: the worker deployment definition runs Rust
+
+The lane is four commits (`af254c2e`, `71b8a4c4`, `aec8c548`, `1eca0be3`), merged as
+`6bdfee9c`. The image builds and ships `cms-worker`; compose runs it instead of
+`cmsWorker` and healthchecks `pgrep -x cms-worker`. The container receives
+`RPC_SECRET`, `DATABASE_URL`, its published `WORKER_PORT`, the sandbox limits and one
+`MAX_FILE_SIZE` assignment. Config sync renders the six sandbox limits from the
+lowercase `[sandbox]` keys, strips TOML digit separators, and replaces an older
+`[worker] MAX_FILE_SIZE` rather than appending a duplicate.
+
+The variable-coverage gate grew an explicit section-scoped mapping for those six
+derived env names; a missing source key fails its own warning, tested in
+`tests/test_var_coverage.sh`. The gate remains red only for the seven warnings that
+were already present at the lane's base: `CMS_SERVICES`, `DAST_AT_UTC`,
+`DAST_MINUTES`, `DAST_TARGET`, `LOG_DIR`, `LOG_SERVICE_ADDR` and
+`RESOURCE_SERVICE_ADDR`. This slice did not repair or suppress them.
+
+No container was started or restarted. A full image build and live worker RPC,
+database, isolate and healthcheck exercise remain unverified.
+
+Merged gate: **162 targets, 1022 passed, 0 failed, 2 ignored**; fmt, clippy and
+`cargo metadata --locked` clean. Config-sync tests 95/0, variable-coverage tests 7/0,
+image pins 77/0, compose config 0 and shell syntax 0.
+
 
 
