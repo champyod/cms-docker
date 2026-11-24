@@ -33,6 +33,7 @@
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
 
+mod client;
 mod connector;
 mod host;
 mod log;
@@ -40,6 +41,7 @@ mod resource;
 mod resource_service;
 pub mod service;
 
+pub use client::{Client, ClientError};
 pub use connector::{
     of_dispatch, of_frame, BackoffPolicy, Connector, DialError, Dialer, NoRoute, PeerSession,
     PeerState, ReconnectNotice, Send,
