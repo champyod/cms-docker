@@ -9,6 +9,7 @@
 //! compilation that never reached evaluation is different: the result's absent
 //! evaluation outcome is handed to the score type, whose own zero or empty answer
 //! is what the scoring service stores.
+//! Its evaluations are not read.
 
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
@@ -96,10 +97,15 @@ pub fn score(input: &ScoringInput<'_>, scored_at: NaiveDateTime) -> Result<Score
         &parameters,
         public_testcases(input.testcases),
     )?;
-    let testcases = evaluated_testcases(input)?;
-    ensure_evaluations(input)?;
+    let (evaluated, testcases) = if input.result.evaluation_outcome.is_some() {
+        let testcases = evaluated_testcases(input)?;
+        ensure_evaluations(input)?;
+        (true, testcases)
+    } else {
+        (false, Vec::new())
+    };
     let scored = score_type.compute_score(&Submission {
-        evaluated: input.result.evaluation_outcome.is_some(),
+        evaluated,
         score_precision: precision,
         testcases,
     })?;

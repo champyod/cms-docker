@@ -75,6 +75,24 @@ fn failed_compilation_keeps_the_score_types_zero_and_empty_documents() {
 }
 
 #[test]
+fn failed_compilation_ignores_stale_malformed_evaluations() {
+    let mut fixture = Fixture::new("Sum", "10");
+    fixture.result.evaluation_outcome = None;
+    fixture.evaluations.truncate(1);
+    fixture.evaluations[0].outcome = Some("not-a-number".to_string());
+
+    let row = fixture
+        .score()
+        .expect("an unevaluated result does not consult its evaluations");
+
+    assert_eq!(row.score, Some(0.0));
+    assert_eq!(row.score_details.as_deref(), Some("[]"));
+    assert_eq!(row.public_score, Some(0.0));
+    assert_eq!(row.public_score_details.as_deref(), Some("[]"));
+    assert_eq!(row.ranking_score_details, Some(Vec::new()));
+}
+
+#[test]
 fn task_precision_rounds_the_subtask_score_stored_in_details() {
     let mut fixture = Fixture::new("GroupMin", "[[1,\"sample-*\"]]");
     fixture.evaluations[1].outcome = Some("0.1235".to_string());
