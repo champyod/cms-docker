@@ -340,6 +340,7 @@ them at once. The split is now evidence-driven, not scheduled by taste:
 |---|---|---|
 | `cms-sandbox` (:24) | `sandbox/` 1,641 + `measure` + `stats` | **extracted** (`60271227`) |
 | S-5e2b job body bridge | `from_body` readers + `write_body` writers; the input/result seam the worker loop needs | **merged** `b6a0ba5e` (see note) |
+| S-5e3a execution port | `execute::compile`/`evaluate` over the five task types; configuration refusals become failed results | **merged** `2aa1c228` (see note) |
 | S-5e2a task registry | `TaskType::of(key, params)`; the class-name key vs the human label | **merged** `dd37dd47` |
 | S-5e1 method context | `Method<C>` + generic `dispatch`/`Registry`/`Host`; the refactor that unblocks the worker | **merged** `e07a3ec2` |
 | S-8b submissions_status | the dashboard's status counts; the reconciliation bucket | **merged** `d69cc587` |
@@ -662,3 +663,35 @@ worktree while this lane's merge was staged. Its two parents are `8e3758d2` and 
 tree is exactly this lane's and nothing of it was lost or altered. The subject does not
 describe it; rewriting a shared commit is not this lane's to do, so the fact is recorded
 here instead. Gate on the merged tree: 155 targets, 955 passed, 0 failed.
+
+### S-5e3a: the execution port, and what it still does not carry
+
+`execute::compile` and `execute::evaluate` now dispatch a typed job to the task type
+its `task_type` row names, over the five variants. The lane is four commits
+(`74081be8`, `ca57cee6`, `a805598b`, `3dc16236`) merged as `2aa1c228`; its own gate
+was **54 targets, 267 passed, 0 failed**, and the merged-tree gate is recorded below.
+
+The parity point that shaped it: `set_configuration_error` (`util.py:123-142`) writes
+`success=false`, `text=null` and `compilation_success`/`outcome=null` on the job and
+returns normally. Rust task types return `TaskError::TooFewFiles`, `MissingManager`
+and `UnexpectedExecutables`; the port turns exactly those three into a failed result
+and leaves every other refusal as a group failure. `text` became optional on
+`Compilation` and `Evaluation` so null and an empty list are different values.
+
+Two defects were found by review after the lane's first green gate and fixed in
+`3dc16236`: `BatchAndOutput` was requiring a toolchain before it had decided whether
+it compiles at all (the reference returns before `get_language` for an answer-only
+compilation and for a carried or listed output-only testcase), and a failed
+Communication `Verdict` was serialising `text: []` instead of `null`.
+
+Not carried by this slice, and queued as S-5e3a2: `archive_sandbox` still only keeps
+the directory. `Stage::archive` (`stage/archive.rs:88`) is ported and tested, but no
+task type calls it, and `write_body` never writes `sandbox_digests`; an archived
+sandbox therefore reaches the database as an empty map. Strict rustdoc also fails on
+a pre-existing unresolved `Cache` link at `tasktypes/mod.rs:43`, unrelated to this
+slice and left alone.
+
+Merged gate: **158 targets, 973 passed, 0 failed, 2 ignored**. The two ignored are
+the `TZ=Asia/Bangkok` child probes `probe_local_reading` and `probe_utc_now`, which
+run only from their parent tests; no suite was skipped.
+
