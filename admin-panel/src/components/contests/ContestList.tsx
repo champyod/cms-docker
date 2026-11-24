@@ -149,7 +149,7 @@ export function ContestList({ initialContests, permissionKeys, initialSort }: Co
         sort={initialSort}
         onSortChange={applySort}
         emptyState={
-          <EmptyState icon={Trophy} title="No contests found" description="Create your first contest to get started." />
+          <EmptyState icon={Trophy} title={dict.contests.list.emptyTitle} description={dict.contests.list.emptyDescription} />
         }
       />
       <ContestModal isOpen={isModalOpen} onClose={handleClose} contest={selectedContest} onSuccess={handleSuccess} permissionKeys={permissionKeys} />

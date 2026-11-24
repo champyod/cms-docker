@@ -273,6 +273,10 @@
       "unrestricted": "Unrestricted",
       "hidden": "Hidden",
       "empty": "No participants yet"
+    },
+    "list": {
+      "emptyTitle": "No contests found",
+      "emptyDescription": "Create your first contest to get started."
     }
   },
   "tasks": {
