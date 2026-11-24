@@ -23,9 +23,9 @@ RUN cargo build --release
 FROM rust:1-bookworm@sha256:48b7f435b8fc6378ce43b44f15e3a47fd8919b2825f835c39bd4bd3da50af5b8 AS backend-build
 WORKDIR /build
 COPY backend/ ./
-# Only the services being shipped, so the build does not pay for cms-worker's sandbox
-# fixtures. More binaries join this line as their services are ported.
+# Only the service binaries shipped in the runtime image are built here.
 RUN cargo build --release --package cms-svc --bin cms-log-service --bin cms-resource-service
+RUN cargo build --release --package cms-worker --bin cms-worker
 
 FROM ${BASE_IMAGE}
 
@@ -211,10 +211,10 @@ ENV PATH="/home/cmsuser/cms/bin:$PATH"
 COPY --from=ranking-build --chown=cmsuser:cmsuser /build/target/release/cms-ranking /home/cmsuser/cms/bin/cms-ranking
 
 # Built in the backend-build stage, same rule: no toolchain in the runtime layer.
-# Both are wired to their containers; docker-compose runs cms-log-service and
-# cms-resource-service instead of the Python entrypoints.
+# Compose runs these Rust binaries instead of the Python entrypoints.
 COPY --from=backend-build --chown=cmsuser:cmsuser /build/target/release/cms-log-service /home/cmsuser/cms/bin/cms-log-service
 COPY --from=backend-build --chown=cmsuser:cmsuser /build/target/release/cms-resource-service /home/cmsuser/cms/bin/cms-resource-service
+COPY --from=backend-build --chown=cmsuser:cmsuser /build/target/release/cms-worker /home/cmsuser/cms/bin/cms-worker
 
 # Install CMS package from the src directory
 RUN --mount=type=cache,target=/home/cmsuser/.cache/pip,uid=1001 cd src && python3 install.py cms --devel
