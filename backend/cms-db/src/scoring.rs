@@ -159,3 +159,39 @@ pub async fn write_score(connection: &mut PgConnection, row: &ScoreRow) -> Resul
         .await?;
     Ok(())
 }
+
+/// Clear one fully scored result's five score fields, leaving its score stamp intact.
+///
+/// The predicate is the reference's `scored()` rule: a partially populated score is
+/// not invalidated, so an interrupted or older write is never silently discarded.
+pub const INVALIDATE_SCORE: &str = "\
+    UPDATE submission_results AS r \
+    SET score = NULL, score_details = NULL, public_score = NULL, \
+        public_score_details = NULL, ranking_score_details = NULL \
+    FROM submissions AS s \
+    WHERE s.id = r.submission_id \
+      AND r.submission_id = $1 AND r.dataset_id = $2 \
+      AND r.score IS NOT NULL AND r.score_details IS NOT NULL \
+      AND r.public_score IS NOT NULL AND r.public_score_details IS NOT NULL \
+      AND r.ranking_score_details IS NOT NULL \
+    RETURNING s.timestamp";
+
+/// Invalidate one result by its composite key and return its submission timestamp.
+///
+/// `None` means the result was absent or was not fully scored; neither case writes
+/// a row. The timestamp lets a caller enqueue the invalidated work in fair order.
+///
+/// # Errors
+///
+/// Returns the driver's own error for a statement it could not run.
+pub async fn invalidate_score(
+    connection: &mut PgConnection,
+    submission: SubmissionId,
+    dataset: DatasetId,
+) -> Result<Option<chrono::NaiveDateTime>, sqlx::Error> {
+    sqlx::query_scalar(INVALIDATE_SCORE)
+        .bind(submission.0)
+        .bind(dataset.0)
+        .fetch_optional(connection)
+        .await
+}

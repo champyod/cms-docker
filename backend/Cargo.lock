@@ -262,6 +262,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "cms-scoring"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "cms-db",
+ "cms-grading",
+ "serde_json",
+ "sqlx",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "cms-svc"
 version = "0.1.0"
 dependencies = [
