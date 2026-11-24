@@ -86,6 +86,7 @@ mod large_object;
 mod permission;
 mod reads;
 mod schema;
+mod scoring;
 mod security_block;
 mod session;
 mod submission;
@@ -140,21 +141,26 @@ pub use grants::{
 pub use large_object::{LargeObject, LargeObjectError, Mode};
 pub use reads::{
     dataset_from_row, enumerate_files, get_datasets_to_judge, result_from_row, submission_from_row,
-    testcase_from_row, DatasetId, DatasetRecord, FileSkips, ReadError, ResultRecord, SubmissionId,
-    SubmissionRecord, TestcaseRecord, DATASET_BY_ID, JUDGEABLE_DATASETS,
-    RESULT_BY_SUBMISSION_AND_DATASET, SUBMISSION_BY_ID, TESTCASES_BY_DATASET,
+    testcase_from_row, testcases_by_dataset, DatasetId, DatasetRecord, FileSkips, ReadError,
+    ResultRecord, SubmissionId, SubmissionRecord, TestcaseRecord, DATASET_BY_ID,
+    JUDGEABLE_DATASETS, RESULT_BY_SUBMISSION_AND_DATASET, SUBMISSION_BY_ID, TESTCASES_BY_DATASET,
 };
 pub use schema::{init_db, SchemaError};
+pub use scoring::{
+    read_result_bundle, scoring_candidates, write_score, ScoringBundle, ScoringCandidate,
+    ScoringReadError,
+};
 pub use security_block::{SecurityBlock, SECURITY_BLOCK};
 pub use session::{
     DedicatedConnection, Session, SessionConfig, SessionError, Transaction, UnhonouredOption,
 };
 pub use submission::{
-    accept_token, get_submission_results, get_submissions, max_resources, result_by_id, token_of,
-    Evaluation, ResultFilter, SearchError, Submission, SubmissionError, SubmissionFilter,
-    SubmissionResult, SubmissionStatus, Token, TokenBudget, TokenRefusal, DELETE_EVALUATIONS,
-    DELETE_EXECUTABLES, EVALUATION, EVALUATIONS_BY_RESULT, EVALUATION_BY_TESTCASE, INSERT_TOKEN,
-    SUBMISSION, SUBMISSION_JUDGING_BY_ID, TOKEN, TOKEN_BY_SUBMISSION, TOKEN_HISTORY,
+    accept_token, evaluations_by_result, get_submission_results, get_submissions, max_resources,
+    result_by_id, token_of, Evaluation, ResultFilter, SearchError, Submission, SubmissionError,
+    SubmissionFilter, SubmissionResult, SubmissionStatus, Token, TokenBudget, TokenRefusal,
+    DELETE_EVALUATIONS, DELETE_EXECUTABLES, EVALUATION, EVALUATIONS_BY_RESULT,
+    EVALUATION_BY_TESTCASE, INSERT_TOKEN, SUBMISSION, SUBMISSION_JUDGING_BY_ID, TOKEN,
+    TOKEN_BY_SUBMISSION, TOKEN_HISTORY,
 };
 pub use task::{
     activate_dataset, dataset_by_id, delete_dataset, merge, unjudged_submissions, FeedbackLevel,

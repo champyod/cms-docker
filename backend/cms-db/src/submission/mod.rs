@@ -14,8 +14,8 @@ mod status;
 mod token;
 
 pub use evaluation::{
-    max_resources, Evaluation, DELETE_EVALUATIONS, DELETE_EXECUTABLES, EVALUATION,
-    EVALUATIONS_BY_RESULT, EVALUATION_BY_TESTCASE,
+    evaluations_by_result, max_resources, Evaluation, DELETE_EVALUATIONS, DELETE_EXECUTABLES,
+    EVALUATION, EVALUATIONS_BY_RESULT, EVALUATION_BY_TESTCASE,
 };
 pub use filter::{ResultFilter, SearchError, SubmissionFilter};
 pub use result::{get_submission_results, result_by_id, SubmissionResult};

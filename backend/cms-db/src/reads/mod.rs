@@ -47,7 +47,7 @@ pub use dataset::{
 pub use files::enumerate_files;
 pub use result::{result_from_row, ResultRecord, RESULT_BY_SUBMISSION_AND_DATASET};
 pub use submission::{submission_from_row, SubmissionId, SubmissionRecord, SUBMISSION_BY_ID};
-pub use testcase::{testcase_from_row, TestcaseRecord, TESTCASES_BY_DATASET};
+pub use testcase::{testcase_from_row, testcases_by_dataset, TestcaseRecord, TESTCASES_BY_DATASET};
 pub use walk::FileSkips;
 
 /// Why a row could not be mapped onto the record beside it.

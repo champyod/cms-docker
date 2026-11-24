@@ -4,7 +4,7 @@ use sqlx::postgres::PgConnection;
 
 use super::{Task, TaskError};
 use crate::reads::{
-    DatasetId, DatasetRecord, SubmissionId, TestcaseRecord, DATASET_BY_ID, TESTCASES_BY_DATASET,
+    testcases_by_dataset, DatasetId, DatasetRecord, SubmissionId, TestcaseRecord, DATASET_BY_ID,
 };
 
 /// Moves a task's active pointer, bound as the task's id then the dataset's id.
@@ -51,10 +51,7 @@ impl Task {
         let Some(dataset) = self.active_dataset_id else {
             return Ok(Vec::new());
         };
-        Ok(sqlx::query_as::<_, TestcaseRecord>(TESTCASES_BY_DATASET)
-            .bind(dataset.0)
-            .fetch_all(connection)
-            .await?)
+        Ok(testcases_by_dataset(connection, dataset).await?)
     }
 }
 
