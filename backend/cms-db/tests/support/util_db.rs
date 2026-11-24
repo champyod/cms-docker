@@ -122,6 +122,7 @@ const TABLES: &[&str] = &[
         evaluation_tries integer NOT NULL DEFAULT 0,
         score double precision,
         score_details jsonb,
+        scored_at timestamp,
         public_score double precision,
         public_score_details jsonb,
         ranking_score_details varchar[],

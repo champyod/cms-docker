@@ -11,6 +11,7 @@ use crate::submission::{
     evaluations_by_result, result_by_id, Evaluation, Submission, SubmissionError, SubmissionResult,
 };
 use crate::task::{dataset_by_id, Task, TaskError};
+use crate::writes::{ScoreRow, UPSERT_SCORE};
 
 /// One submission result that is ready for a scoring pass.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -137,4 +138,24 @@ pub async fn read_result_bundle(
         evaluations,
         testcases,
     })
+}
+
+/// Write one score row, replacing every score column when its key already exists.
+///
+/// # Errors
+///
+/// Returns the driver's own error for a statement it could not run.
+pub async fn write_score(connection: &mut PgConnection, row: &ScoreRow) -> Result<(), sqlx::Error> {
+    sqlx::query(UPSERT_SCORE)
+        .bind(row.submission_id.0)
+        .bind(row.dataset_id.0)
+        .bind(row.score)
+        .bind(row.score_details.as_deref())
+        .bind(row.scored_at)
+        .bind(row.public_score)
+        .bind(row.public_score_details.as_deref())
+        .bind(row.ranking_score_details.as_deref())
+        .execute(connection)
+        .await?;
+    Ok(())
 }
