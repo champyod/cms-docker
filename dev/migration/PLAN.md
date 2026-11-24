@@ -341,6 +341,7 @@ them at once. The split is now evidence-driven, not scheduled by taste:
 | `cms-sandbox` (:24) | `sandbox/` 1,641 + `measure` + `stats` | **extracted** (`60271227`) |
 | S-5e2b job body bridge | `from_body` readers + `write_body` writers; the input/result seam the worker loop needs | **merged** `b6a0ba5e` (see note) |
 | S-5e3a execution port | `execute::compile`/`evaluate` over the five task types; configuration refusals become failed results | **merged** `2aa1c228` (see note) |
+| S-5e3a2 sandbox archives | `archive_sandbox` calls `Stage::archive`, files a digest map on every result, and deletes independently of keep | **merged** `a5e10c98` (see note) |
 | S-5e2a task registry | `TaskType::of(key, params)`; the class-name key vs the human label | **merged** `dd37dd47` |
 | S-5e1 method context | `Method<C>` + generic `dispatch`/`Registry`/`Host`; the refactor that unblocks the worker | **merged** `e07a3ec2` |
 | S-8b submissions_status | the dashboard's status counts; the reconciliation bucket | **merged** `d69cc587` |
@@ -684,14 +685,38 @@ it compiles at all (the reference returns before `get_language` for an answer-on
 compilation and for a carried or listed output-only testcase), and a failed
 Communication `Verdict` was serialising `text: []` instead of `null`.
 
-Not carried by this slice, and queued as S-5e3a2: `archive_sandbox` still only keeps
-the directory. `Stage::archive` (`stage/archive.rs:88`) is ported and tested, but no
-task type calls it, and `write_body` never writes `sandbox_digests`; an archived
-sandbox therefore reaches the database as an empty map. Strict rustdoc also fails on
-a pre-existing unresolved `Cache` link at `tasktypes/mod.rs:43`, unrelated to this
-slice and left alone.
+That gap is closed by S-5e3a2 below: `Stage::archive` (`stage/archive.rs:88`) is now
+called by every task type that can archive, and `write_body` writes the digest map.
+Strict rustdoc still fails on a pre-existing unresolved `Cache` link at
+`tasktypes/mod.rs:43`, unrelated to these slices and left alone.
 
 Merged gate: **158 targets, 973 passed, 0 failed, 2 ignored**. The two ignored are
 the `TZ=Asia/Bangkok` child probes `probe_local_reading` and `probe_utc_now`, which
 run only from their parent tests; no suite was skipped.
 
+### S-5e3a2: archives are filed, and keep is a separate decision
+
+The lane is five commits (`6aa30cdf`, `cee801c8`, `343bd578`, `70694c62`, `337aa987`),
+merged as `a5e10c98`; its own gate was **57 targets, 276 passed, 0 failed**. Every
+task type that closes a box now calls `Stage::archive` when `archive_sandbox` is set,
+files the packed directory under its digest, and records that digest under the same
+root path the sandbox list names. `write_body` writes the map as `sandbox_digests`,
+including the checker box an output-only comparator creates.
+
+Two review defects shaped the slice. A first attempt deleted 736 comment lines across
+16 files and replaced module docs with one-liners; it was rejected and every comment
+restored verbatim, with the hard check `git diff … | grep '^-.*//'` producing zero.
+`archive_sandbox` was also being used as `keep`, so every successful archived box
+stayed on disk; the reference archives and then deletes a successful box unless
+`keep_sandbox` is set (`util.py:83-92`). Keep is `!success` at every close point now,
+and tests cover both a removed successful box and a kept failed one.
+
+Merge hygiene: `a5e10c98` also carries two admin-panel files from a concurrent
+writer's unstaged work in the shared worktree — `status-colour-baseline.json`
+(258 → 256) and `ContestTasksSection.tsx` (warning → muted). They were staged between
+this session's status check and its merge, so they entered the merge commit. The
+backend tree is byte-identical to lane tip `337aa987`; removing the panel files would
+require rewriting a shared merge, so they are recorded here and left untouched.
+
+Merged gate: **161 targets, 982 passed, 0 failed, 2 ignored**; fmt and clippy clean,
+and the two ignored tests are the same `TZ=Asia/Bangkok` child probes.
