@@ -3,7 +3,9 @@
 import { cn } from '@/lib/utils';
 import { PROGRAMMING_LANGUAGES } from '@/lib/constants';
 import { ApplyLimitsButton } from '@/components/limits/ApplyLimitsButton';
+import { Input } from '@/components/core/Input';
 import { LimitField } from '@/components/core/LimitField';
+import { Select } from '@/components/core/Select';
 import { useDictionary } from '@/hooks/useDictionary';
 import type { TaskData } from '@/app/actions/tasks';
 import { InfoButton } from './task-modal-sections';
@@ -21,17 +23,23 @@ export function TokensTab({ formData, onChange }: TabProps): React.JSX.Element {
     <div className="space-y-6">
       <div>
         <label className="block text-xs font-bold text-muted-foreground uppercase mb-2">Token Mode<InfoButton text="Tokens control how often participants can request feedback on their submissions." /></label>
-        <select value={formData.token_mode} onChange={(e) => onChange({ ...formData, token_mode: e.target.value })} className="w-full px-4 py-3 bg-muted/50 border border-border rounded-xl text-foreground focus:outline-none focus:border-ring focus-visible:ring-2 focus-visible:ring-ring/50">
-          <option value="disabled">Disabled</option><option value="finite">Finite</option><option value="infinite">Infinite</option>
-        </select>
+        <Select
+          value={formData.token_mode}
+          onChange={(e) => onChange({ ...formData, token_mode: e.target.value })}
+          options={[
+            { value: 'disabled', label: 'Disabled' },
+            { value: 'finite', label: 'Finite' },
+            { value: 'infinite', label: 'Infinite' },
+          ]}
+        />
       </div>
       {formData.token_mode === 'finite' && (
         <div className="grid grid-cols-1 gap-6 p-4 bg-muted/50 rounded-xl md:grid-cols-2">
           <LimitField id="token_max_number" label={limits.fields.token_max_number} hint={limits.hints.token_max_number} value={formData.token_max_number ?? null} onChangeValue={(next) => onChange({ ...formData, token_max_number: next })} unlimitedLabel={limits.unlimited} />
-          <div><label className="block text-xs font-bold text-muted-foreground uppercase mb-2">Min Interval (s)</label><input type="number" value={formData.token_min_interval ?? ''} onChange={(e) => onChange({ ...formData, token_min_interval: e.target.value ? parseInt(e.target.value, 10) : null })} className="w-full px-4 py-3 bg-muted/50 border border-border rounded-xl text-foreground focus:outline-none focus:border-ring focus-visible:ring-2 focus-visible:ring-ring/50" /></div>
-          <div><label className="block text-xs font-bold text-muted-foreground uppercase mb-2">Initial Tokens</label><input type="number" value={formData.token_gen_initial ?? ''} onChange={(e) => onChange({ ...formData, token_gen_initial: e.target.value ? parseInt(e.target.value, 10) : null })} placeholder="2" className="w-full px-4 py-3 bg-muted/50 border border-border rounded-xl text-foreground focus:outline-none focus:border-ring focus-visible:ring-2 focus-visible:ring-ring/50" /></div>
-          <div><label className="block text-xs font-bold text-muted-foreground uppercase mb-2">Gen Amount</label><input type="number" value={formData.token_gen_number ?? ''} onChange={(e) => onChange({ ...formData, token_gen_number: e.target.value ? parseInt(e.target.value, 10) : null })} placeholder="2" className="w-full px-4 py-3 bg-muted/50 border border-border rounded-xl text-foreground focus:outline-none focus:border-ring focus-visible:ring-2 focus-visible:ring-ring/50" /></div>
-          <div><label className="block text-xs font-bold text-muted-foreground uppercase mb-2">Gen Interval (min)</label><input type="number" value={formData.token_gen_interval ?? ''} onChange={(e) => onChange({ ...formData, token_gen_interval: e.target.value ? parseInt(e.target.value, 10) : null })} placeholder="30" className="w-full px-4 py-3 bg-muted/50 border border-border rounded-xl text-foreground focus:outline-none focus:border-ring focus-visible:ring-2 focus-visible:ring-ring/50" /></div>
+          <div><label className="block text-xs font-bold text-muted-foreground uppercase mb-2">Min Interval (s)</label><Input type="number" value={formData.token_min_interval ?? ''} onChange={(e) => onChange({ ...formData, token_min_interval: e.target.value ? parseInt(e.target.value, 10) : null })} /></div>
+          <div><label className="block text-xs font-bold text-muted-foreground uppercase mb-2">Initial Tokens</label><Input type="number" value={formData.token_gen_initial ?? ''} onChange={(e) => onChange({ ...formData, token_gen_initial: e.target.value ? parseInt(e.target.value, 10) : null })} placeholder="2" /></div>
+          <div><label className="block text-xs font-bold text-muted-foreground uppercase mb-2">Gen Amount</label><Input type="number" value={formData.token_gen_number ?? ''} onChange={(e) => onChange({ ...formData, token_gen_number: e.target.value ? parseInt(e.target.value, 10) : null })} placeholder="2" /></div>
+          <div><label className="block text-xs font-bold text-muted-foreground uppercase mb-2">Gen Interval (min)</label><Input type="number" value={formData.token_gen_interval ?? ''} onChange={(e) => onChange({ ...formData, token_gen_interval: e.target.value ? parseInt(e.target.value, 10) : null })} placeholder="30" /></div>
           <LimitField id="token_gen_max" label={limits.fields.token_gen_max} hint={limits.hints.token_gen_max} value={formData.token_gen_max ?? null} onChangeValue={(next) => onChange({ ...formData, token_gen_max: next })} unlimitedLabel={limits.unlimited} />
         </div>
       )}
