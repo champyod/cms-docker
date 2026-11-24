@@ -149,13 +149,14 @@ impl BatchAndOutput {
     pub fn compile(
         &self,
         job: &CompilationJob,
-        toolchain: &dyn Toolchain,
+        toolchain: Option<&dyn Toolchain>,
         runtime: &Runtime,
         store: Box<dyn Cache>,
     ) -> Result<Compilation, TaskError> {
         if !carries_source(&job.files) {
             return Ok(no_compilation());
         }
+        let toolchain = toolchain.ok_or(TaskError::NoLanguage)?;
         self.batch.compile(job, toolchain, runtime, store)
     }
 
@@ -183,7 +184,7 @@ impl BatchAndOutput {
     pub fn evaluate(
         &self,
         job: &EvaluationJob,
-        toolchain: &dyn Toolchain,
+        toolchain: Option<&dyn Toolchain>,
         runtime: &Runtime,
         store: Box<dyn Cache>,
     ) -> Result<Answer, TaskError> {
@@ -210,6 +211,7 @@ impl BatchAndOutput {
             return Ok(Answer::carried(answer, kind, judged));
         }
         if kind == BATCH && !job.executables.is_empty() {
+            let toolchain = toolchain.ok_or(TaskError::NoLanguage)?;
             let run =
                 self.batch
                     .evaluate_with(job, toolchain, runtime, store, &[BATCH.to_owned()])?;

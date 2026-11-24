@@ -5,6 +5,10 @@
 //! the model a service sends, the dataset and submission it is read against, and
 //! the refusals each constructor makes before it builds anything.
 //!
+//! [`execute`] is where a typed compilation or evaluation meets the task type its
+//! row names: configuration refusals become failed job results, every other
+//! refusal stays an error, and optional text keeps `None` distinct from no sentences.
+//!
 //! What a task is made of is [`tasktypes`]: the order a job's files are handed
 //! over, its runs are launched and its files are taken back in, which is the one
 //! thing a task type decides and the only thing that differs between one task
