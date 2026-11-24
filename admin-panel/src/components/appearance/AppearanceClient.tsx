@@ -27,7 +27,7 @@ export function BrandingTab({
       <div className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <ImageIcon className="size-4 text-primary" />
+            <ImageIcon className="size-4 text-muted-foreground" />
             <h3 className="text-sm font-semibold text-foreground">Scoreboard Branding Logo</h3>
           </div>
           <Link href={logoHref} className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
@@ -89,13 +89,13 @@ export function ServicesGroup({ values, missing }: { readonly values: Record<str
       {SERVICE_GROUPS.map((group) => (
         <div key={group.title} className="space-y-3">
           <div className="flex items-center gap-2">
-            <Settings2 className="size-4 text-primary" />
+            <Settings2 className="size-4 text-muted-foreground" />
             <h3 className="text-sm font-semibold text-foreground">{group.title}</h3>
           </div>
           <div className="grid gap-3">
             {group.keys.map((key) => (
               <div key={key} className="flex items-center justify-between rounded-lg border border-border bg-card/30 px-3 py-2">
-                <code className="font-mono text-xs text-primary">{key}</code>
+                <code className="font-mono text-xs text-foreground">{key}</code>
                 <span className="max-w-3/5 truncate text-right text-xs text-muted-foreground">{values[key] ?? missing}</span>
               </div>
             ))}
