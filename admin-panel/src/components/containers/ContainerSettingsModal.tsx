@@ -144,7 +144,7 @@ export function ContainerSettingsModal({
         />
         <div className="space-y-3">
           <label className="text-sm font-bold text-foreground flex items-center gap-2">
-            <RotateCcw className="w-4 h-4 text-primary" />
+            <RotateCcw className="w-4 h-4 text-muted-foreground" />
             Maximum Restart Attempts
           </label>
           <p className="text-xs text-muted-foreground">
@@ -177,7 +177,7 @@ export function ContainerSettingsModal({
           </div>
           <div className="flex items-center justify-between">
             <span className="text-sm text-muted-foreground">Restart Count</span>
-            <span className={cn('text-sm font-bold', config.currentRestarts >= config.maxRestarts ? 'text-destructive' : 'text-primary')}>
+            <span className={cn('text-sm font-bold', config.currentRestarts >= config.maxRestarts ? 'text-destructive' : 'text-foreground')}>
               {config.currentRestarts} / {config.maxRestarts}
             </span>
           </div>
