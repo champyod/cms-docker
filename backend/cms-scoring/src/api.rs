@@ -103,6 +103,10 @@ impl Scoring {
         )
     }
 
+    pub(crate) fn pop(&self) -> Result<Option<(ScoringOperation, NaiveDateTime)>, String> {
+        Ok(self.queue()?.pop())
+    }
+
     fn enqueue(
         &self,
         operation: ScoringOperation,

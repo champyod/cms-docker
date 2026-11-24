@@ -8,6 +8,7 @@
 
 pub mod api;
 pub mod queue;
+pub mod run;
 pub mod service;
 
 pub use queue::{ScoringOperation, ScoringQueue};

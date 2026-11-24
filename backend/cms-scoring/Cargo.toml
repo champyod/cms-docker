@@ -11,7 +11,7 @@ cms-svc = { path = "../cms-svc" }
 chrono = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
-tokio = { workspace = true }
+tokio = { workspace = true, features = ["time"] }
 
 [dev-dependencies]
 sqlx = { workspace = true }
