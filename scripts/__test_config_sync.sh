@@ -251,6 +251,11 @@ sed \
 run_sync
 assert_exit 0 $? "real run with [sandbox] worker limits exits 0"
 assert_grep "$TEST_ROOT/.env" '^MAX_FILE_SIZE=2097152$' ".env MAX_FILE_SIZE is [sandbox] max_file_size"
+if [[ "$(grep -c '^MAX_FILE_SIZE=' "$TEST_ROOT/.env")" -eq 1 ]]; then
+  pass ".env carries exactly one MAX_FILE_SIZE assignment"
+else
+  fail ".env must carry exactly one MAX_FILE_SIZE assignment"
+fi
 assert_grep "$TEST_ROOT/.env" '^COMPILATION_SANDBOX_MAX_PROCESSES=17$' ".env compilation process limit is distinct"
 assert_grep "$TEST_ROOT/.env" '^COMPILATION_SANDBOX_MAX_TIME_S=2.5$' ".env compilation time limit is distinct"
 assert_grep "$TEST_ROOT/.env" '^COMPILATION_SANDBOX_MAX_MEMORY_KIB=262144$' ".env compilation memory limit is distinct"
@@ -319,10 +324,10 @@ awk '
 run_sync
 assert_exit 0 $? "real run with one [sandbox] key exits 0"
 assert_grep "$TEST_ROOT/.env" '^MAX_FILE_SIZE=1048576$' ".env keeps the one present sandbox value"
-if [[ "$(grep -c '^MAX_FILE_SIZE=' "$TEST_ROOT/.env")" -eq 2 ]]; then
-  pass "the present sandbox key appends its MAX_FILE_SIZE line"
+if [[ "$(grep -c '^MAX_FILE_SIZE=' "$TEST_ROOT/.env")" -eq 1 ]]; then
+  pass "the present sandbox key replaces MAX_FILE_SIZE"
 else
-  fail "the present sandbox key did not append MAX_FILE_SIZE"
+  fail "the present sandbox key must leave exactly one MAX_FILE_SIZE"
 fi
 for worker_variable in COMPILATION_SANDBOX_MAX_PROCESSES \
   COMPILATION_SANDBOX_MAX_TIME_S COMPILATION_SANDBOX_MAX_MEMORY_KIB \
@@ -366,12 +371,48 @@ ENV
   assert_grep "$TEST_ROOT/worker-compose-worker.yml" 'TRUSTED_SANDBOX_MAX_TIME_S: "10.0"' "trusted time default is rendered"
   assert_grep "$TEST_ROOT/worker-compose-worker.yml" 'TRUSTED_SANDBOX_MAX_MEMORY_KIB: "4194304"' "trusted memory default is rendered"
   assert_grep "$TEST_ROOT/worker-compose-worker.yml" 'MAX_FILE_SIZE: "1048576"' "worker keeps its file size default"
+  assert_grep "$TEST_ROOT/worker-compose-worker.yml" 'WORKER_SHARD: "0"' "worker keeps its shard environment"
+  assert_grep "$TEST_ROOT/worker-compose-worker.yml" 'WORKER_PORT: "26000"' "worker receives its default port"
   assert_grep "$TEST_ROOT/worker-compose-worker.yml" 'pgrep -x cms-worker' "worker healthcheck matches the binary name"
   if grep -q 'cmsWorker' "$TEST_ROOT/worker-compose-worker.yml"; then
     fail "worker compose still references cmsWorker"
   else
     pass "worker compose has no cmsWorker reference"
   fi
+fi
+
+echo ""
+echo "=== Test 19: [sandbox] without max_file_size keeps the original assignment ==="
+setup_test_root
+grep -v '^max_file_size = ' "$TEST_ROOT/config/cms.sample.toml" > "$TEST_ROOT/config/cms.toml"
+run_sync
+assert_exit 0 $? "real run with [sandbox] but no max_file_size exits 0"
+assert_grep "$TEST_ROOT/.env" '^MAX_FILE_SIZE=1048576$' ".env keeps config.toml's MAX_FILE_SIZE"
+if [[ "$(grep -c '^MAX_FILE_SIZE=' "$TEST_ROOT/.env")" -eq 1 ]]; then
+  pass "an absent sandbox max_file_size leaves exactly one MAX_FILE_SIZE"
+else
+  fail "an absent sandbox max_file_size must leave exactly one MAX_FILE_SIZE"
+fi
+assert_grep "$TEST_ROOT/.env" '^COMPILATION_SANDBOX_MAX_PROCESSES=1000$' ".env still renders the other sandbox limits"
+
+echo ""
+echo "=== Test 20: a non-default worker port reaches the process and published mapping ==="
+if ! command -v docker >/dev/null 2>&1; then
+  fail "docker compose worker port config requires docker"
+else
+  printf 'WORKER_PORT=26001\n' >> "$TEST_ROOT/compose.env"
+  compose_code=0
+  (cd "$REPO_ROOT" && docker compose --env-file "$TEST_ROOT/compose.env" --profile worker config) \
+    > "$TEST_ROOT/worker-port-compose.yml" 2> "$TEST_ROOT/worker-port-compose.log" || compose_code=$?
+  assert_exit 0 "$compose_code" "worker compose config with port 26001 exits 0"
+  awk '
+    /^  worker:$/ { in_worker = 1 }
+    in_worker && /^  [^ ]/ && !/^  worker:$/ { exit }
+    in_worker { print }
+  ' "$TEST_ROOT/worker-port-compose.yml" > "$TEST_ROOT/worker-port-compose-worker.yml"
+  assert_grep "$TEST_ROOT/worker-port-compose-worker.yml" 'WORKER_PORT: "26001"' "worker process receives port 26001"
+  assert_grep "$TEST_ROOT/worker-port-compose-worker.yml" 'published: "26001"' "worker publishes port 26001"
+  assert_grep "$TEST_ROOT/worker-port-compose-worker.yml" 'target: 26001' "worker container targets port 26001"
 fi
 
 echo ""

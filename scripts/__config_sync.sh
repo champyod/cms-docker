@@ -1943,6 +1943,10 @@ render_worker_env() {
     echo "Would write worker env from [sandbox] in ${file}"
     return 0
   fi
+  if toml_key_in_section "$file" sandbox max_file_size; then
+    # WHY replace: config.toml's [worker] also emits this name, and raw readers take the first line.
+    sed -i '/^MAX_FILE_SIZE=/d' "$MERGED_ENV"
+  fi
   {
     echo "### [worker] ###"
     for index in "${!keys[@]}"; do

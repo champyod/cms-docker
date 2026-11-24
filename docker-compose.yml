@@ -735,6 +735,7 @@ services:
       ISOLATE_CGROUP_CONTROL: ${ISOLATE_CGROUP_CONTROL:-1}
       ISOLATE_CGROUP_PATH: ${ISOLATE_CGROUP_PATH:-/sys/fs/cgroup/cms-isolate}
       WORKER_SHARD: ${WORKER_SHARD:-0}
+      WORKER_PORT: ${WORKER_PORT:-26000}
       RPC_SECRET: ${RPC_SECRET}
       DATABASE_URL: postgresql://${POSTGRES_USER}:***@database:5432/${POSTGRES_DB:-cmsdb}
       CORE_SERVICES_HOST: ${CORE_SERVICES_HOST:-cms-log-service}
