@@ -7,5 +7,7 @@
 #![forbid(unsafe_code)]
 
 pub mod queue;
+pub mod service;
 
 pub use queue::{ScoringOperation, ScoringQueue};
+pub use service::{invalidate, score_candidate, ScoringServiceError};

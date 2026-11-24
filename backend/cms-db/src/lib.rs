@@ -147,8 +147,8 @@ pub use reads::{
 };
 pub use schema::{init_db, SchemaError};
 pub use scoring::{
-    read_result_bundle, scoring_candidates, write_score, ScoringBundle, ScoringCandidate,
-    ScoringReadError,
+    invalidate_score, read_result_bundle, scoring_candidates, write_score, ScoringBundle,
+    ScoringCandidate, ScoringReadError, INVALIDATE_SCORE,
 };
 pub use security_block::{SecurityBlock, SECURITY_BLOCK};
 pub use session::{
