@@ -237,5 +237,184 @@ assert_grep "$TEST_ROOT/sync-output.log" 'ResourceService shard 1' \
   "the failure names the shard it cannot address"
 
 echo ""
+echo "=== Test 15: .env carries distinct [sandbox] worker limits ==="
+setup_test_root
+sed \
+  -e 's/^max_file_size = .*/max_file_size = 2_097_152/' \
+  -e 's/^compilation_sandbox_max_processes = .*/compilation_sandbox_max_processes = 17/' \
+  -e 's/^compilation_sandbox_max_time_s = .*/compilation_sandbox_max_time_s = 2.5/' \
+  -e 's/^compilation_sandbox_max_memory_kib = .*/compilation_sandbox_max_memory_kib = 262_144/' \
+  -e 's/^trusted_sandbox_max_processes = .*/trusted_sandbox_max_processes = 23/' \
+  -e 's/^trusted_sandbox_max_time_s = .*/trusted_sandbox_max_time_s = 7.25/' \
+  -e 's/^trusted_sandbox_max_memory_kib = .*/trusted_sandbox_max_memory_kib = 8_388_608/' \
+  "$TEST_ROOT/config/cms.sample.toml" > "$TEST_ROOT/config/cms.toml"
+run_sync
+assert_exit 0 $? "real run with [sandbox] worker limits exits 0"
+assert_grep "$TEST_ROOT/.env" '^MAX_FILE_SIZE=2097152$' ".env MAX_FILE_SIZE is [sandbox] max_file_size"
+if [[ "$(grep -c '^MAX_FILE_SIZE=' "$TEST_ROOT/.env")" -eq 1 ]]; then
+  pass ".env carries exactly one MAX_FILE_SIZE assignment"
+else
+  fail ".env must carry exactly one MAX_FILE_SIZE assignment"
+fi
+assert_grep "$TEST_ROOT/.env" '^COMPILATION_SANDBOX_MAX_PROCESSES=17$' ".env compilation process limit is distinct"
+assert_grep "$TEST_ROOT/.env" '^COMPILATION_SANDBOX_MAX_TIME_S=2.5$' ".env compilation time limit is distinct"
+assert_grep "$TEST_ROOT/.env" '^COMPILATION_SANDBOX_MAX_MEMORY_KIB=262144$' ".env compilation memory limit is distinct"
+assert_grep "$TEST_ROOT/.env" '^TRUSTED_SANDBOX_MAX_PROCESSES=23$' ".env trusted process limit is distinct"
+assert_grep "$TEST_ROOT/.env" '^TRUSTED_SANDBOX_MAX_TIME_S=7.25$' ".env trusted time limit is distinct"
+assert_grep "$TEST_ROOT/.env" '^TRUSTED_SANDBOX_MAX_MEMORY_KIB=8388608$' ".env trusted memory limit is distinct"
+worker_blocks="$(grep -c '^### \[worker\] ###$' "$TEST_ROOT/.env")"
+if [[ "$worker_blocks" -eq 2 ]]; then
+  pass "sandbox limits add one [worker] block beside config.toml's worker block"
+else
+  fail "expected two [worker] blocks with [sandbox], got $worker_blocks"
+fi
+if [[ "$(grep -c '^RPC_SECRET=.' "$TEST_ROOT/.env")" -eq 1 ]]; then
+  pass "worker rendering leaves the single RPC_SECRET line untouched"
+else
+  fail "worker rendering changed the RPC_SECRET line count"
+fi
+if grep -q '^DATABASE_URL=' "$TEST_ROOT/.env"; then
+  fail "worker rendering invented a root DATABASE_URL"
+else
+  pass "worker rendering leaves DATABASE_URL to compose"
+fi
+
+echo ""
+echo "=== Test 16: no [sandbox] table adds no worker env block ==="
+setup_test_root
+awk '
+  /^\[sandbox\][[:space:]]*$/ { skip = 1; next }
+  /^\[/ { skip = 0 }
+  !skip { print }
+' "$TEST_ROOT/config/cms.sample.toml" > "$TEST_ROOT/config/cms.toml"
+run_sync
+assert_exit 0 $? "real run without [sandbox] exits 0"
+worker_blocks="$(grep -c '^### \[worker\] ###$' "$TEST_ROOT/.env")"
+if [[ "$worker_blocks" -eq 1 ]]; then
+  pass "no extra [worker] block without [sandbox]"
+else
+  fail "expected only config.toml's [worker] block without [sandbox], got $worker_blocks"
+fi
+for worker_variable in COMPILATION_SANDBOX_MAX_PROCESSES \
+  COMPILATION_SANDBOX_MAX_TIME_S COMPILATION_SANDBOX_MAX_MEMORY_KIB \
+  TRUSTED_SANDBOX_MAX_PROCESSES TRUSTED_SANDBOX_MAX_TIME_S \
+  TRUSTED_SANDBOX_MAX_MEMORY_KIB; do
+  if grep -q "^${worker_variable}=" "$TEST_ROOT/.env"; then
+    fail "${worker_variable} emitted without a [sandbox] key"
+  else
+    pass "no ${worker_variable} without a [sandbox] key"
+  fi
+done
+if [[ "$(grep -c '^MAX_FILE_SIZE=' "$TEST_ROOT/.env")" -eq 1 ]]; then
+  pass "no second MAX_FILE_SIZE without [sandbox]"
+else
+  fail "worker rendering added MAX_FILE_SIZE without [sandbox]"
+fi
+
+echo ""
+echo "=== Test 17: a partial [sandbox] table invents no missing limits ==="
+setup_test_root
+awk '
+  /^\[sandbox\][[:space:]]*$/ { in_sandbox = 1; print; next }
+  /^\[/ { in_sandbox = 0 }
+  in_sandbox && /^max_file_size[[:space:]]*=/ { print; next }
+  in_sandbox { next }
+  { print }
+' "$TEST_ROOT/config/cms.sample.toml" > "$TEST_ROOT/config/cms.toml"
+run_sync
+assert_exit 0 $? "real run with one [sandbox] key exits 0"
+assert_grep "$TEST_ROOT/.env" '^MAX_FILE_SIZE=1048576$' ".env keeps the one present sandbox value"
+if [[ "$(grep -c '^MAX_FILE_SIZE=' "$TEST_ROOT/.env")" -eq 1 ]]; then
+  pass "the present sandbox key replaces MAX_FILE_SIZE"
+else
+  fail "the present sandbox key must leave exactly one MAX_FILE_SIZE"
+fi
+for worker_variable in COMPILATION_SANDBOX_MAX_PROCESSES \
+  COMPILATION_SANDBOX_MAX_TIME_S COMPILATION_SANDBOX_MAX_MEMORY_KIB \
+  TRUSTED_SANDBOX_MAX_PROCESSES TRUSTED_SANDBOX_MAX_TIME_S \
+  TRUSTED_SANDBOX_MAX_MEMORY_KIB; do
+  if grep -q "^${worker_variable}=" "$TEST_ROOT/.env"; then
+    fail "${worker_variable} invented for an absent [sandbox] key"
+  else
+    pass "no invented ${worker_variable} for an absent key"
+  fi
+done
+
+echo ""
+echo "=== Test 18: worker compose runs cms-worker with RPC and database env ==="
+if ! command -v docker >/dev/null 2>&1; then
+  fail "docker compose worker config requires docker"
+else
+  cat > "$TEST_ROOT/compose.env" <<'ENV'
+RPC_SECRET=test-rpc-secret
+POSTGRES_USER=testuser
+POSTGRES_PASSWORD=test-db-password
+POSTGRES_DB=testdb
+ENV
+  compose_db_user=testuser
+  compose_code=0
+  (cd "$REPO_ROOT" && docker compose --env-file "$TEST_ROOT/compose.env" --profile worker config) \
+    > "$TEST_ROOT/worker-compose.yml" 2> "$TEST_ROOT/worker-compose.log" || compose_code=$?
+  assert_exit 0 "$compose_code" "worker compose config exits 0"
+  awk '
+    /^  worker:$/ { in_worker = 1 }
+    in_worker && /^  [^ ]/ && !/^  worker:$/ { exit }
+    in_worker { print }
+  ' "$TEST_ROOT/worker-compose.yml" > "$TEST_ROOT/worker-compose-worker.yml"
+  assert_grep "$TEST_ROOT/worker-compose-worker.yml" 'exec cms-worker' "worker command execs cms-worker"
+  assert_grep "$TEST_ROOT/worker-compose-worker.yml" 'RPC_SECRET: test-rpc-secret' "worker receives RPC_SECRET"
+  assert_grep "$TEST_ROOT/worker-compose-worker.yml" "DATABASE_URL: postgresql://${compose_db_user}:[^@]*@database:5432/testdb" "worker receives the panel database URL"
+  assert_grep "$TEST_ROOT/worker-compose-worker.yml" 'COMPILATION_SANDBOX_MAX_PROCESSES: "1000"' "compilation process default is rendered"
+  assert_grep "$TEST_ROOT/worker-compose-worker.yml" 'COMPILATION_SANDBOX_MAX_TIME_S: "10.0"' "compilation time default is rendered"
+  assert_grep "$TEST_ROOT/worker-compose-worker.yml" 'COMPILATION_SANDBOX_MAX_MEMORY_KIB: "524288"' "compilation memory default is rendered"
+  assert_grep "$TEST_ROOT/worker-compose-worker.yml" 'TRUSTED_SANDBOX_MAX_PROCESSES: "1000"' "trusted process default is rendered"
+  assert_grep "$TEST_ROOT/worker-compose-worker.yml" 'TRUSTED_SANDBOX_MAX_TIME_S: "10.0"' "trusted time default is rendered"
+  assert_grep "$TEST_ROOT/worker-compose-worker.yml" 'TRUSTED_SANDBOX_MAX_MEMORY_KIB: "4194304"' "trusted memory default is rendered"
+  assert_grep "$TEST_ROOT/worker-compose-worker.yml" 'MAX_FILE_SIZE: "1048576"' "worker keeps its file size default"
+  assert_grep "$TEST_ROOT/worker-compose-worker.yml" 'WORKER_SHARD: "0"' "worker keeps its shard environment"
+  assert_grep "$TEST_ROOT/worker-compose-worker.yml" 'WORKER_PORT: "26000"' "worker receives its default port"
+  assert_grep "$TEST_ROOT/worker-compose-worker.yml" 'pgrep -x cms-worker' "worker healthcheck matches the binary name"
+  if grep -q 'cmsWorker' "$TEST_ROOT/worker-compose-worker.yml"; then
+    fail "worker compose still references cmsWorker"
+  else
+    pass "worker compose has no cmsWorker reference"
+  fi
+fi
+
+echo ""
+echo "=== Test 19: [sandbox] without max_file_size keeps the original assignment ==="
+setup_test_root
+grep -v '^max_file_size = ' "$TEST_ROOT/config/cms.sample.toml" > "$TEST_ROOT/config/cms.toml"
+run_sync
+assert_exit 0 $? "real run with [sandbox] but no max_file_size exits 0"
+assert_grep "$TEST_ROOT/.env" '^MAX_FILE_SIZE=1048576$' ".env keeps config.toml's MAX_FILE_SIZE"
+if [[ "$(grep -c '^MAX_FILE_SIZE=' "$TEST_ROOT/.env")" -eq 1 ]]; then
+  pass "an absent sandbox max_file_size leaves exactly one MAX_FILE_SIZE"
+else
+  fail "an absent sandbox max_file_size must leave exactly one MAX_FILE_SIZE"
+fi
+assert_grep "$TEST_ROOT/.env" '^COMPILATION_SANDBOX_MAX_PROCESSES=1000$' ".env still renders the other sandbox limits"
+
+echo ""
+echo "=== Test 20: a non-default worker port reaches the process and published mapping ==="
+if ! command -v docker >/dev/null 2>&1; then
+  fail "docker compose worker port config requires docker"
+else
+  printf 'WORKER_PORT=26001\n' >> "$TEST_ROOT/compose.env"
+  compose_code=0
+  (cd "$REPO_ROOT" && docker compose --env-file "$TEST_ROOT/compose.env" --profile worker config) \
+    > "$TEST_ROOT/worker-port-compose.yml" 2> "$TEST_ROOT/worker-port-compose.log" || compose_code=$?
+  assert_exit 0 "$compose_code" "worker compose config with port 26001 exits 0"
+  awk '
+    /^  worker:$/ { in_worker = 1 }
+    in_worker && /^  [^ ]/ && !/^  worker:$/ { exit }
+    in_worker { print }
+  ' "$TEST_ROOT/worker-port-compose.yml" > "$TEST_ROOT/worker-port-compose-worker.yml"
+  assert_grep "$TEST_ROOT/worker-port-compose-worker.yml" 'WORKER_PORT: "26001"' "worker process receives port 26001"
+  assert_grep "$TEST_ROOT/worker-port-compose-worker.yml" 'published: "26001"' "worker publishes port 26001"
+  assert_grep "$TEST_ROOT/worker-port-compose-worker.yml" 'target: 26001' "worker container targets port 26001"
+fi
+
+echo ""
 echo "=== Results: $PASS passed, $FAIL failed ==="
 [[ "$FAIL" -eq 0 ]]
