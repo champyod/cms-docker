@@ -367,6 +367,7 @@ them at once. The split is now evidence-driven, not scheduled by taste:
 | S-6d3g submission builder | `SubmissionInputs` to the exact compilation/evaluation body | **merged** `3f7de592` (see note) |
 | S-6d3h output parser | strict returned-body parsing into storable result fields | **merged** `08d4256c` (see note) |
 | S-6d3k worker dispatcher | persistent per-shard client, `execute_job_group`, reply/count refusals | **merged** `c35fefe7` (see note) |
+| S-6d3l submission runner | build one submission job, dispatch it, parse every returned body | **merged** `15f00296` (see note) |
 | S-5e2a task registry | `TaskType::of(key, params)`; the class-name key vs the human label | **merged** `dd37dd47` |
 | S-5e1 method context | `Method<C>` + generic `dispatch`/`Registry`/`Host`; the refactor that unblocks the worker | **merged** `e07a3ec2` |
 | S-8b submissions_status | the dashboard's status counts; the reconciliation bucket | **merged** `d69cc587` |
@@ -1181,3 +1182,20 @@ mutation returning an empty receipt failed `a_batch_hands_its_audit_rows_back`,
 exit 101, restored byte-identically. Lane gate **63 targets, 400 passed, 0
 failed, 2 ignored**. Merged gate **192 targets, 1204 passed, 0 failed, 2
 ignored**.
+
+### S-6d3l: submission runner
+
+`run_submission` composes the existing submission builder, per-shard dispatcher
+and output parser: it builds exactly one body, sends it once, then reads every
+returned body in order. It does not read or write the database, retry, or group
+results. The valid submission fixture moved to one shared test-support file so
+the builder and runner cannot drift. Lane commit `31dc9e61`, merged as
+`15f00296`; the ignored-return control failed
+`a_compilation_is_built_dispatched_and_parsed_into_one_output` with zero outputs
+and passed after byte-identical restoration. Lane gate **73 passed** for
+`cms-evaluation`; combined merged gate with S-6d3j **183 targets, 1210 passed, 0
+failed, 2 ignored**.
+
+The daemon is not deployable yet: converting `WorkerOutput` into the commit's
+`ObjectWrite`, audit receipt chaining, service loop, user-test inputs/builders,
+the binary and the compose entrypoint remain.
