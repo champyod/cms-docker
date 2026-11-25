@@ -12,8 +12,8 @@
 //! the batch's audit rows back instead of storing them.
 
 use cms_db::{
-    commit, AuditRow, DatasetId, EvaluationRow, ObjectWrite, OperationType, ResultRow, RowState,
-    SubmissionId,
+    commit, AuditRow, DatasetId, EvaluationRow, ExecutableRow, ObjectWrite, OperationType,
+    ResultRow, RowState, SubmissionId,
 };
 use sqlx::postgres::PgConnection;
 use sqlx::{AssertSqlSafe, Connection, FromRow};
@@ -28,6 +28,10 @@ const SUBMISSION: i32 = 100;
 const DATASET: i32 = 20;
 const TESTCASE_A: i32 = 40;
 const TESTCASE_B: i32 = 41;
+
+/// Digests the frozen `digest` domain accepts: forty lowercase hex characters.
+const OLD_DIGEST: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+const NEW_DIGEST: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 
 /// One dataset with two testcases and one submission; replica role disables the
 /// grandparent FKs, but NOT NULL, CHECK and domain constraints still apply.
@@ -138,6 +142,71 @@ fn batch(evaluations: Vec<EvaluationRow>) -> ObjectWrite {
         score: None,
         audit: Vec::new(),
     }
+}
+
+/// Open the live fixture, failing by name when CMS_DB_TEST_URL is absent rather
+/// than skipping.
+async fn require_open() -> (PgConnection, PgConnection) {
+    open()
+        .await
+        .expect("CMS_DB_TEST_URL must name a scratch database")
+}
+
+/// Insert one executable directly, so the precondition does not depend on the
+/// commit under test.
+async fn seed_executable(connection: &mut PgConnection, filename: &str, digest: &str) {
+    let insert = format!(
+        "INSERT INTO executables (submission_id, dataset_id, filename, digest) \
+         VALUES ({SUBMISSION}, {DATASET}, '{filename}', '{digest}')"
+    );
+    sqlx::raw_sql(AssertSqlSafe(insert))
+        .execute(&mut *connection)
+        .await
+        .expect("seeding an executable");
+}
+
+/// One compiled file a compilation carries.
+fn executable_row(filename: &str, digest: &str) -> ExecutableRow {
+    ExecutableRow {
+        submission_id: SubmissionId(SUBMISSION),
+        dataset_id: DatasetId(DATASET),
+        filename: filename.to_string(),
+        digest: digest.parse().expect("a valid digest"),
+    }
+}
+
+/// A Compilation batch carrying exactly the given executable set.
+fn compilation_batch(executables: Vec<ExecutableRow>) -> ObjectWrite {
+    ObjectWrite {
+        operation: OperationType::Compilation,
+        submission_id: SubmissionId(SUBMISSION),
+        dataset_id: DatasetId(DATASET),
+        result: result_row(),
+        executables,
+        evaluations: Vec::new(),
+        score: None,
+        audit: Vec::new(),
+    }
+}
+
+#[derive(Debug, FromRow)]
+struct StoredExecutable {
+    filename: String,
+    digest: String,
+}
+
+/// The executables the database holds for the object, in filename order.
+async fn stored_executables(connection: &mut PgConnection) -> Vec<StoredExecutable> {
+    sqlx::query_as::<_, StoredExecutable>(
+        "SELECT filename::text AS filename, digest::text AS digest \
+         FROM executables WHERE submission_id = $1 AND dataset_id = $2 \
+         ORDER BY filename",
+    )
+    .bind(SUBMISSION)
+    .bind(DATASET)
+    .fetch_all(connection)
+    .await
+    .expect("reading the stored executables")
 }
 
 #[derive(Debug, FromRow)]
@@ -309,6 +378,67 @@ async fn a_batch_hands_its_audit_rows_back() {
     assert_eq!(returned[0].entity.as_str(), "evaluations");
     let stored = stored_evaluations(&mut connection).await;
     assert_eq!(stored.len(), 2, "the data rows still landed");
+
+    drop(connection);
+    schema_check::drop_database(&mut base, CHECK_DATABASE).await;
+}
+
+/// A recompilation replaces the whole executable set: the stale old.bin is
+/// cleared and only new.bin remains.
+#[tokio::test]
+async fn a_recompilation_replaces_the_executable_set() {
+    let (mut base, mut connection) = require_open().await;
+    seed_executable(&mut connection, "old.bin", OLD_DIGEST).await;
+
+    let written = compilation_batch(vec![executable_row("new.bin", NEW_DIGEST)]);
+    commit(&mut connection, &[written])
+        .await
+        .expect("committing a recompilation");
+
+    let stored = stored_executables(&mut connection).await;
+    assert_eq!(stored.len(), 1, "only the new executable remains");
+    assert_eq!(stored[0].filename, "new.bin");
+    assert_eq!(stored[0].digest, NEW_DIGEST);
+
+    drop(connection);
+    schema_check::drop_database(&mut base, CHECK_DATABASE).await;
+}
+
+/// A compilation with no executables still clears the set: the DELETE runs even
+/// when the new set is empty.
+#[tokio::test]
+async fn a_compilation_with_no_executables_clears_the_set() {
+    let (mut base, mut connection) = require_open().await;
+    seed_executable(&mut connection, "old.bin", OLD_DIGEST).await;
+
+    let written = compilation_batch(Vec::new());
+    commit(&mut connection, &[written])
+        .await
+        .expect("committing a compilation with no executables");
+
+    let stored = stored_executables(&mut connection).await;
+    assert!(stored.is_empty(), "the executable set is cleared");
+
+    drop(connection);
+    schema_check::drop_database(&mut base, CHECK_DATABASE).await;
+}
+
+/// An Evaluation write must not clear the executable set: the DELETE runs only
+/// for Compilation writes.
+#[tokio::test]
+async fn an_evaluation_write_keeps_the_executable_set() {
+    let (mut base, mut connection) = require_open().await;
+    seed_executable(&mut connection, "old.bin", OLD_DIGEST).await;
+
+    let written = batch(Vec::new());
+    commit(&mut connection, &[written])
+        .await
+        .expect("committing an evaluation write");
+
+    let stored = stored_executables(&mut connection).await;
+    assert_eq!(stored.len(), 1, "the executable survives");
+    assert_eq!(stored[0].filename, "old.bin");
+    assert_eq!(stored[0].digest, OLD_DIGEST, "the digest is unchanged");
 
     drop(connection);
     schema_check::drop_database(&mut base, CHECK_DATABASE).await;

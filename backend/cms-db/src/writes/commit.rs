@@ -72,6 +72,10 @@ pub async fn commit(
     let mut transaction = connection.begin().await?;
     for group in writes {
         write_result(&mut transaction, &group.result).await?;
+        // A compilation replaces the whole set; clear it even when the new set is empty.
+        if group.operation == OperationType::Compilation {
+            delete_executables(&mut transaction, group.submission_id, group.dataset_id).await?;
+        }
         if !group.executables.is_empty() {
             insert_executables(&mut transaction, &group.executables).await?;
         }
@@ -110,6 +114,21 @@ async fn write_result(connection: &mut PgConnection, row: &ResultRow) -> Result<
         .bind(row.compilation_sandbox_digests.clone())
         .bind(row.evaluation_outcome.map(EvaluationOutcome::as_str))
         .bind(row.evaluation_tries)
+        .execute(&mut *connection)
+        .await?;
+    Ok(())
+}
+
+/// Remove one object's whole executable set, the way the reference's
+/// `invalidate_compilation` does before a compilation writes its replacement.
+async fn delete_executables(
+    connection: &mut PgConnection,
+    submission: SubmissionId,
+    dataset: DatasetId,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(crate::DELETE_EXECUTABLES)
+        .bind(submission.0)
+        .bind(dataset.0)
         .execute(&mut *connection)
         .await?;
     Ok(())
