@@ -22,7 +22,7 @@ use super::batch::{AuditRow, ObjectWrite, OperationType};
 use super::shapes::{
     CompilationOutcome, EvaluationOutcome, EvaluationRow, ExecutableRow, ResultRow, ScoreRow,
 };
-use super::statements::{DELETE_EXECUTABLES, INSERT_EXECUTABLES, UPSERT_RESULT, UPSERT_SCORE};
+use super::statements::{INSERT_EXECUTABLES, UPSERT_RESULT, UPSERT_SCORE};
 use crate::reads::{DatasetId, SubmissionId};
 
 /// The stored evaluations of one submission on one dataset.
@@ -126,7 +126,7 @@ async fn delete_executables(
     submission: SubmissionId,
     dataset: DatasetId,
 ) -> Result<(), sqlx::Error> {
-    sqlx::query(DELETE_EXECUTABLES)
+    sqlx::query(crate::DELETE_EXECUTABLES)
         .bind(submission.0)
         .bind(dataset.0)
         .execute(&mut *connection)

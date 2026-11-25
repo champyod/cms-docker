@@ -34,12 +34,6 @@ pub const INSERT_EXECUTABLES: &str = "\
     INSERT INTO executables (submission_id, dataset_id, filename, digest) \
     SELECT * FROM unnest($1::integer[], $2::integer[], $3::varchar[], $4::varchar[])";
 
-/// Remove one object's whole executable set before a compilation replaces it.
-/// The set is keyed by `(submission_id, dataset_id)`, the pair the reference's
-/// `invalidate_compilation` clears before it writes a new set.
-pub const DELETE_EXECUTABLES: &str =
-    "DELETE FROM executables WHERE submission_id = $1 AND dataset_id = $2";
-
 /// The `evaluations` columns one testcase run writes, one array bound per column
 /// so every testcase of one object lands in one statement. The three `varchar[]`
 /// columns are bound as `text[]` of array literals and cast back, because
