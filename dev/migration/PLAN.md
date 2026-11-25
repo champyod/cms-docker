@@ -180,7 +180,7 @@ Read:       dev/agent-protocol.md §1 (binding), dev/migration/INVENTORY.md §<n
 | Q1 | Does `backend` become one crate or stay five, as slices land? | S-3 onwards — it decides which crate owns a function, and moving later is a rewrite |
 | Q2 | Is the DB schema frozen for the migration? `OPEN-QUESTIONS.md` OQ-05/OQ-06 say two RLS exemptions are unconfirmed | S-3, S-8 |
 | Q3 | Is the contest surface allowed to change at all, or is byte-parity required? | S-7 — decides whether S-1 diffs bodies or only status+shape |
-| Q4 | Which of `src/cms/server/admin` and the panel's Python `cmsAdminWebServer` is the surviving admin surface? | S-8 |
+| Q4 | Which of `src/cms/server/admin` and the panel's Python `cmsAdminWebServer` is the surviving admin surface? | S-8 | **Answered by the operator 2026-11-25: A — the panel keeps its UI and calls a Rust write API; its 147 server actions move behind that API, the Python admin's 75 routes and templates are deleted, and one Rust process owns every database write.** S-8 becomes the write API plus a deletion, not a 5,376-line port |
 | Q5 | Upstream mergeability: `CONTEXT.md` says a core replacement forfeits it permanently. Confirmed? | everything — this is the cost the goal accepts |
 
 Q5 is the one that can still cancel the plan, and `MIGRATION-OPTIONS.md:OPT-4` already flags it.
