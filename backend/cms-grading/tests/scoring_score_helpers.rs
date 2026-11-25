@@ -65,6 +65,7 @@ fn dataset(score_type: &str, parameters: &str) -> DatasetRecord {
         id: DATASET_ID,
         task_id: TASK_ID,
         task_type: "Batch".to_string(),
+        task_type_parameters: "{}".to_string(),
         score_type: score_type.to_string(),
         score_type_parameters: parameters.to_string(),
         time_limit: Some(2.0),

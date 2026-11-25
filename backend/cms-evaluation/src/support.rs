@@ -1,9 +1,9 @@
 use chrono::{DateTime, NaiveDateTime};
 
 use cms_db::{
-    dataset_from_row, submission_from_row, testcase_from_row, DatasetId, DatasetRecord, Evaluation,
-    FileDigest, SubmissionId, SubmissionRecord, SubmissionResult, TestcaseRecord, UserTest,
-    UserTestResult,
+    dataset_from_row, submission_from_row, testcase_from_row, DatasetId, DatasetRecord, DatasetRow,
+    Evaluation, FileDigest, SubmissionId, SubmissionRecord, SubmissionResult, TestcaseRecord,
+    UserTest, UserTestResult,
 };
 
 const TIMESTAMP_SECONDS: i64 = 1_700_000_000;
@@ -72,15 +72,17 @@ pub(super) fn user_test_timestamp() -> NaiveDateTime {
 }
 
 pub(super) fn dataset(is_active: bool) -> DatasetRecord {
-    dataset_from_row(
-        DatasetId(22),
-        7,
-        "Batch".to_string(),
-        "Sum".to_string(),
-        "{}".to_string(),
-        (None, None),
+    dataset_from_row(DatasetRow {
+        id: DatasetId(22),
+        task_id: 7,
+        task_type: "Batch".to_string(),
+        task_type_parameters: "{}".to_string(),
+        score_type: "Sum".to_string(),
+        score_type_parameters: "{}".to_string(),
+        time_limit: None,
+        memory_limit: None,
         is_active,
-    )
+    })
 }
 
 pub(super) fn testcases() -> Vec<TestcaseRecord> {

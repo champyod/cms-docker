@@ -41,7 +41,7 @@ mod testcase;
 mod walk;
 
 pub use dataset::{
-    dataset_from_row, get_datasets_to_judge, DatasetId, DatasetRecord, DATASET_BY_ID,
+    dataset_from_row, get_datasets_to_judge, DatasetId, DatasetRecord, DatasetRow, DATASET_BY_ID,
     JUDGEABLE_DATASETS,
 };
 pub use files::enumerate_files;
