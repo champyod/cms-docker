@@ -36,6 +36,7 @@
 
 mod compilation;
 mod evaluation;
+mod export;
 mod model;
 mod user_test;
 pub mod wire;
