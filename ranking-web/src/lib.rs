@@ -1,3 +1,4 @@
+pub mod access_mode;
 pub mod auth;
 pub mod binding;
 pub mod board;

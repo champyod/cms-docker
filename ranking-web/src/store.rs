@@ -449,6 +449,11 @@ pub struct Wording {
 }
 
 impl Appearance {
+    /// The closed access mode; an unknown stored value is protected.
+    pub fn access_mode(&self) -> crate::access_mode::AccessMode {
+        crate::access_mode::AccessMode::from_stored(&self.access_mode)
+    }
+
     /// The scoreboard only learns whether to show the id column from this flag,
     /// so it is derived here rather than stored twice.
     pub fn show_id_column(&self) -> bool {

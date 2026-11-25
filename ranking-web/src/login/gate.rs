@@ -32,7 +32,7 @@ pub async fn gate(State(state): State<AppState>, request: Request, next: Next) -
     };
     let protected = appearance
         .as_ref()
-        .is_some_and(|row| row.access_mode == "protected");
+        .is_some_and(|row| row.access_mode().is_protected());
     if !protected {
         return next.run(request).await;
     }

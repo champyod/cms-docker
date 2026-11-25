@@ -370,6 +370,17 @@ protected_mode_redirects() {
     pass "protected mode sends an anonymous visitor to the sign-in page"
 }
 
+access_mode_constraint_rejects_unknown() {
+    local output
+    if output="$(psql "${DATABASE_URL}" -q -v ON_ERROR_STOP=1 \
+        -c "UPDATE ranking_settings SET access_mode = 'weird' WHERE id = 1" 2>&1)"; then
+        fail "the database accepted an unknown access mode"
+    fi
+    grep -q 'ranking_settings_access_mode_check' <<<"${output}" ||
+        fail "the unknown access mode was refused by something other than its check constraint"
+    pass "the database refuses an access mode outside public and protected"
+}
+
 main() {
     require_tools
     prepare_console_schema
@@ -403,6 +414,7 @@ main() {
     console_login_refuses_an_overlong_candidate
     console_login_rejects_an_oversized_username
     protected_mode_redirects
+    access_mode_constraint_rejects_unknown
     printf "\nacceptance rehearsal passed\n"
 }
 

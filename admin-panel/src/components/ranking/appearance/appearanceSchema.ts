@@ -1,5 +1,6 @@
 import type { AppearanceFields } from '@/app/actions/rankingAppearance';
 import type { Dictionary } from '@/lib/dictionary';
+import { ACCESS_MODE_PROTECTED, ACCESS_MODE_PUBLIC } from '@/lib/ranking-access-mode';
 
 type AppearanceCopy = Dictionary['ranking']['appearance'];
 
@@ -34,9 +35,6 @@ export interface AppearanceSection {
   readonly title: string;
   readonly fields: readonly AppearanceField[];
 }
-
-export const ACCESS_MODE_PUBLIC = 'public';
-export const ACCESS_MODE_PROTECTED = 'protected';
 
 /** The JSON boxes are the long fields, so they take the row rather than half of it. */
 const JSON_SPAN: AppearanceFieldSpan = 'full';
