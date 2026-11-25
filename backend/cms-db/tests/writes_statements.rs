@@ -99,17 +99,28 @@ fn a_result_row_is_upserted_on_the_key_the_read_looks_up() {
 
 #[test]
 fn a_row_set_is_written_by_one_statement_binding_one_array_per_column() {
-    for sql in [INSERT_EXECUTABLES, INSERT_EVALUATIONS] {
-        let columns = inserted_columns(sql).len();
-
+    assert!(
+        INSERT_EXECUTABLES.contains("SELECT * FROM unnest("),
+        "INSERT_EXECUTABLES does not batch its rows"
+    );
+    assert_eq!(
+        INSERT_EXECUTABLES.matches("::").count(),
+        inserted_columns(INSERT_EXECUTABLES).len(),
+        "INSERT_EXECUTABLES binds the wrong arrays"
+    );
+    assert!(
+        INSERT_EVALUATIONS.contains("FROM unnest("),
+        "INSERT_EVALUATIONS does not batch its rows"
+    );
+    // The three varchar[] columns are cast back from the text[] literals bound.
+    for cast in [
+        "u.text::varchar[]",
+        "u.evaluation_sandbox_paths::varchar[]",
+        "u.evaluation_sandbox_digests::varchar[]",
+    ] {
         assert!(
-            sql.contains("SELECT * FROM unnest("),
-            "{sql} does not batch its rows"
-        );
-        assert_eq!(
-            sql.matches("::").count(),
-            columns,
-            "{sql} binds the wrong arrays"
+            INSERT_EVALUATIONS.contains(cast),
+            "INSERT_EVALUATIONS does not cast {cast}"
         );
     }
 }
