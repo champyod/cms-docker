@@ -362,6 +362,7 @@ them at once. The split is now evidence-driven, not scheduled by taste:
 | S-6d3d dataset parameters | `task_type_parameters` raw JSON text on both dataset read paths | **merged** `226e6e23` (see note) |
 | S-6d3e submission inputs | one read for a submission job's records, files, managers, executables and languages | **merged** `d4bf98eb` (see note) |
 | S-6d3f job body export | exact 20/27-key worker bodies with defaults and round-trip tests | **merged** `496b3050` (see note) |
+| S-6d3g submission builder | `SubmissionInputs` to the exact compilation/evaluation body | **merged** `3f7de592` (see note) |
 | S-5e2a task registry | `TaskType::of(key, params)`; the class-name key vs the human label | **merged** `dd37dd47` |
 | S-5e1 method context | `Method<C>` + generic `dispatch`/`Registry`/`Host`; the refactor that unblocks the worker | **merged** `e07a3ec2` |
 | S-8b submissions_status | the dashboard's status counts; the reconciliation bucket | **merged** `d69cc587` |
@@ -1083,9 +1084,20 @@ modules. Lane commit `32f69289`, merged as `496b3050`; the key-set control faile
 restoration. Lane gate **306 passed** for `cms-grading`; merged gate **177 targets,
 1178 passed, 0 failed, 2 ignored**.
 
-The daemon is not deployable yet: building the submission job from
-`SubmissionInputs`, worker dispatch, result writing, user-test inputs/results, the
-binary and the compose entrypoint remain.
+### S-6d3g: submission job builder
+
+`cms-evaluation::submission_job` parses the dataset's raw task-type parameters
+once, reshapes a `SubmissionInputs` into the `cms-grading` Dataset and Submission,
+and dispatches Compilation and Evaluation to their constructors; a user-test kind
+is refused before any constructor. Contest languages decide multithreading, and
+the language descriptor is looked up only when present. Lane commit `af801812`,
+merged as `3f7de592`; the wrong-task-type control failed
+`compilation_body_writes_the_exact_compilation_shape` and passed after byte-identical
+restoration. Lane gate **358 passed** for `cms-evaluation` + `cms-grading`; merged
+gate **178 targets, 1184 passed, 0 failed, 2 ignored**.
+
+The daemon is not deployable yet: worker dispatch, result writing, user-test
+inputs/builders, the binary and the compose entrypoint remain.
 
 
 
