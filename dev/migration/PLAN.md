@@ -208,6 +208,7 @@ commit names the lane tip and the gate result it was accepted on.
 | 2026-11-22 | `feat/rust-S3g-reads` | `dd53f811` | the deferred 244 lines. Parent's own mutation of `reads/walk.rs:64` (`!submissions && !users` → `||`) failed `the_walk_visits_every_table_and_honours_each_skip`, leaking digests …0006 and …0007 into a walk "without users", exit 101, restored byte-identical. Merged tree: 113 binaries, 760 passed, live database | `4df2295e` |
 | 2026-11-22 | `feat/rust-S3h-schema` | `70945d9f` | closes the three gaps: schema creation (DDL obtained by running the reference and dumping it, frozen at `dev/fixtures/cms_schema.sql`, 224 statements split into `cms-db/sql/`), username display/registration, and the team fallback. Parent's own mutation of `username/policy.rs:72` (removing the contest short-circuit) failed `a_contest_denial_is_not_reopened_by_a_user_allow` and `a_contest_policy_decides_for_every_participant`, exit 101, restored byte-identical. Merged tree: 117 binaries, 772 passed, live database | `be01014e` |
 | 2026-11-22 | `feat/rust-S3i-pgdump` | `7bb3952f`→`d7b453fe` | dumper from the prod-pinned image, fixture regenerated on PG 15, version check made strict. Parent's own control: the first attempt (deleting a FOREIGN KEY statement) proved only that the DDL runs, not that the comparison sees anything — repaired to `CASCADE`→`RESTRICT`, which failed at statement 187 with "224 statements expected, 224 created", exit 101, restored byte-identical. Merged tree: no host `pg_dump`, 117 binaries, 772 passed | `2461a695` |
+| 2026-11-25 | `feat/rust-S6d3i-writes` | `2ab37bd3` | the evaluations row set: the pinned `SELECT * FROM unnest(...)` could not fill three `varchar[]` columns (`42804`), and the statement test read SQL as text, so nothing executed it. Parent's own mutation dropping one `::varchar[]` cast failed `one_object_rows_round_trip_their_per_row_arrays` with `42804`, exit 101, restored byte-identically. Lane gate 62 targets / 396 passed; merged gate **190 targets, 1195 passed, 0 failed, 2 ignored** | `0cc770fd` |
 
 Gate on the tree after all fifteen merges (`7408c34d`, plus the test fix `50a37ea3`), with a live
 database: `cargo fmt --check` exit 0; `cargo clippy --all-targets -- -D warnings` exit 0; `cargo test --
@@ -1107,18 +1108,32 @@ merged as `08d4256c`; the wrong-type and bad-digest controls each failed named
 tests and passed after byte-identical restoration. Lane gate **62 passed** for
 `cms-evaluation`; merged gate **179 targets, 1194 passed, 0 failed, 2 ignored**.
 
-The daemon is not deployable yet: database result writes, grouping/completion,
-worker dispatch, user-test inputs/builders, the binary and the compose entrypoint
-remain.
+The daemon is not deployable yet: grouping and completion, worker dispatch,
+user-test inputs and builders, the binary and the compose entrypoint remain.
 
+### S-6d3i: the evaluations row set
 
+`evaluations.text`, `evaluation_sandbox_paths` and `evaluation_sandbox_digests`
+are `character varying[]` (`dev/fixtures/cms_schema.sql:448-461`), so the pinned
+`SELECT * FROM unnest(...)` could not write them: `unnest` yields one scalar per
+row and PostgreSQL refuses the insert — `42804`, `column "text" is of type
+character varying[] but expression is of type character varying`, reproduced on
+15.19. `EvaluationRow` already held one list per column; the statement was the
+defect, and `tests/writes_statements.rs` only read the SQL as text, which is why
+no run caught it.
 
+The row set now binds those three columns as `text[]` of PostgreSQL array
+literals and casts each element back with `::varchar[]`. The literal encoder is
+the only hand-written piece and escapes `"` and `\`. Three methods survived the
+hard requirements — `COPY` through `copy_in_raw`, `jsonb_to_recordset`, and this
+one; all are one revert and none adds a dependency, and the literal form keeps
+the shipped twelve bound arrays and the single statement, so it is the smallest
+final state.
 
-
-
-
-
-
-
-
-
+Lane commit `2ab37bd3`, merged as `0cc770fd`. The live test seeds the frozen
+schema in a scratch database, writes rows whose arrays differ in length, and
+asserts element order and `NULL` versus empty on read-back. Lane gate **62
+targets, 396 passed, 0 failed, 2 ignored**. Parent's own mutation removing one
+`::varchar[]` cast failed `one_object_rows_round_trip_their_per_row_arrays` with
+`42804`, exit 101, restored byte-identically. Merged gate **190 targets, 1195
+passed, 0 failed, 2 ignored**.
