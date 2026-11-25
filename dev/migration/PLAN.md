@@ -361,6 +361,7 @@ them at once. The split is now evidence-driven, not scheduled by taste:
 | S-6d3c auto managers | task-type manager list, reusing Communication's existing `manager` name | **merged** `39490ba3` (see note) |
 | S-6d3d dataset parameters | `task_type_parameters` raw JSON text on both dataset read paths | **merged** `226e6e23` (see note) |
 | S-6d3e submission inputs | one read for a submission job's records, files, managers, executables and languages | **merged** `d4bf98eb` (see note) |
+| S-6d3f job body export | exact 20/27-key worker bodies with defaults and round-trip tests | **merged** `496b3050` (see note) |
 | S-5e2a task registry | `TaskType::of(key, params)`; the class-name key vs the human label | **merged** `dd37dd47` |
 | S-5e1 method context | `Method<C>` + generic `dispatch`/`Registry`/`Host`; the refactor that unblocks the worker | **merged** `e07a3ec2` |
 | S-8b submissions_status | the dashboard's status counts; the reconciliation bucket | **merged** `d69cc587` |
@@ -1071,9 +1072,20 @@ tests and passed after byte-identical restoration. Lane gate **740 passed** for
 `cms-db` + `cms-grading` + `cms-evaluation`; merged gate **176 targets, 1171 passed,
 0 failed, 2 ignored**.
 
-The daemon is not deployable yet: building the submission job from these inputs,
-worker dispatch, result writing, user-test inputs/results, the binary and the
-compose entrypoint remain.
+### S-6d3f: job body export
+
+`cms-grading::job::export` writes the exact worker body of a compilation or
+evaluation that has not run: the pinned 20- and 27-key sets, the five operation
+fields, digest maps, evaluation input/output/limits, and the reference's
+worker-filled defaults. `wire::put` is the only key writer, shared by both
+modules. Lane commit `32f69289`, merged as `496b3050`; the key-set control failed
+`compilation_body_has_exactly_the_pinned_key_set` and passed after byte-identical
+restoration. Lane gate **306 passed** for `cms-grading`; merged gate **177 targets,
+1178 passed, 0 failed, 2 ignored**.
+
+The daemon is not deployable yet: building the submission job from
+`SubmissionInputs`, worker dispatch, result writing, user-test inputs/results, the
+binary and the compose entrypoint remain.
 
 
 
