@@ -209,6 +209,7 @@ commit names the lane tip and the gate result it was accepted on.
 | 2026-11-22 | `feat/rust-S3h-schema` | `70945d9f` | closes the three gaps: schema creation (DDL obtained by running the reference and dumping it, frozen at `dev/fixtures/cms_schema.sql`, 224 statements split into `cms-db/sql/`), username display/registration, and the team fallback. Parent's own mutation of `username/policy.rs:72` (removing the contest short-circuit) failed `a_contest_denial_is_not_reopened_by_a_user_allow` and `a_contest_policy_decides_for_every_participant`, exit 101, restored byte-identical. Merged tree: 117 binaries, 772 passed, live database | `be01014e` |
 | 2026-11-22 | `feat/rust-S3i-pgdump` | `7bb3952f`→`d7b453fe` | dumper from the prod-pinned image, fixture regenerated on PG 15, version check made strict. Parent's own control: the first attempt (deleting a FOREIGN KEY statement) proved only that the DDL runs, not that the comparison sees anything — repaired to `CASCADE`→`RESTRICT`, which failed at statement 187 with "224 statements expected, 224 created", exit 101, restored byte-identical. Merged tree: no host `pg_dump`, 117 binaries, 772 passed | `2461a695` |
 | 2026-11-25 | `feat/rust-S6d3i-writes` | `2ab37bd3` | the evaluations row set: the pinned `SELECT * FROM unnest(...)` could not fill three `varchar[]` columns (`42804`), and the statement test read SQL as text, so nothing executed it. Parent's own mutation dropping one `::varchar[]` cast failed `one_object_rows_round_trip_their_per_row_arrays` with `42804`, exit 101, restored byte-identically. Lane gate 62 targets / 396 passed; merged gate **190 targets, 1195 passed, 0 failed, 2 ignored** | `0cc770fd` |
+| 2026-11-25 | `feat/rust-S6d3j-commit` | `f82d931b` | one object's batch in one transaction. The audit write was rejected at review — no trigger fills the hash, so rows go back to the chained writer — and the refusal that replaced it made `group_by_object` → `commit` uncallable, fixed to a receipt. Parent's empty-receipt mutation failed `a_batch_hands_its_audit_rows_back`, exit 101, restored byte-identical. Lane gate 63 targets / 400 passed; merged gate **192 targets, 1204 passed, 0 failed, 2 ignored** | `0e9fbddf` |
 
 Gate on the tree after all fifteen merges (`7408c34d`, plus the test fix `50a37ea3`), with a live
 database: `cargo fmt --check` exit 0; `cargo clippy --all-targets -- -D warnings` exit 0; `cargo test --
@@ -1150,3 +1151,33 @@ targets, 396 passed, 0 failed, 2 ignored**. Parent's own mutation removing one
 `::varchar[]` cast failed `one_object_rows_round_trip_their_per_row_arrays` with
 `42804`, exit 101, restored byte-identically. Merged gate **190 targets, 1195
 passed, 0 failed, 2 ignored**.
+
+### S-6d3j: the object commit step
+
+`group_by_object` merges every operation on one object and `seal` refuses a batch
+that declares no audit row; `commit` now writes the result row, the executable
+set, the evaluations and the score on one `sqlx::Transaction`. Each evaluation
+row runs inside its own savepoint, which reproduces the reference's
+`begin_nested` and its swallowed `IntegrityError`
+(`src/cms/service/EvaluationService.py:702-719`). After the writes, an Evaluation
+group stamps `evaluation_outcome = 'ok'` only when the stored evaluation count
+equals the dataset's testcase count.
+
+The first attempt wrote audit rows here, with a six-column INSERT on the CMS
+connection. That is a security regression: no trigger fills `entry_hash` — the
+writer computes and chains it in application code
+(`admin-panel/src/lib/audit.ts:166-199`) — so every stored row would have been
+unchained and indistinguishable from a tampered one. The rows are now handed back
+to the caller, which appends them through that writer. Fixing it surfaced a
+second defect: `seal` refuses a batch with no audit row, so a commit that refused
+one carrying them left `group_by_object` → `commit` uncallable; the receipt form
+is the contract that satisfies both.
+
+Commits `3f16f4fb`, `3ff6fc66`, `f82d931b`, merged as `0e9fbddf`. Live tests seed
+the frozen schema and assert: two of two testcases complete the result, one of
+two leaves it NULL, a duplicate row inside the batch does not abort it, and the
+batch's audit rows come back with nothing written to `audit_log`. Parent's own
+mutation returning an empty receipt failed `a_batch_hands_its_audit_rows_back`,
+exit 101, restored byte-identically. Lane gate **63 targets, 400 passed, 0
+failed, 2 ignored**. Merged gate **192 targets, 1204 passed, 0 failed, 2
+ignored**.
