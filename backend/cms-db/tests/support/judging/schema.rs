@@ -72,6 +72,7 @@ const SCHEMA: &[&str] = &[
         comment varchar NOT NULL DEFAULT '',
         official boolean NOT NULL DEFAULT true,
         UNIQUE (participation_id, opaque_id))",
+    "DROP TABLE IF EXISTS submission_results CASCADE",
     "CREATE TABLE IF NOT EXISTS submission_results (
         submission_id integer NOT NULL REFERENCES submissions (id) ON DELETE CASCADE,
         dataset_id integer NOT NULL REFERENCES datasets (id) ON DELETE CASCADE,
@@ -94,16 +95,6 @@ const SCHEMA: &[&str] = &[
         public_score_details jsonb,
         ranking_score_details varchar[],
         PRIMARY KEY (submission_id, dataset_id))",
-    "ALTER TABLE submission_results
-        ADD COLUMN IF NOT EXISTS compilation_text varchar[] NOT NULL DEFAULT '{}',
-        ADD COLUMN IF NOT EXISTS compilation_stdout varchar,
-        ADD COLUMN IF NOT EXISTS compilation_stderr varchar,
-        ADD COLUMN IF NOT EXISTS compilation_time double precision,
-        ADD COLUMN IF NOT EXISTS compilation_wall_clock_time double precision,
-        ADD COLUMN IF NOT EXISTS compilation_memory bigint,
-        ADD COLUMN IF NOT EXISTS compilation_shard integer,
-        ADD COLUMN IF NOT EXISTS compilation_sandbox_paths varchar[],
-        ADD COLUMN IF NOT EXISTS compilation_sandbox_digests varchar[]",
     "CREATE TABLE IF NOT EXISTS executables (
         id serial PRIMARY KEY,
         submission_id integer NOT NULL,
