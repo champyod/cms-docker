@@ -17,18 +17,13 @@ use cms_db::{
 };
 use sqlx::postgres::PgConnection;
 use sqlx::{AssertSqlSafe, Connection, FromRow};
-use std::sync::atomic::{AtomicUsize, Ordering};
 
 #[allow(dead_code)]
 #[path = "support/schema_check.rs"]
 mod schema_check;
 
-/// Each test owns a distinct scratch database, so parallel tests never collide.
-static NEXT_CHECK_DATABASE: AtomicUsize = AtomicUsize::new(0);
-fn check_database() -> String {
-    let n = NEXT_CHECK_DATABASE.fetch_add(1, Ordering::Relaxed);
-    format!("cms_commit_check_{n}")
-}
+/// The scratch database the frozen schema is created in and dropped after.
+const CHECK_DATABASE: &str = "cms_commit_check";
 const SUBMISSION: i32 = 100;
 const DATASET: i32 = 20;
 const TESTCASE_A: i32 = 40;
@@ -48,14 +43,13 @@ const SEED: &[&str] = &[
 
 /// A connection with the frozen schema, replica role and the parent rows, plus
 /// the base connection used to drop it again.
-async fn open() -> Option<(PgConnection, PgConnection, String)> {
+async fn open() -> Option<(PgConnection, PgConnection)> {
     let url = schema_check::skip()?;
-    let name = check_database();
-    let check_url = schema_check::with_database(&url, &name);
+    let check_url = schema_check::with_database(&url, CHECK_DATABASE);
     let mut base = PgConnection::connect(&url)
         .await
         .expect("connecting to the scratch database");
-    schema_check::create_database(&mut base, &name).await;
+    schema_check::create_database(&mut base, CHECK_DATABASE).await;
 
     let mut connection = PgConnection::connect(&check_url)
         .await
@@ -77,7 +71,7 @@ async fn open() -> Option<(PgConnection, PgConnection, String)> {
             .await
             .expect("seeding the parent rows");
     }
-    Some((base, connection, name))
+    Some((base, connection))
 }
 
 /// One testcase run, with per-row arrays that survive the write.
@@ -202,7 +196,7 @@ async fn stored_result(connection: &mut PgConnection) -> StoredResult {
 /// completion rule stamps evaluation_outcome = 'ok'.
 #[tokio::test]
 async fn two_evaluations_complete_the_result() {
-    let Some((mut base, mut connection, name)) = open().await else {
+    let Some((mut base, mut connection)) = open().await else {
         return;
     };
     let written = batch(vec![evaluation_row(TESTCASE_A), evaluation_row(TESTCASE_B)]);
@@ -236,13 +230,13 @@ async fn two_evaluations_complete_the_result() {
     assert_eq!(result.evaluation_outcome.as_deref(), Some("ok"));
 
     drop(connection);
-    schema_check::drop_database(&mut base, &name).await;
+    schema_check::drop_database(&mut base, CHECK_DATABASE).await;
 }
 
 /// One of two testcases evaluated: the completion rule must NOT fire.
 #[tokio::test]
 async fn one_of_two_testcases_leaves_outcome_null() {
-    let Some((mut base, mut connection, name)) = open().await else {
+    let Some((mut base, mut connection)) = open().await else {
         return;
     };
     let written = batch(vec![evaluation_row(TESTCASE_A)]);
@@ -261,14 +255,14 @@ async fn one_of_two_testcases_leaves_outcome_null() {
     );
 
     drop(connection);
-    schema_check::drop_database(&mut base, &name).await;
+    schema_check::drop_database(&mut base, CHECK_DATABASE).await;
 }
 
 /// A duplicate evaluation row in the batch is tolerated: the other rows land
 /// and the call returns Ok.
 #[tokio::test]
 async fn a_duplicate_row_does_not_abort_the_batch() {
-    let Some((mut base, mut connection, name)) = open().await else {
+    let Some((mut base, mut connection)) = open().await else {
         return;
     };
     let written = batch(vec![
@@ -292,7 +286,7 @@ async fn a_duplicate_row_does_not_abort_the_batch() {
     assert_eq!(stored[1].execution_memory, Some(1024));
 
     drop(connection);
-    schema_check::drop_database(&mut base, &name).await;
+    schema_check::drop_database(&mut base, CHECK_DATABASE).await;
 }
 
 /// A batch's audit rows come back from the commit instead of being stored: this
@@ -300,7 +294,7 @@ async fn a_duplicate_row_does_not_abort_the_batch() {
 /// one writer that can, and nothing reaches `audit_log` from here.
 #[tokio::test]
 async fn a_batch_hands_its_audit_rows_back() {
-    let Some((mut base, mut connection, name)) = open().await else {
+    let Some((mut base, mut connection)) = open().await else {
         return;
     };
     let mut written = batch(vec![evaluation_row(TESTCASE_A), evaluation_row(TESTCASE_B)]);
@@ -317,5 +311,5 @@ async fn a_batch_hands_its_audit_rows_back() {
     assert_eq!(stored.len(), 2, "the data rows still landed");
 
     drop(connection);
-    schema_check::drop_database(&mut base, &name).await;
+    schema_check::drop_database(&mut base, CHECK_DATABASE).await;
 }
