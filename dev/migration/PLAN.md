@@ -359,6 +359,7 @@ them at once. The split is now evidence-driven, not scheduled by taste:
 | S-6d3a ES queue | priority-then-timestamp queue, duplicate refusal, cumulative status | **committed** `b5bb73a7` (see note) |
 | S-6d3b ES RPC context | named-object reads, `new_submission`/`new_user_test`, `queue_status` | **committed** `67569040` (see note) |
 | S-6d3c auto managers | task-type manager list, reusing Communication's existing `manager` name | **merged** `39490ba3` (see note) |
+| S-6d3d dataset parameters | `task_type_parameters` raw JSON text on both dataset read paths | **merged** `226e6e23` (see note) |
 | S-5e2a task registry | `TaskType::of(key, params)`; the class-name key vs the human label | **merged** `dd37dd47` |
 | S-5e1 method context | `Method<C>` + generic `dispatch`/`Registry`/`Host`; the refactor that unblocks the worker | **merged** `e07a3ec2` |
 | S-8b submissions_status | the dashboard's status counts; the reconciliation bucket | **merged** `d69cc587` |
@@ -1044,6 +1045,18 @@ failed `automatic_managers_are_exact_for_all_five_kinds` with left `[]` and righ
 `["manager"]`, then passed after byte-identical restoration. Lane gate **299
 passed** for `cms-grading`; merged gate **174 targets, 1163 passed, 0 failed, 2
 ignored**.
+
+### S-6d3d: dataset task-type parameters
+
+`DatasetRecord` now carries `task_type_parameters` as raw `jsonb::text`, and both
+`DATASET_BY_ID` and `JUDGEABLE_DATASETS` project it. The row mapping takes a
+`DatasetRow` bundle, avoiding an eight-argument function and any lint suppression.
+A live test reads the database's own `::text` rendering as an oracle and proves
+both paths equal it, without pinning a PostgreSQL version's JSON formatting. Lane
+commit `a243639f`, merged as `226e6e23`; the NULL-projection control failed the
+named live read and passed after byte-identical restoration. Lane gate **734
+passed** for `cms-db` + `cms-grading` + `cms-evaluation`; merged gate **175 targets,
+1165 passed, 0 failed, 2 ignored**.
 
 The daemon is not deployable yet: worker dispatch, result writing, user-test
 results, the binary and the compose entrypoint remain.
