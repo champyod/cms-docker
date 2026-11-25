@@ -83,6 +83,7 @@ mod filecache;
 mod fsobject;
 mod grants;
 mod interval;
+mod judging;
 mod large_object;
 mod permission;
 mod reads;
@@ -143,6 +144,7 @@ pub use grants::{
     ALLOW_OVERRIDE_KEYS, DENY_OVERRIDE_KEYS, GROUP, GROUP_GRANT_KEYS, GROUP_PERMISSION, PERMISSION,
     REGISTERED_KEYS,
 };
+pub use judging::{submission_inputs, JudgingError, JudgingReadError, SubmissionInputs};
 pub use large_object::{LargeObject, LargeObjectError, Mode};
 pub use reads::{
     dataset_from_row, enumerate_files, get_datasets_to_judge, result_from_row, submission_from_row,
