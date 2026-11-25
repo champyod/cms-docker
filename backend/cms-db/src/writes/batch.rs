@@ -14,7 +14,10 @@ use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 use std::fmt;
 
+use sqlx::postgres::PgConnection;
+
 use super::shapes::{EvaluationRow, ExecutableRow, ResultRow, ScoreRow};
+use super::statements::INSERT_EVALUATIONS;
 use crate::reads::{DatasetId, SubmissionId};
 
 /// Which half of a judging commit one group belongs to.
@@ -113,6 +116,60 @@ pub struct ObjectWrite {
 }
 
 impl ObjectWrite {
+    /// Writes one object's evaluation rows in one statement, one bound array
+    /// per column; each of the three `varchar[]` columns carries a per-row list.
+    ///
+    /// # Errors
+    ///
+    /// Returns the driver's own error for a statement it could not run.
+    pub async fn write_evaluations(
+        connection: &mut PgConnection,
+        rows: &[EvaluationRow],
+    ) -> Result<(), sqlx::Error> {
+        let mut submission_id = Vec::with_capacity(rows.len());
+        let mut dataset_id = Vec::with_capacity(rows.len());
+        let mut testcase_id = Vec::with_capacity(rows.len());
+        let mut outcome = Vec::with_capacity(rows.len());
+        let mut text = Vec::with_capacity(rows.len());
+        let mut admin_text = Vec::with_capacity(rows.len());
+        let mut execution_time = Vec::with_capacity(rows.len());
+        let mut execution_wall_clock_time = Vec::with_capacity(rows.len());
+        let mut execution_memory = Vec::with_capacity(rows.len());
+        let mut evaluation_shard = Vec::with_capacity(rows.len());
+        let mut evaluation_sandbox_paths = Vec::with_capacity(rows.len());
+        let mut evaluation_sandbox_digests = Vec::with_capacity(rows.len());
+        for row in rows {
+            submission_id.push(row.submission_id.0);
+            dataset_id.push(row.dataset_id.0);
+            testcase_id.push(row.testcase_id);
+            outcome.push(row.outcome.clone());
+            text.push(Some(row.text_literal()));
+            admin_text.push(row.admin_text.clone());
+            execution_time.push(row.execution_time);
+            execution_wall_clock_time.push(row.execution_wall_clock_time);
+            execution_memory.push(row.execution_memory);
+            evaluation_shard.push(row.evaluation_shard);
+            evaluation_sandbox_paths.push(row.sandbox_paths_literal());
+            evaluation_sandbox_digests.push(row.sandbox_digests_literal());
+        }
+        sqlx::query(INSERT_EVALUATIONS)
+            .bind(submission_id)
+            .bind(dataset_id)
+            .bind(testcase_id)
+            .bind(outcome)
+            .bind(text)
+            .bind(admin_text)
+            .bind(execution_time)
+            .bind(execution_wall_clock_time)
+            .bind(execution_memory)
+            .bind(evaluation_shard)
+            .bind(evaluation_sandbox_paths)
+            .bind(evaluation_sandbox_digests)
+            .execute(connection)
+            .await?;
+        Ok(())
+    }
+
     /// Closes the batch for writing.
     ///
     /// # Errors

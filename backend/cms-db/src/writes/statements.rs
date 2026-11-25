@@ -35,14 +35,23 @@ pub const INSERT_EXECUTABLES: &str = "\
     SELECT * FROM unnest($1::integer[], $2::integer[], $3::varchar[], $4::varchar[])";
 
 /// The `evaluations` columns one testcase run writes, one array bound per column
-/// so every testcase of one object lands in one statement.
+/// so every testcase of one object lands in one statement. The three `varchar[]`
+/// columns are bound as `text[]` of array literals and cast back, because
+/// `unnest` yields a scalar per row and cannot carry a jagged per-row array.
 pub const INSERT_EVALUATIONS: &str = "\
     INSERT INTO evaluations (submission_id, dataset_id, testcase_id, outcome, text, admin_text, \
         execution_time, execution_wall_clock_time, execution_memory, evaluation_shard, \
         evaluation_sandbox_paths, evaluation_sandbox_digests) \
-    SELECT * FROM unnest($1::integer[], $2::integer[], $3::integer[], $4::varchar[], $5::varchar[], \
+    SELECT u.submission_id, u.dataset_id, u.testcase_id, u.outcome, u.text::varchar[], \
+        u.admin_text, u.execution_time, u.execution_wall_clock_time, u.execution_memory, \
+        u.evaluation_shard, u.evaluation_sandbox_paths::varchar[], \
+        u.evaluation_sandbox_digests::varchar[] \
+    FROM unnest($1::integer[], $2::integer[], $3::integer[], $4::varchar[], $5::text[], \
         $6::varchar[], $7::double precision[], $8::double precision[], $9::bigint[], $10::integer[], \
-        $11::varchar[], $12::varchar[])";
+        $11::text[], $12::text[]) \
+    AS u(submission_id, dataset_id, testcase_id, outcome, text, admin_text, \
+        execution_time, execution_wall_clock_time, execution_memory, evaluation_shard, \
+        evaluation_sandbox_paths, evaluation_sandbox_digests)";
 
 /// The `submission_results` score columns one scoring pass writes, upserted on
 /// the same key, leaving a score already stored alone until it is recomputed.

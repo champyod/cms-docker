@@ -138,7 +138,7 @@ pub struct EvaluationRow {
     pub testcase_id: i32,
     /// `evaluations.outcome`, the grader's own outcome string.
     pub outcome: Option<String>,
-    /// `evaluations.text`, the localized grader output.
+    /// `evaluations.text`, this row's own list of localized grader strings.
     pub text: Vec<String>,
     /// `evaluations.admin_text`, the admin-facing grader output.
     pub admin_text: Option<String>,
@@ -150,10 +150,59 @@ pub struct EvaluationRow {
     pub execution_memory: Option<i64>,
     /// `evaluations.evaluation_shard`, the worker that ran it.
     pub evaluation_shard: Option<i32>,
-    /// `evaluations.evaluation_sandbox_paths`, absent when unset.
+    /// `evaluations.evaluation_sandbox_paths`, this row's own list; `None` is a
+    /// SQL NULL and `Some(vec![])` an empty array.
     pub evaluation_sandbox_paths: Option<Vec<String>>,
-    /// `evaluations.evaluation_sandbox_digests`, absent when unset.
+    /// `evaluations.evaluation_sandbox_digests`, this row's own list; `None` is a
+    /// SQL NULL and `Some(vec![])` an empty array.
     pub evaluation_sandbox_digests: Option<Vec<String>>,
+}
+
+impl EvaluationRow {
+    /// The `text` column's `varchar[]` as the `text[]` element the statement casts.
+    #[must_use]
+    pub fn text_literal(&self) -> String {
+        array_literal(&self.text)
+    }
+
+    /// The nullable `evaluation_sandbox_paths` as a `text[]` element.
+    #[must_use]
+    pub fn sandbox_paths_literal(&self) -> Option<String> {
+        self.evaluation_sandbox_paths
+            .as_ref()
+            .map(|paths| array_literal(paths))
+    }
+
+    /// The nullable `evaluation_sandbox_digests` as a `text[]` element.
+    #[must_use]
+    pub fn sandbox_digests_literal(&self) -> Option<String> {
+        self.evaluation_sandbox_digests
+            .as_ref()
+            .map(|digests| array_literal(digests))
+    }
+}
+
+/// A row's `varchar[]` as a PostgreSQL array literal, carried in a `text[]`
+/// element because `unnest` yields a scalar and cannot hold a jagged list.
+#[must_use]
+fn array_literal(items: &[String]) -> String {
+    let mut out = String::from("{");
+    for (at, item) in items.iter().enumerate() {
+        if at > 0 {
+            out.push(',');
+        }
+        out.push('"');
+        for ch in item.chars() {
+            match ch {
+                '\\' => out.push_str("\\\\"),
+                '"' => out.push_str("\\\""),
+                other => out.push(other),
+            }
+        }
+        out.push('"');
+    }
+    out.push('}');
+    out
 }
 
 /// The five score fields one scoring pass writes, plus the time it stamped them.
