@@ -291,6 +291,30 @@ async fn contest_operations_returns_the_exact_submission_and_user_test_work() {
 }
 
 #[tokio::test]
+async fn by_id_reads_return_only_the_named_object() {
+    let url = std::env::var("CMS_DB_TEST_URL")
+        .expect("CMS_DB_TEST_URL must name a scratch PostgreSQL database");
+    let mut connection = open(&url).await;
+    seed(&mut connection).await;
+
+    let submission = cms_evaluation::submission_operations_by_id(&mut connection, 305)
+        .await
+        .expect("submission operations");
+    assert_eq!(submission.len(), 2);
+    assert!(submission
+        .iter()
+        .all(|planned| planned.operation.object_id == 305));
+
+    let user_test = cms_evaluation::user_test_operations_by_id(&mut connection, 402)
+        .await
+        .expect("user test operations");
+    assert_eq!(user_test.len(), 2);
+    assert!(user_test
+        .iter()
+        .all(|planned| planned.operation.object_id == 402));
+}
+
+#[tokio::test]
 async fn a_none_contest_includes_the_other_contest_and_a_specific_one_excludes_it() {
     let url = std::env::var("CMS_DB_TEST_URL")
         .expect("CMS_DB_TEST_URL must name a scratch PostgreSQL database");

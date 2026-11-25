@@ -13,6 +13,7 @@ use cms_proto::Operation;
 pub mod operation;
 pub mod plan;
 pub mod queue;
+pub mod service;
 pub mod sweep;
 
 pub use operation::{
@@ -24,7 +25,8 @@ pub use plan::{
     compilation_priority, evaluation_priority, submission_operations, user_test_operations,
 };
 pub use queue::{EvaluationOperation, EvaluationQueue, QueueStatusEntry};
-pub use sweep::contest_operations;
+pub use service::Evaluation;
+pub use sweep::{contest_operations, submission_operations_by_id, user_test_operations_by_id};
 
 #[cfg(test)]
 mod support;

@@ -55,7 +55,8 @@ const SUBMISSION_COMPILATIONS: &str = "\
            ON r.submission_id = s.id AND r.dataset_id = d.id
     WHERE (d.id = t.active_dataset_id OR d.autojudge)
       AND (r.submission_id IS NULL
-           OR (r.compilation_outcome IS NULL AND r.compilation_tries < $2))
+           OR (r.compilation_outcome IS NULL AND r.compilation_tries < $3))
+      AND ($2::integer IS NULL OR s.id = $2)
       AND ($1::integer IS NULL OR p.contest_id = $1)
     ORDER BY s.timestamp, s.id, d.id";
 
@@ -77,8 +78,9 @@ const SUBMISSION_EVALUATIONS: &str = "\
     WHERE (d.id = t.active_dataset_id OR d.autojudge)
       AND r.compilation_outcome = 'ok'
       AND r.evaluation_outcome IS NULL
-      AND r.evaluation_tries < $2
+      AND r.evaluation_tries < $3
       AND e.id IS NULL
+      AND ($2::integer IS NULL OR s.id = $2)
       AND ($1::integer IS NULL OR p.contest_id = $1)
     ORDER BY s.timestamp, s.id, d.id, tc.codename";
 
@@ -95,7 +97,8 @@ const USER_TEST_COMPILATIONS: &str = "\
            ON r.user_test_id = ut.id AND r.dataset_id = d.id
     WHERE (d.id = t.active_dataset_id OR d.autojudge)
       AND (r.user_test_id IS NULL
-           OR (r.compilation_outcome IS NULL AND r.compilation_tries < $2))
+           OR (r.compilation_outcome IS NULL AND r.compilation_tries < $3))
+      AND ($2::integer IS NULL OR ut.id = $2)
       AND ($1::integer IS NULL OR p.contest_id = $1)
     ORDER BY ut.timestamp, ut.id, d.id";
 
@@ -113,7 +116,8 @@ const USER_TEST_EVALUATIONS: &str = "\
     WHERE (d.id = t.active_dataset_id OR d.autojudge)
       AND r.compilation_outcome = 'ok'
       AND r.evaluation_outcome IS NULL
-      AND r.evaluation_tries < $2
+      AND r.evaluation_tries < $3
+      AND ($2::integer IS NULL OR ut.id = $2)
       AND ($1::integer IS NULL OR p.contest_id = $1)
     ORDER BY ut.timestamp, ut.id, d.id";
 
@@ -125,10 +129,12 @@ const USER_TEST_EVALUATIONS: &str = "\
 pub async fn submission_compilations(
     connection: &mut PgConnection,
     contest_id: Option<i32>,
+    object_id: Option<i32>,
     max_tries: i32,
 ) -> Result<Vec<CompilationCandidate>, sqlx::Error> {
     let rows = sqlx::query_as::<_, CompilationRow>(SUBMISSION_COMPILATIONS)
         .bind(contest_id)
+        .bind(object_id)
         .bind(max_tries)
         .fetch_all(connection)
         .await?;
@@ -143,10 +149,12 @@ pub async fn submission_compilations(
 pub async fn submission_evaluations(
     connection: &mut PgConnection,
     contest_id: Option<i32>,
+    object_id: Option<i32>,
     max_tries: i32,
 ) -> Result<Vec<EvaluationCandidate>, sqlx::Error> {
     let rows = sqlx::query_as::<_, EvaluationRow>(SUBMISSION_EVALUATIONS)
         .bind(contest_id)
+        .bind(object_id)
         .bind(max_tries)
         .fetch_all(connection)
         .await?;
@@ -161,10 +169,12 @@ pub async fn submission_evaluations(
 pub async fn user_test_compilations(
     connection: &mut PgConnection,
     contest_id: Option<i32>,
+    object_id: Option<i32>,
     max_tries: i32,
 ) -> Result<Vec<CompilationCandidate>, sqlx::Error> {
     let rows = sqlx::query_as::<_, CompilationRow>(USER_TEST_COMPILATIONS)
         .bind(contest_id)
+        .bind(object_id)
         .bind(max_tries)
         .fetch_all(connection)
         .await?;
@@ -179,10 +189,12 @@ pub async fn user_test_compilations(
 pub async fn user_test_evaluations(
     connection: &mut PgConnection,
     contest_id: Option<i32>,
+    object_id: Option<i32>,
     max_tries: i32,
 ) -> Result<Vec<EvaluationCandidate>, sqlx::Error> {
     let rows = sqlx::query_as::<_, EvaluationRow>(USER_TEST_EVALUATIONS)
         .bind(contest_id)
+        .bind(object_id)
         .bind(max_tries)
         .fetch_all(connection)
         .await?;

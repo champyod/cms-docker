@@ -111,6 +111,17 @@ impl Operation {
 }
 
 impl OperationKind {
+    /// The `type` string this operation writes on the wire and in `queue_status`.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Compilation => "compile",
+            Self::Evaluation => "evaluate",
+            Self::UserTestCompilation => "compile_test",
+            Self::UserTestEvaluation => "evaluate_test",
+        }
+    }
+
     /// Reads the `type` key, which is what distinguishes the four operations.
     ///
     /// # Errors

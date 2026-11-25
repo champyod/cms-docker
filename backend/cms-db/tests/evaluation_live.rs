@@ -186,7 +186,7 @@ async fn every_sweep_read_returns_its_contest_work_and_nothing_else() {
     seed(&mut connection).await;
 
     assert_eq!(
-        submission_compilations(&mut connection, Some(CONTEST), 3)
+        submission_compilations(&mut connection, Some(CONTEST), None, 3)
             .await
             .expect("submission compilations"),
         vec![
@@ -204,7 +204,7 @@ async fn every_sweep_read_returns_its_contest_work_and_nothing_else() {
         ]
     );
     assert_eq!(
-        submission_evaluations(&mut connection, Some(CONTEST), 3)
+        submission_evaluations(&mut connection, Some(CONTEST), None, 3)
             .await
             .expect("submission evaluations"),
         vec![
@@ -215,7 +215,7 @@ async fn every_sweep_read_returns_its_contest_work_and_nothing_else() {
         ]
     );
     assert_eq!(
-        user_test_compilations(&mut connection, Some(CONTEST), 3)
+        user_test_compilations(&mut connection, Some(CONTEST), None, 3)
             .await
             .expect("user test compilations"),
         vec![
@@ -228,7 +228,7 @@ async fn every_sweep_read_returns_its_contest_work_and_nothing_else() {
         ]
     );
     assert_eq!(
-        user_test_evaluations(&mut connection, Some(CONTEST), 3)
+        user_test_evaluations(&mut connection, Some(CONTEST), None, 3)
             .await
             .expect("user test evaluations"),
         vec![evaluation(402, ACTIVE, 13, true, 0, None)]
@@ -242,16 +242,16 @@ async fn a_contest_filter_excludes_the_other_contest_and_none_reads_every_contes
     let mut connection = open(&url).await;
     seed(&mut connection).await;
 
-    let filtered = submission_compilations(&mut connection, Some(OTHER_CONTEST), 3)
+    let filtered = submission_compilations(&mut connection, Some(OTHER_CONTEST), None, 3)
         .await
         .expect("other contest compilations");
     assert!(filtered.is_empty());
-    let all = submission_compilations(&mut connection, None, 3)
+    let all = submission_compilations(&mut connection, None, None, 3)
         .await
         .expect("all contest compilations");
     assert!(!all.iter().any(|candidate| candidate.object_id == 308));
     assert!(all.iter().any(|candidate| candidate.object_id == 300));
-    let all_evaluations = submission_evaluations(&mut connection, None, 3)
+    let all_evaluations = submission_evaluations(&mut connection, None, None, 3)
         .await
         .expect("all contest evaluations");
     assert!(all_evaluations

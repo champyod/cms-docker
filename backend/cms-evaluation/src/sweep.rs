@@ -30,6 +30,66 @@ pub async fn contest_operations(
     let mut planned = Vec::new();
     planned.extend(submission_work(connection, contest_id).await?);
     planned.extend(user_test_work(connection, contest_id).await?);
+    sort(&mut planned);
+    Ok(planned)
+}
+
+/// Every operation one submission still owes on its judgeable datasets.
+///
+/// # Errors
+///
+/// Returns the driver's own error for a candidate read it refused.
+pub async fn submission_operations_by_id(
+    connection: &mut PgConnection,
+    submission_id: i32,
+) -> Result<Vec<PlannedOperation>, sqlx::Error> {
+    let compilations =
+        submission_compilations(connection, None, Some(submission_id), MAX_COMPILATION_TRIES)
+            .await?;
+    let evaluations =
+        submission_evaluations(connection, None, Some(submission_id), MAX_EVALUATION_TRIES).await?;
+    let mut planned: Vec<_> = compilations
+        .into_iter()
+        .map(submission_compilation)
+        .chain(evaluations.into_iter().map(submission_evaluation))
+        .collect();
+    sort(&mut planned);
+    Ok(planned)
+}
+
+/// Every operation one user test still owes on its judgeable datasets.
+///
+/// # Errors
+///
+/// Returns the driver's own error for a candidate read it refused.
+pub async fn user_test_operations_by_id(
+    connection: &mut PgConnection,
+    user_test_id: i32,
+) -> Result<Vec<PlannedOperation>, sqlx::Error> {
+    let compilations = user_test_compilations(
+        connection,
+        None,
+        Some(user_test_id),
+        MAX_USER_TEST_COMPILATION_TRIES,
+    )
+    .await?;
+    let evaluations = user_test_evaluations(
+        connection,
+        None,
+        Some(user_test_id),
+        MAX_USER_TEST_EVALUATION_TRIES,
+    )
+    .await?;
+    let mut planned: Vec<_> = compilations
+        .into_iter()
+        .map(user_test_compilation)
+        .chain(evaluations.into_iter().map(user_test_evaluation))
+        .collect();
+    sort(&mut planned);
+    Ok(planned)
+}
+
+fn sort(planned: &mut [PlannedOperation]) {
     planned.sort_by(|left, right| {
         (
             left.timestamp,
@@ -44,7 +104,6 @@ pub async fn contest_operations(
                 right.operation.testcase_codename.as_deref(),
             ))
     });
-    Ok(planned)
 }
 
 async fn submission_work(
@@ -52,8 +111,9 @@ async fn submission_work(
     contest_id: Option<i32>,
 ) -> Result<Vec<PlannedOperation>, sqlx::Error> {
     let compilations =
-        submission_compilations(connection, contest_id, MAX_COMPILATION_TRIES).await?;
-    let evaluations = submission_evaluations(connection, contest_id, MAX_EVALUATION_TRIES).await?;
+        submission_compilations(connection, contest_id, None, MAX_COMPILATION_TRIES).await?;
+    let evaluations =
+        submission_evaluations(connection, contest_id, None, MAX_EVALUATION_TRIES).await?;
     Ok(compilations
         .into_iter()
         .map(submission_compilation)
@@ -65,10 +125,15 @@ async fn user_test_work(
     connection: &mut PgConnection,
     contest_id: Option<i32>,
 ) -> Result<Vec<PlannedOperation>, sqlx::Error> {
-    let compilations =
-        user_test_compilations(connection, contest_id, MAX_USER_TEST_COMPILATION_TRIES).await?;
+    let compilations = user_test_compilations(
+        connection,
+        contest_id,
+        None,
+        MAX_USER_TEST_COMPILATION_TRIES,
+    )
+    .await?;
     let evaluations =
-        user_test_evaluations(connection, contest_id, MAX_USER_TEST_EVALUATION_TRIES).await?;
+        user_test_evaluations(connection, contest_id, None, MAX_USER_TEST_EVALUATION_TRIES).await?;
     Ok(compilations
         .into_iter()
         .map(user_test_compilation)

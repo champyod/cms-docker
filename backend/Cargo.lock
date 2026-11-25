@@ -231,6 +231,8 @@ dependencies = [
  "chrono",
  "cms-db",
  "cms-proto",
+ "cms-svc",
+ "serde_json",
  "sqlx",
  "tokio",
 ]
