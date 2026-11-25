@@ -387,6 +387,7 @@ them at once. The split is now evidence-driven, not scheduled by taste:
 | S-6d3h output parser | strict returned-body parsing into storable result fields | **merged** `08d4256c` (see note) |
 | S-6d3k worker dispatcher | persistent per-shard client, `execute_job_group`, reply/count refusals | **merged** `c35fefe7` (see note) |
 | S-6d3l submission runner | build one submission job, dispatch it, parse every returned body | **merged** `15f00296` (see note) |
+| S-6d3m executable replacement | compilation commit clears the old set before inserting the new one | **merged** `604b1697` (see note) |
 | S-5e2a task registry | `TaskType::of(key, params)`; the class-name key vs the human label | **merged** `dd37dd47` |
 | S-5e1 method context | `Method<C>` + generic `dispatch`/`Registry`/`Host`; the refactor that unblocks the worker | **merged** `e07a3ec2` |
 | S-8b submissions_status | the dashboard's status counts; the reconciliation bucket | **merged** `d69cc587` |
@@ -1215,6 +1216,16 @@ and passed after byte-identical restoration. Lane gate **73 passed** for
 `cms-evaluation`; combined merged gate with S-6d3j **183 targets, 1210 passed, 0
 failed, 2 ignored**.
 
-The daemon is not deployable yet: converting `WorkerOutput` into the commit's
-`ObjectWrite`, audit receipt chaining, service loop, user-test inputs/builders,
-the binary and the compose entrypoint remain.
+The daemon is not deployable yet: the column-complete result read, converting
+`WorkerOutput` into the commit's `ObjectWrite`, audit receipt chaining, service
+loop, user-test inputs/builders, the binary and the compose entrypoint remain.
+
+### S-6d3m: executable set replacement
+
+`ObjectBatch::commit` now runs the existing crate-root `DELETE_EXECUTABLES`
+statement inside the transaction for every Compilation group before inserting
+its executable set, even when that set is empty. Evaluation groups leave the set
+alone. Lane `572e3bc5`, merged `604b1697`; the disabled-delete control failed
+`a_recompilation_replaces_the_executable_set` with two rows instead of one and
+passed after byte-identical restoration. Lane gate **403 passed** for `cms-db`;
+merged gate **183 targets, 1213 passed, 0 failed, 2 ignored**.
