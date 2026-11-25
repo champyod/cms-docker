@@ -224,7 +224,7 @@ async fn accept(
         Err(error) => return refuse(&error.to_string()),
     };
     let mut response = Redirect::to("/").into_response();
-    if let Ok(value) = session::set_cookie(&token, false).parse() {
+    if let Ok(value) = session::set_cookie(&token, state.config().cookie_secure).parse() {
         response.headers_mut().append(header::SET_COOKIE, value);
     }
     response

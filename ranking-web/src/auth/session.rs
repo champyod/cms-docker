@@ -116,10 +116,18 @@ pub fn cookie_value(header: &str, name: &str) -> Option<String> {
 }
 
 pub fn set_cookie(token: &str, secure: bool) -> String {
-    let secure_flag = if secure { "; Secure" } else { "" };
     format!(
-        "{COOKIE_NAME}={token}; Path=/; HttpOnly; SameSite=Lax; Max-Age={TTL_SECONDS}{secure_flag}"
+        "{COOKIE_NAME}={token}; Path=/; HttpOnly; SameSite=Lax; Max-Age={TTL_SECONDS}{}",
+        secure_flag(secure)
     )
+}
+
+fn secure_flag(secure: bool) -> &'static str {
+    if secure {
+        "; Secure"
+    } else {
+        ""
+    }
 }
 
 /// The session a request carries, if any. A missing secret or a malformed cookie is
@@ -135,8 +143,11 @@ pub fn from_headers(secret: Option<&str>, headers: &axum::http::HeaderMap) -> Op
     verify(secret, &token, now).ok()
 }
 
-pub fn clear_cookie() -> String {
-    format!("{COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0")
+pub fn clear_cookie(secure: bool) -> String {
+    format!(
+        "{COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0{}",
+        secure_flag(secure)
+    )
 }
 
 #[cfg(test)]
@@ -234,6 +245,16 @@ mod tests {
         assert!(cookie.contains("HttpOnly"));
         assert!(cookie.contains("SameSite=Lax"));
         assert!(cookie.contains("Secure"));
-        assert!(clear_cookie().contains("Max-Age=0"));
+        assert!(clear_cookie(true).contains("Max-Age=0"));
+        assert!(clear_cookie(true).contains("Secure"));
+    }
+
+    #[test]
+    fn an_explicit_http_cookie_keeps_the_other_attributes() {
+        let cookie = set_cookie("token", false);
+        assert!(cookie.contains("HttpOnly"));
+        assert!(cookie.contains("SameSite=Lax"));
+        assert!(!cookie.contains("Secure"));
+        assert!(!clear_cookie(false).contains("Secure"));
     }
 }

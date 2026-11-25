@@ -153,6 +153,7 @@ start_service() {
     RANKING_BIND_ADDRESS="127.0.0.1:${PORT}" \
         RANKING_REDIS_URL="${SERVICE_REDIS_URL}" \
         RANKING_TRUSTED_PROXIES="${SERVICE_TRUSTED_PROXIES}" \
+        COOKIE_SECURE=false \
         RANKING_SESSION_SECRET="${SESSION_SECRET}" \
         RANKING_STATIC_DIR="${REPO}/ranking-web/static" \
         CMS_CREDITS_FILE="${REPO}/credits.json" \
@@ -303,6 +304,19 @@ console_login_treats_a_malformed_credential_as_a_credential_failure() {
     pass "a malformed credential is counted and cannot confirm a username"
 }
 
+console_cookie_attributes_match_the_http_override() {
+    local long headers
+    long="$(python3 -c 'print("x" * 72)')"
+    headers="$(curl -sS -D - -o /dev/null -H "X-Forwarded-For: 198.51.100.209" \
+        -d "username=e2e-long" --data-urlencode "password=${long}" "${BASE}/login")"
+    grep -qi '^set-cookie:.*HttpOnly' <<<"${headers}" || fail "the session cookie is not HttpOnly"
+    grep -qi '^set-cookie:.*SameSite=Lax' <<<"${headers}" || fail "the session cookie is not SameSite=Lax"
+    if grep -qi '^set-cookie:.*Secure' <<<"${headers}"; then
+        fail "the explicit local HTTP override still emitted Secure"
+    fi
+    pass "the session cookie keeps HttpOnly and SameSite=Lax under the explicit HTTP override"
+}
+
 console_login_refuses_an_overlong_candidate() {
     local long over headers jar code
     long="$(python3 -c 'print("x" * 72)')"
@@ -412,6 +426,7 @@ main() {
     a_stale_event_id_is_answered_with_a_reinit
     console_login_treats_a_malformed_credential_as_a_credential_failure
     console_login_refuses_an_overlong_candidate
+    console_cookie_attributes_match_the_http_override
     console_login_rejects_an_oversized_username
     protected_mode_redirects
     access_mode_constraint_rejects_unknown

@@ -24,7 +24,7 @@ x-admin-panel: &admin-panel
     AUTH_SECRET: ${AUTH_SECRET}
     # WHY: the panel speaks the authenticated CMS RPC protocol (cms/io/rpc.py fails closed without it)
     RPC_SECRET: ${RPC_SECRET}
-    COOKIE_SECURE: ${COOKIE_SECURE:-false}
+    COOKIE_SECURE: ${COOKIE_SECURE:-true}
 
     # Adaptive login CAPTCHA
     CAPTCHA_ENABLED: ${CAPTCHA_ENABLED:-0}
@@ -405,6 +405,7 @@ services:
       CONTEST_LISTEN_PORT: ${CONTEST_LISTEN_PORT:-8888}
       SECRET_KEY: ${SECRET_KEY}
       COOKIE_DURATION: ${COOKIE_DURATION:-10800}
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
       MAX_SUBMISSION_LENGTH: ${MAX_SUBMISSION_LENGTH:-100000}
       MAX_INPUT_LENGTH: ${MAX_INPUT_LENGTH:-5000000}
       SUBMIT_LOCAL_COPY: ${SUBMIT_LOCAL_COPY:-true}
@@ -562,6 +563,7 @@ services:
     environment:
       CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.toml}
       ADMIN_LISTEN_PORT: ${ADMIN_LISTEN_PORT:-8889}
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
       # WHY: admin writes use cms_admin_account_security with the generated secret, never the owner role.
       ADMIN_SECURITY_DATABASE_URL: postgresql://cms_admin_account_security:${ADMIN_SECURITY_PASSWORD}@database:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-cmsdb}
     volumes:
@@ -616,6 +618,7 @@ services:
       RANKING_LOGO_PATH: ${CMS_RANKING_LIB_DIR:-/var/local/lib/cms/ranking}/logo
       # Signs the console cookie.
       RANKING_SESSION_SECRET: ${RANKING_SESSION_SECRET:-}
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
       # The same Redis the contest login counters use, under a ranking namespace.
       RANKING_REDIS_URL: redis://${LOGIN_RATE_LIMIT_REDIS_HOST:-redis-rate-limit}:${LOGIN_RATE_LIMIT_REDIS_PORT:-6379}
       # Every CAPTCHA key stays in config.toml, as decided; the service only reads them.

@@ -38,6 +38,19 @@ fn defaults_to_the_first_shard() {
 }
 
 #[test]
+fn session_cookies_are_secure_by_default() {
+    let config = RankingConfig::from_pairs(pairs(&[])).expect("defaults parse");
+    assert!(config.cookie_secure);
+}
+
+#[test]
+fn local_http_can_explicitly_disable_secure_cookies() {
+    let config = RankingConfig::from_pairs(pairs(&[("COOKIE_SECURE", "false")]))
+        .expect("the local override parses");
+    assert!(!config.cookie_secure);
+}
+
+#[test]
 fn keeps_the_configured_shard() {
     let config =
         RankingConfig::from_pairs(pairs(&[("RANKING_SHARD", "3")])).expect("a valid shard");

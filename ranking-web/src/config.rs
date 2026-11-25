@@ -42,6 +42,8 @@ pub struct RankingConfig {
     /// Signs the console cookie. Absent means the console cannot log anyone in, which
     /// is a refusal rather than an open door.
     pub session_secret: Option<String>,
+    /// Adds Secure to the console cookie; local HTTP deployments must opt out explicitly.
+    pub cookie_secure: bool,
     pub captcha: CaptchaConfig,
     /// The Redis the failure counters live in. Absent means the console cannot track
     /// failures, which is a refusal at login rather than an unguarded door.
@@ -146,6 +148,7 @@ impl Default for RankingConfig {
             logo_path: None,
             avatar_dir: None,
             session_secret: None,
+            cookie_secure: true,
             captcha: CaptchaConfig::default(),
             redis_url: None,
             trusted_proxies: Vec::new(),
@@ -185,6 +188,7 @@ impl RankingConfig {
             logo_path: read_path(&vars, "RANKING_LOGO_PATH", ""),
             avatar_dir: read_path(&vars, "RANKING_AVATAR_DIR", DEFAULT_AVATAR_DIR),
             session_secret: read_secret(&vars),
+            cookie_secure: read_cookie_secure(&vars),
             captcha: read_captcha(&vars),
             redis_url: read_trimmed_optional(&vars, "RANKING_REDIS_URL"),
             trusted_proxies: read_trusted_proxies(&vars)?,
@@ -314,6 +318,15 @@ fn read_secret(vars: &HashMap<String, String>) -> Option<String> {
         .map(|value| value.trim())
         .filter(|value| !value.is_empty())
         .map(str::to_string)
+}
+
+fn read_cookie_secure(vars: &HashMap<String, String>) -> bool {
+    !matches!(
+        vars.get("COOKIE_SECURE")
+            .map(|value| value.trim().to_ascii_lowercase())
+            .as_deref(),
+        Some("0" | "false" | "no" | "off")
+    )
 }
 
 #[cfg(test)]

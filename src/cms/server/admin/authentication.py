@@ -27,6 +27,7 @@ from werkzeug.local import Local, LocalManager
 from werkzeug.wrappers import Request, Response
 
 from cms import config
+from cmscommon.cookies import session_cookie_attributes
 from cmscommon.datetime import make_timestamp
 
 
@@ -151,8 +152,8 @@ class AWSAuthMiddleware:
             response.set_cookie(
                 AWSAuthMiddleware.COOKIE,
                 cookie_signed,
-                httponly=True,
                 max_age=config.admin_web_server.cookie_duration,
+                **session_cookie_attributes(),
             )
             return start_response(
                 status, response.headers.to_wsgi_list(), exc_info)

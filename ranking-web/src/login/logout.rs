@@ -17,7 +17,7 @@ pub async fn logout(State(state): State<AppState>, headers: HeaderMap) -> Respon
         let _ = sessions::delete(db.pool(), &session.session_id).await;
     }
     let mut response = Redirect::to("/login").into_response();
-    if let Ok(value) = session::clear_cookie().parse() {
+    if let Ok(value) = session::clear_cookie(state.config().cookie_secure).parse() {
         response.headers_mut().append(header::SET_COOKIE, value);
     }
     response
