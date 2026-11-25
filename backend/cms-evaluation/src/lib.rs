@@ -10,6 +10,7 @@
 use chrono::NaiveDateTime;
 use cms_proto::Operation;
 
+pub mod dispatch;
 pub mod job;
 pub mod operation;
 pub mod plan;
@@ -18,6 +19,7 @@ pub mod result;
 pub mod service;
 pub mod sweep;
 
+pub use dispatch::{DispatchError, WorkerDispatcher};
 pub use job::{submission_job, SubmissionJobError};
 pub use operation::{
     submission_to_compile, submission_to_evaluate, submission_to_evaluate_on_testcase,
