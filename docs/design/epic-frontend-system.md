@@ -29,6 +29,17 @@ Three layers, one source of truth each: **tokens** (colour, type, radius, densit
 | S14 | A board layout for pages carrying several record kinds | done | `BoardPage` with a section contract; two lanes refused those pages before it existed, and the refusal was correct |
 | S15 | A contract that does not push a page to invent content | done | `activity` is optional on dashboard after a lane refused a count-only digest; `tests/page-slots.test.ts` pins every slot's requirement level, so loosening one is a decision and not a quiet edit |
 
+## How this epic is worked
+
+One page at a time, in sidebar order, starting at `/`. A page is taken to zero
+before the next begins, and a page is never one turn: the first round takes the
+page whole — its archetype and the facts its inventory row promises, its layout
+and spacing, its colour budget, and its empty, failed and loading states — and
+each later round takes one component on it. Nothing is committed before its
+render is on screen: a component change shows that component in light and dark, a
+layout change shows the shape, a rule change shows the diff. The reader names the
+next page, or redirects the round in progress.
+
 ## Rules this epic is held to
 
 - A step lands only with its gate green and its negative control shown to fail.
