@@ -237,11 +237,12 @@ SQL
 
 seed_console_admin() {
     psql "${DATABASE_URL}" -q >/dev/null <<'SQL'
-DELETE FROM admins WHERE username IN ('e2e', 'e2e-noperm', 'e2e-bad');
+DELETE FROM admins WHERE username IN ('e2e', 'e2e-noperm', 'e2e-bad', 'e2e-long');
 INSERT INTO admins (name, username, authentication, enabled) VALUES
     ('E2E Operator', 'e2e', 'bcrypt:$2b$10$dNhGvAUxNK3y0uOSw/CuL.xpMG2l/TqeUDGVGhNgFHFPJ6VUIH4Gu', true),
     ('E2E No Permission', 'e2e-noperm', 'bcrypt:$2b$10$dNhGvAUxNK3y0uOSw/CuL.xpMG2l/TqeUDGVGhNgFHFPJ6VUIH4Gu', true),
-    ('E2E Malformed Credential', 'e2e-bad', 'plaintext:not-a-real-password', true);
+    ('E2E Malformed Credential', 'e2e-bad', 'plaintext:not-a-real-password', true),
+    ('E2E Long Password', 'e2e-long', 'bcrypt:$2b$10$vBEmh6.imiNSHUTccz7SbOzbnc3q22/kjtuAju9pWH7E2dcuDKEW2', true);
 INSERT INTO permissions (key, module, verb)
     VALUES ('ranking:read', 'ranking', 'read') ON CONFLICT (key) DO NOTHING;
 INSERT INTO groups (name) VALUES ('e2e-ranking') ON CONFLICT (name) DO NOTHING;
@@ -250,7 +251,7 @@ INSERT INTO group_permissions (group_id, permission_id)
     WHERE g.name = 'e2e-ranking' ON CONFLICT (group_id, permission_id) DO NOTHING;
 INSERT INTO admin_groups (admin_id, group_id)
     SELECT a.id, g.id FROM admins a JOIN groups g ON g.name = 'e2e-ranking'
-    WHERE a.username = 'e2e' ON CONFLICT (admin_id, group_id) DO NOTHING;
+    WHERE a.username IN ('e2e', 'e2e-long') ON CONFLICT (admin_id, group_id) DO NOTHING;
 SQL
     pass "the console admin and its ranking:read group are seeded"
 }
@@ -290,16 +291,35 @@ console_login_treats_a_malformed_credential_as_a_credential_failure() {
     local ip="198.51.100.203" code
     for _ in 1 2 3 4 5; do
         code="$(curl -sS -o /dev/null -w "%{http_code}" -H "X-Forwarded-For: ${ip}" \
-            -d "username=e2e-bad" -d "password=e2e-secret" "${BASE}/login")"
+            -d "username=e2e-bad" -d "password=***" "${BASE}/login")"
         [[ "${code}" == "303" || "${code}" == "307" ]] ||
             fail "a malformed stored credential should look like a wrong password, got ${code}"
     done
     # The malformed attempts must feed the address counter; five of them lock the source.
     code="$(curl -sS -o /dev/null -w "%{http_code}" -H "X-Forwarded-For: ${ip}" \
-        -d "username=e2e" -d "password=e2e-secret" "${BASE}/login")"
+        -d "username=e2e" -d "password=***" "${BASE}/login")"
     [[ "${code}" == "429" ]] ||
         fail "malformed credentials did not count toward the source lockout, got ${code}"
     pass "a malformed credential is counted and cannot confirm a username"
+}
+
+console_login_refuses_an_overlong_candidate() {
+    local long over headers jar code
+    long="$(python3 -c 'print("x" * 72)')"
+    over="$(python3 -c 'print("x" * 73)')"
+    headers="$(curl -sS -D - -o /dev/null -H "X-Forwarded-For: 198.51.100.208" \
+        -d "username=e2e-long" --data-urlencode "password=${over}" "${BASE}/login")"
+    if grep -qi "^set-cookie:.*ranking_session" <<<"${headers}"; then
+        fail "a candidate one byte over bcrypt's limit authenticated the account"
+    fi
+    jar="$(mktemp)"
+    code="$(curl -sS -o /dev/null -w "%{http_code}" -c "${jar}" \
+        -H "X-Forwarded-For: 198.51.100.208" -d "username=e2e-long" \
+        --data-urlencode "password=${long}" "${BASE}/login")"
+    [[ "${code}" == "303" || "${code}" == "307" ]] || fail "the 72-byte password should be accepted, got ${code}"
+    grep -q ranking_session "${jar}" || fail "the 72-byte password set no session"
+    rm -f "${jar}"
+    pass "a candidate over 72 bytes is refused while the 72-byte password still signs in"
 }
 
 console_login_rejects_an_oversized_username() {
@@ -380,6 +400,7 @@ main() {
     a_score_write_publishes_a_board_delta
     a_stale_event_id_is_answered_with_a_reinit
     console_login_treats_a_malformed_credential_as_a_credential_failure
+    console_login_refuses_an_overlong_candidate
     console_login_rejects_an_oversized_username
     protected_mode_redirects
     printf "\nacceptance rehearsal passed\n"
