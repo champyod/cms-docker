@@ -7,12 +7,13 @@
 //! WHY a scratch database: the shared test database is not reset between runs.
 //! WHY replica role: the frozen FKs would force seeding grandparent tables the
 //! commit never touches; the schema stays exactly as the fixture dumps it. No
-//! audit_log table is created: init_db omits the Prisma-owned tables, and the
-//! chained writer that appends to it is a separate slice this layer refuses.
+//! audit_log table is created: init_db omits the Prisma-owned tables, the
+//! chained writer that appends to it is a separate slice, and this layer hands
+//! the batch's audit rows back instead of storing them.
 
 use cms_db::{
-    commit, AuditRow, CommitError, DatasetId, EvaluationRow, ObjectWrite, OperationType, ResultRow,
-    RowState, SubmissionId,
+    commit, AuditRow, DatasetId, EvaluationRow, ObjectWrite, OperationType, ResultRow, RowState,
+    SubmissionId,
 };
 use sqlx::postgres::PgConnection;
 use sqlx::{AssertSqlSafe, Connection, FromRow};
@@ -191,23 +192,6 @@ async fn stored_result(connection: &mut PgConnection) -> StoredResult {
     .expect("reading the stored result")
 }
 
-/// The three data tables the commit writes, before and after a refusal.
-async fn data_counts(connection: &mut PgConnection) -> (i64, i64, i64) {
-    let results: i64 = sqlx::query_scalar("SELECT count(*) FROM submission_results")
-        .fetch_one(&mut *connection)
-        .await
-        .expect("counting submission_results");
-    let evaluations: i64 = sqlx::query_scalar("SELECT count(*) FROM evaluations")
-        .fetch_one(&mut *connection)
-        .await
-        .expect("counting evaluations");
-    let executables: i64 = sqlx::query_scalar("SELECT count(*) FROM executables")
-        .fetch_one(&mut *connection)
-        .await
-        .expect("counting executables");
-    (results, evaluations, executables)
-}
-
 /// Two testcases evaluated: both rows land, the result row is written, and the
 /// completion rule stamps evaluation_outcome = 'ok'.
 #[tokio::test]
@@ -305,32 +289,26 @@ async fn a_duplicate_row_does_not_abort_the_batch() {
     schema_check::drop_database(&mut base, CHECK_DATABASE).await;
 }
 
-/// A batch carrying an audit row is refused before any transaction: this layer
-/// cannot append it inside the hash chain, so nothing reaches the three tables.
+/// A batch's audit rows come back from the commit instead of being stored: this
+/// connection cannot compute the chain, so the caller appends them through the
+/// one writer that can, and nothing reaches `audit_log` from here.
 #[tokio::test]
-async fn a_batch_with_an_audit_row_is_refused_unchained() {
+async fn a_batch_hands_its_audit_rows_back() {
     let Some((mut base, mut connection)) = open().await else {
         return;
     };
     let mut written = batch(vec![evaluation_row(TESTCASE_A), evaluation_row(TESTCASE_B)]);
     written.audit = vec![audit_row("evaluate")];
 
-    let before = data_counts(&mut connection).await;
-    let error = commit(&mut connection, &[written])
+    let returned = commit(&mut connection, &[written])
         .await
-        .expect_err("a batch carrying an audit row must be refused");
-    let message = error.to_string();
-    assert!(
-        matches!(error, CommitError::AuditNotWired),
-        "the refusal is AuditNotWired: {message}",
-    );
-    assert!(
-        message.contains("chain"),
-        "the error names the missing chained writer: {message}",
-    );
-    let after = data_counts(&mut connection).await;
-    assert_eq!(before, (0, 0, 0), "the three tables start empty");
-    assert_eq!(before, after, "refusing the batch wrote nothing");
+        .expect("the rows commit and hand their audit back");
+
+    assert_eq!(returned.len(), 1, "the batch's audit row comes back");
+    assert_eq!(returned[0].verb.as_str(), "evaluate");
+    assert_eq!(returned[0].entity.as_str(), "evaluations");
+    let stored = stored_evaluations(&mut connection).await;
+    assert_eq!(stored.len(), 2, "the data rows still landed");
 
     drop(connection);
     schema_check::drop_database(&mut base, CHECK_DATABASE).await;

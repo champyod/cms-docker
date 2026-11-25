@@ -1,9 +1,11 @@
 //! The commit that turns grouped object writes into rows, in one transaction.
 //!
 //! A batch's audit rows are its declaration that it must be recorded, but
-//! appending them belongs to the one writer that computes the hash chain; this
-//! layer refuses to store them unchained. A batch carrying audit rows is
-//! therefore refused before the transaction begins. Everything else runs on one
+//! appending them belongs to the one writer that computes the hash chain, and
+//! this connection cannot chain them: a row stored here would carry no hash and
+//! be indistinguishable from a tampered one. The rows are therefore handed back
+//! to the caller, which appends them through that writer, and nothing is written
+//! to `audit_log` from here. Everything else runs on one
 //! [`sqlx::Transaction`] so a batch is all-or-nothing. The evaluation rows are
 //! each written inside a savepoint: the reference's `begin_nested` swallows one
 //! `IntegrityError` so a duplicate testcase cannot poison the whole batch.
@@ -16,7 +18,7 @@
 use sqlx::postgres::PgConnection;
 use sqlx::Connection;
 
-use super::batch::{ObjectWrite, OperationType};
+use super::batch::{AuditRow, ObjectWrite, OperationType};
 use super::shapes::{
     CompilationOutcome, EvaluationOutcome, EvaluationRow, ExecutableRow, ResultRow, ScoreRow,
 };
@@ -43,9 +45,6 @@ const ROLLBACK_TO_SQL: &str = "ROLLBACK TO SAVEPOINT sp_evaluation";
 /// Why a commit failed before or while it reached the database.
 #[derive(Debug, thiserror::Error)]
 pub enum CommitError {
-    /// A batch carries audit rows this layer cannot append inside the chain.
-    #[error("audit rows need the chained writer; until it computes the chain a stored row would be unchained")]
-    AuditNotWired,
     /// A statement or the transaction itself was refused by the driver.
     #[error(transparent)]
     Database(#[from] sqlx::Error),
@@ -53,29 +52,23 @@ pub enum CommitError {
 
 /// Commit grouped object writes into rows in one transaction.
 ///
-/// A batch carrying audit rows is refused before the transaction begins:
-/// appending those rows is the caller's work through the chained writer, and
-/// this layer will not store them unchained. Otherwise the result, executables,
-/// evaluations and score are written in that order; for an
-/// [`OperationType::Evaluation`] group the completion rule stamps
+/// The batches come from [`group_by_object`](super::group_by_object), which
+/// merges every operation on one object; each declares the audit rows it owes.
+/// This layer returns those rows instead of storing them: the connection cannot
+/// compute the chain, so the caller appends them through the one writer that
+/// can. The result, executables, evaluations and score are written in that
+/// order; for an [`OperationType::Evaluation`] group the completion rule stamps
 /// `evaluation_outcome = 'ok'` when the stored evaluation count equals the
 /// dataset's testcase count. One duplicate evaluation row is tolerated per row
 /// without losing the others.
 ///
 /// # Errors
 ///
-/// Returns [`CommitError::AuditNotWired`] when a group carries audit rows, or
-/// [`CommitError::Database`] when a statement or the transaction fails.
+/// Returns [`CommitError::Database`] when a statement or the transaction fails.
 pub async fn commit(
     connection: &mut PgConnection,
     writes: &[ObjectWrite],
-) -> Result<(), CommitError> {
-    // WHY fail closed before any transaction: the chain is computed by the
-    // writer, so a stored audit row here would be unchained and unverifiable.
-    if writes.iter().any(|group| !group.audit.is_empty()) {
-        return Err(CommitError::AuditNotWired);
-    }
-
+) -> Result<Vec<AuditRow>, CommitError> {
     let mut transaction = connection.begin().await?;
     for group in writes {
         write_result(&mut transaction, &group.result).await?;
@@ -93,7 +86,10 @@ pub async fn commit(
         }
     }
     transaction.commit().await?;
-    Ok(())
+    Ok(writes
+        .iter()
+        .flat_map(|group| group.audit.iter().cloned())
+        .collect())
 }
 
 /// Upsert one object's result row.
