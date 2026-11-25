@@ -360,6 +360,7 @@ them at once. The split is now evidence-driven, not scheduled by taste:
 | S-6d3b ES RPC context | named-object reads, `new_submission`/`new_user_test`, `queue_status` | **committed** `67569040` (see note) |
 | S-6d3c auto managers | task-type manager list, reusing Communication's existing `manager` name | **merged** `39490ba3` (see note) |
 | S-6d3d dataset parameters | `task_type_parameters` raw JSON text on both dataset read paths | **merged** `226e6e23` (see note) |
+| S-6d3e submission inputs | one read for a submission job's records, files, managers, executables and languages | **merged** `d4bf98eb` (see note) |
 | S-5e2a task registry | `TaskType::of(key, params)`; the class-name key vs the human label | **merged** `dd37dd47` |
 | S-5e1 method context | `Method<C>` + generic `dispatch`/`Registry`/`Host`; the refactor that unblocks the worker | **merged** `e07a3ec2` |
 | S-8b submissions_status | the dashboard's status counts; the reconciliation bucket | **merged** `d69cc587` |
@@ -1058,8 +1059,21 @@ named live read and passed after byte-identical restoration. Lane gate **734
 passed** for `cms-db` + `cms-grading` + `cms-evaluation`; merged gate **175 targets,
 1165 passed, 0 failed, 2 ignored**.
 
-The daemon is not deployable yet: worker dispatch, result writing, user-test
-results, the binary and the compose entrypoint remain.
+### S-6d3e: submission job inputs
+
+`cms-db::submission_inputs` loads one submission, its dataset, testcases,
+managers, uploaded files, optional result, result executables and contest
+languages on a caller-owned connection. Missing rows return `Ok(None)`; a dataset
+of another task is the existing named refusal, and a failed read is never an
+absent input. Named-file maps are ordered. Lane commit `7f1d9634`, merged as
+`d4bf98eb`. The manager-read and contest-language controls each failed named live
+tests and passed after byte-identical restoration. Lane gate **740 passed** for
+`cms-db` + `cms-grading` + `cms-evaluation`; merged gate **176 targets, 1171 passed,
+0 failed, 2 ignored**.
+
+The daemon is not deployable yet: building the submission job from these inputs,
+worker dispatch, result writing, user-test inputs/results, the binary and the
+compose entrypoint remain.
 
 
 
