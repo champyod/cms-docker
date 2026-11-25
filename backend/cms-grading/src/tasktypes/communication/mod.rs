@@ -60,7 +60,7 @@ use super::{Parameter, Parameters, Runtime, TaskError, Toolchain};
 
 /// The manager the dataset holds, the input it reads, and the file it may write
 /// for a user test to be shown.
-const MANAGER: &str = "manager";
+pub(super) const MANAGER: &str = "manager";
 const INPUT: &str = "input.txt";
 const OUTPUT: &str = "output.txt";
 /// The basename of the stub, which is the main class in the languages that name one

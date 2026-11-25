@@ -14,6 +14,7 @@
 
 use serde_json::Value;
 
+use super::communication::MANAGER;
 use super::{Batch, BatchAndOutput, Communication, OutputOnly, TaskError, TwoSteps};
 
 /// One of the five task types, built from the parameters its task row carries.
@@ -80,6 +81,17 @@ impl TaskType {
             Self::OutputOnly(_) => "Output only",
             Self::TwoSteps(_) => "Two steps",
             Self::Communication(_) => "Communication",
+        }
+    }
+
+    /// The managers a job of this type is handed: only Communication's one manager.
+    #[must_use]
+    pub fn auto_managers(&self) -> Vec<String> {
+        match self {
+            Self::Batch(_) | Self::BatchAndOutput(_) | Self::OutputOnly(_) | Self::TwoSteps(_) => {
+                Vec::new()
+            }
+            Self::Communication(_) => vec![MANAGER.to_owned()],
         }
     }
 }
