@@ -10,12 +10,14 @@
 use chrono::NaiveDateTime;
 use cms_proto::Operation;
 
+pub mod job;
 pub mod operation;
 pub mod plan;
 pub mod queue;
 pub mod service;
 pub mod sweep;
 
+pub use job::{submission_job, SubmissionJobError};
 pub use operation::{
     submission_to_compile, submission_to_evaluate, submission_to_evaluate_on_testcase,
     user_test_to_compile, user_test_to_evaluate, MAX_COMPILATION_TRIES, MAX_EVALUATION_TRIES,

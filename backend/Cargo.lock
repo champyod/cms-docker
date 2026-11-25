@@ -230,6 +230,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "cms-db",
+ "cms-grading",
  "cms-proto",
  "cms-svc",
  "serde_json",

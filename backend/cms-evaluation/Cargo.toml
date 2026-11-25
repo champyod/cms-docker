@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 cms-db = { path = "../cms-db" }
+cms-grading = { path = "../cms-grading" }
 cms-proto = { path = "../cms-proto" }
 cms-svc = { path = "../cms-svc" }
 chrono = { workspace = true }
