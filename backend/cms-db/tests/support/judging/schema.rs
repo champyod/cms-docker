@@ -72,6 +72,8 @@ const SCHEMA: &[&str] = &[
         comment varchar NOT NULL DEFAULT '',
         official boolean NOT NULL DEFAULT true,
         UNIQUE (participation_id, opaque_id))",
+    "DROP TABLE IF EXISTS executables",
+    "DROP TABLE IF EXISTS evaluations",
     "DROP TABLE IF EXISTS submission_results CASCADE",
     "CREATE TABLE IF NOT EXISTS submission_results (
         submission_id integer NOT NULL REFERENCES submissions (id) ON DELETE CASCADE,

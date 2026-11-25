@@ -215,6 +215,60 @@ fn a_submission_reads_back_with_its_comment_and_its_token() {
     });
 }
 
+/// The fixture drops and recreates its child tables with the declared foreign
+/// keys, so neither accepts a row whose `submission_results` parent is absent.
+#[test]
+fn fixture_child_tables_reject_a_dangling_result_row() {
+    let Some(url) = skip() else { return };
+    sqlx::test_block_on(async {
+        let mut connection = connect(&url).await;
+        let task_id = judging::create_task(&mut connection, "s3d-fk-dangling", SILENT).await;
+        let dataset = judging::create_dataset(&mut connection, task_id, "only").await;
+        // A valid testcase keeps the evaluations.testcases FK satisfied, so the
+        // only constraint an insert can violate is the parent-result FK.
+        let testcase = judging::create_testcase(&mut connection, dataset, "alpha").await;
+        // No submission_results row exists for this pair.
+        let dangling: i32 = 999_999;
+
+        let executable = sqlx::query(
+            "INSERT INTO executables (submission_id, dataset_id, filename, digest)
+             VALUES ($1, $2, 'ghost', 'deadbeef')",
+        )
+        .bind(dangling)
+        .bind(dataset)
+        .execute(&mut connection)
+        .await
+        .expect_err("executables accepted a row with no parent submission_results");
+        let executable_db = executable
+            .as_database_error()
+            .expect("executables raised a non-database error");
+        assert_eq!(
+            executable_db.code().as_deref(),
+            Some("23503"),
+            "executables did not raise the foreign-key violation"
+        );
+
+        let evaluation = sqlx::query(
+            "INSERT INTO evaluations (submission_id, dataset_id, testcase_id)
+             VALUES ($1, $2, $3)",
+        )
+        .bind(dangling)
+        .bind(dataset)
+        .bind(testcase)
+        .execute(&mut connection)
+        .await
+        .expect_err("evaluations accepted a row with no parent submission_results");
+        let evaluation_db = evaluation
+            .as_database_error()
+            .expect("evaluations raised a non-database error");
+        assert_eq!(
+            evaluation_db.code().as_deref(),
+            Some("23503"),
+            "evaluations did not raise the foreign-key violation"
+        );
+    });
+}
+
 /// One testcase of `dataset`, carrying the digests the fixture inserts.
 fn case_record(id: i32, dataset: i32) -> cms_db::TestcaseRecord {
     cms_db::TestcaseRecord {
