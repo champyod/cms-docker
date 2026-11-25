@@ -131,7 +131,7 @@ fn plus_value(stats: Option<&ExecutionStats>, success: bool) -> Value {
     }
 }
 
-fn put(body: &mut Map<String, Value>, key: JobKey, value: Value) {
+pub(super) fn put(body: &mut Map<String, Value>, key: JobKey, value: Value) {
     body.insert(key.as_str().to_owned(), value);
 }
 
