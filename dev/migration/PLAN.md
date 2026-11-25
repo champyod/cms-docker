@@ -365,6 +365,7 @@ them at once. The split is now evidence-driven, not scheduled by taste:
 | S-6d3f job body export | exact 20/27-key worker bodies with defaults and round-trip tests | **merged** `496b3050` (see note) |
 | S-6d3g submission builder | `SubmissionInputs` to the exact compilation/evaluation body | **merged** `3f7de592` (see note) |
 | S-6d3h output parser | strict returned-body parsing into storable result fields | **merged** `08d4256c` (see note) |
+| S-6d3k worker dispatcher | persistent per-shard client, `execute_job_group`, reply/count refusals | **merged** `c35fefe7` (see note) |
 | S-5e2a task registry | `TaskType::of(key, params)`; the class-name key vs the human label | **merged** `dd37dd47` |
 | S-5e1 method context | `Method<C>` + generic `dispatch`/`Registry`/`Host`; the refactor that unblocks the worker | **merged** `e07a3ec2` |
 | S-8b submissions_status | the dashboard's status counts; the reconciliation bucket | **merged** `d69cc587` |
@@ -1108,8 +1109,20 @@ merged as `08d4256c`; the wrong-type and bad-digest controls each failed named
 tests and passed after byte-identical restoration. Lane gate **62 passed** for
 `cms-evaluation`; merged gate **179 targets, 1194 passed, 0 failed, 2 ignored**.
 
-The daemon is not deployable yet: grouping and completion, worker dispatch,
-user-test inputs and builders, the binary and the compose entrypoint remain.
+### S-6d3k: worker dispatcher
+
+`WorkerDispatcher` keeps one lazily opened `cms_svc::Client` per shard address,
+sends `execute_job_group` once, parses the reply as `JobGroup`, and refuses a
+different job count. A transport or refused call drops that shard's client so the
+next call reconnects; retry and backoff remain the caller's decision. Lane commit
+`69d8a79d`, merged as `c35fefe7`; the disabled-count-check control failed
+`a_short_reply_is_a_count_mismatch` and passed after byte-identical restoration.
+Lane gate **67 passed** for `cms-evaluation`; merged gate **181 targets, 1200
+passed, 0 failed, 2 ignored**.
+
+The daemon is not deployable yet: the object-commit transaction, service loop,
+result grouping/completion, user-test inputs/builders, the binary and the compose
+entrypoint remain.
 
 ### S-6d3i: the evaluations row set
 
