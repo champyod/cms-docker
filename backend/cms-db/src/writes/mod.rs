@@ -19,26 +19,31 @@
 //! decides which rows go down together, and the audit rows that must accompany
 //! them.
 //!
-//! The three files below hold one concern each, so that the statements, the rows
-//! they write and the batch that carries them are read apart:
+//! The four files below hold one concern each, so that the statements, the rows
+//! they write, the batch that carries them and the commit that lands them are
+//! read apart:
 //!
 //! - `statements`: the four column-exact statements.
 //! - `shapes`: the row each table is written as, and the two enum values its
 //!   outcome columns accept.
 //! - `batch`: the grouping that merges operations into a batch, and the audit
 //!   rows every batch must carry.
+//! - `commit`: the one transaction that executes the statements for a batch.
 //!
 //! # Errors
 //!
-//! [`WriteError::MissingAudit`] is the only error the module produces:
-//! [`group_by_object`] and [`ObjectWrite::seal`] both refuse a batch carrying no
-//! audit row, so a mutation cannot be written unrecorded.
+//! [`WriteError::MissingAudit`] refuses a batch carrying no audit row:
+//! [`group_by_object`], [`ObjectWrite::seal`] and [`commit`] all apply it, so a
+//! mutation cannot be written unrecorded. [`commit`] also surfaces a statement
+//! or transaction the driver refused as [`CommitError::Database`].
 
 mod batch;
+mod commit;
 mod shapes;
 mod statements;
 
 pub use batch::{group_by_object, AuditRow, ObjectWrite, OperationType, RowState, WriteError};
+pub use commit::{commit, CommitError};
 pub use shapes::{
     CompilationOutcome, EvaluationOutcome, EvaluationRow, ExecutableRow, ResultRow, ScoreRow,
 };
