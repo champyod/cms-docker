@@ -18,8 +18,26 @@ pub struct SubmissionResult {
     pub dataset_id: DatasetId,
     /// `compilation_outcome`, absent until compilation ends.
     pub compilation_outcome: Option<CompilationOutcome>,
+    /// `compilation_text`, the localized compiler output, empty by default.
+    pub compilation_text: Vec<String>,
     /// `compilation_tries`, the failures so far, which every invalidation resets.
     pub compilation_tries: i32,
+    /// `compilation_stdout`, the compiler's standard output.
+    pub compilation_stdout: Option<String>,
+    /// `compilation_stderr`, the compiler's standard error.
+    pub compilation_stderr: Option<String>,
+    /// `compilation_time`, in seconds.
+    pub compilation_time: Option<f64>,
+    /// `compilation_wall_clock_time`, in seconds.
+    pub compilation_wall_clock_time: Option<f64>,
+    /// `compilation_memory`, in bytes.
+    pub compilation_memory: Option<i64>,
+    /// `compilation_shard`, the worker that compiled it.
+    pub compilation_shard: Option<i32>,
+    /// `compilation_sandbox_paths`, absent when unset.
+    pub compilation_sandbox_paths: Option<Vec<String>>,
+    /// `compilation_sandbox_digests`, absent when unset.
+    pub compilation_sandbox_digests: Option<Vec<String>>,
     /// `evaluation_outcome`, absent until every testcase of the dataset has a row.
     pub evaluation_outcome: Option<EvaluationOutcome>,
     /// `evaluation_tries`, the failures so far, which every invalidation resets.
@@ -38,7 +56,9 @@ pub struct SubmissionResult {
 
 /// The columns one `submission_results` row is read with: the two `jsonb` documents are cast to the text the score type wrote.
 pub const RESULT_BY_ID: &str = "\
-    SELECT submission_id, dataset_id, compilation_outcome, compilation_tries,
+    SELECT submission_id, dataset_id, compilation_outcome, compilation_text, compilation_tries,
+           compilation_stdout, compilation_stderr, compilation_time, compilation_wall_clock_time,
+           compilation_memory, compilation_shard, compilation_sandbox_paths, compilation_sandbox_digests,
            evaluation_outcome, evaluation_tries, score, score_details::text AS score_details,
            public_score, public_score_details::text AS public_score_details,
            ranking_score_details
@@ -68,7 +88,9 @@ pub async fn result_by_id(
 /// It spells the projection `RESULT_BY_ID` names, because a search reads the same row
 /// and a narrower query cannot share a selection list with a wider one.
 const RESULT_MATCHING_COLUMNS: &str = "\
-    SELECT r.submission_id, r.dataset_id, r.compilation_outcome, r.compilation_tries,
+    SELECT r.submission_id, r.dataset_id, r.compilation_outcome, r.compilation_text, r.compilation_tries,
+           r.compilation_stdout, r.compilation_stderr, r.compilation_time, r.compilation_wall_clock_time,
+           r.compilation_memory, r.compilation_shard, r.compilation_sandbox_paths, r.compilation_sandbox_digests,
            r.evaluation_outcome, r.evaluation_tries, r.score,
            r.score_details::text AS score_details,
            r.public_score, r.public_score_details::text AS public_score_details,
@@ -139,7 +161,16 @@ struct ResultRow {
     submission_id: i32,
     dataset_id: i32,
     compilation_outcome: Option<String>,
+    compilation_text: Vec<String>,
     compilation_tries: i32,
+    compilation_stdout: Option<String>,
+    compilation_stderr: Option<String>,
+    compilation_time: Option<f64>,
+    compilation_wall_clock_time: Option<f64>,
+    compilation_memory: Option<i64>,
+    compilation_shard: Option<i32>,
+    compilation_sandbox_paths: Option<Vec<String>>,
+    compilation_sandbox_digests: Option<Vec<String>>,
     evaluation_outcome: Option<String>,
     evaluation_tries: i32,
     score: Option<f64>,
@@ -165,7 +196,16 @@ impl TryFrom<ResultRow> for SubmissionResult {
                 row.compilation_outcome,
                 CompilationOutcome::parse,
             )?,
+            compilation_text: row.compilation_text,
             compilation_tries: row.compilation_tries,
+            compilation_stdout: row.compilation_stdout,
+            compilation_stderr: row.compilation_stderr,
+            compilation_time: row.compilation_time,
+            compilation_wall_clock_time: row.compilation_wall_clock_time,
+            compilation_memory: row.compilation_memory,
+            compilation_shard: row.compilation_shard,
+            compilation_sandbox_paths: row.compilation_sandbox_paths,
+            compilation_sandbox_digests: row.compilation_sandbox_digests,
             evaluation_outcome: outcome(
                 "evaluation_outcome",
                 row.evaluation_outcome,

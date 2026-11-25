@@ -44,7 +44,10 @@ async fn a_result_search_filters_by_every_criterion_it_takes() {
     );
     let scored = all
         .iter()
-        .find(|result| result.submission_id == SubmissionId(FIRST_SUBMISSION))
+        .find(|result| {
+            result.submission_id == SubmissionId(FIRST_SUBMISSION)
+                && result.dataset_id == DatasetId(FIRST_DATASET)
+        })
         .expect("the scored fixture");
     assert_eq!(scored.score, Some(5.0));
     assert_eq!(scored.public_score, Some(3.0));
