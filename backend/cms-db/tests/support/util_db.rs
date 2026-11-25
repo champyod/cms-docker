@@ -102,6 +102,7 @@ const TABLES: &[&str] = &[
         time_limit double precision,
         memory_limit bigint,
         task_type varchar NOT NULL DEFAULT 'Batch',
+        task_type_parameters jsonb NOT NULL DEFAULT '{}',
         score_type varchar NOT NULL DEFAULT 'Sum',
         score_type_parameters jsonb NOT NULL DEFAULT '0')",
     "CREATE TEMP TABLE submissions (

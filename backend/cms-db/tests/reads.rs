@@ -6,9 +6,9 @@
 use chrono::{DateTime, NaiveDateTime};
 use cms_db::{
     dataset_from_row, result_from_row, submission_from_row, testcase_from_row, DatasetId,
-    DatasetRecord, DigestError, ReadError, ResultRecord, SubmissionId, SubmissionRecord,
-    TestcaseRecord, DATASET_BY_ID, JUDGEABLE_DATASETS, RESULT_BY_SUBMISSION_AND_DATASET,
-    SUBMISSION_BY_ID, TESTCASES_BY_DATASET,
+    DatasetRecord, DatasetRow, DigestError, ReadError, ResultRecord, SubmissionId,
+    SubmissionRecord, TestcaseRecord, DATASET_BY_ID, JUDGEABLE_DATASETS,
+    RESULT_BY_SUBMISSION_AND_DATASET, SUBMISSION_BY_ID, TESTCASES_BY_DATASET,
 };
 
 /// Forty lowercase hex characters, which is what `testcases.input` holds.
@@ -30,6 +30,9 @@ const BATCH: &str = "Batch";
 const SCORE_TYPE: &str = "Sum";
 const SCORE_TYPE_PARAMETERS: &str = "{ \"weight\": 10 }";
 
+/// The task-type configuration the dataset row carries without parsing it.
+const TASK_TYPE_PARAMETERS: &str = "[ \"diff\" ]";
+
 /// Seconds a `submissions.timestamp` column holds, read as a time without a zone.
 const SUBMITTED_EPOCH_SECONDS: i64 = 1_700_000_000;
 
@@ -43,8 +46,8 @@ const DATASET_ID: DatasetId = DatasetId(9);
 const QUERIES: [(&str, &str); 5] = [
     (SUBMISSION_BY_ID, "id task_id participation_id timestamp language official"),
     (RESULT_BY_SUBMISSION_AND_DATASET, "submission_id dataset_id is_compiled is_compilation_succeeded compilation_tries is_evaluated evaluation_tries"),
-    (DATASET_BY_ID, "id task_id task_type score_type score_type_parameters time_limit memory_limit is_active"),
-    (JUDGEABLE_DATASETS, "id task_id task_type score_type score_type_parameters time_limit memory_limit is_active"),
+    (DATASET_BY_ID, "id task_id task_type task_type_parameters score_type score_type_parameters time_limit memory_limit is_active"),
+    (JUDGEABLE_DATASETS, "id task_id task_type task_type_parameters score_type score_type_parameters time_limit memory_limit is_active"),
     (TESTCASES_BY_DATASET, "id dataset_id codename is_public input output"),
 ];
 
@@ -153,24 +156,28 @@ fn a_result_that_has_never_compiled_carries_no_tries() {
 
 #[test]
 fn a_dataset_row_maps_with_and_without_its_limits() {
-    let limited = dataset_from_row(
-        DATASET_ID,
-        TASK_ID,
-        BATCH.to_string(),
-        SCORE_TYPE.to_string(),
-        SCORE_TYPE_PARAMETERS.to_string(),
-        (Some(5.0), Some(268_435_456)),
-        true,
-    );
-    let bare = dataset_from_row(
-        DATASET_ID,
-        TASK_ID,
-        BATCH.to_string(),
-        SCORE_TYPE.to_string(),
-        SCORE_TYPE_PARAMETERS.to_string(),
-        (None, None),
-        false,
-    );
+    let limited = dataset_from_row(DatasetRow {
+        id: DATASET_ID,
+        task_id: TASK_ID,
+        task_type: BATCH.to_string(),
+        task_type_parameters: TASK_TYPE_PARAMETERS.to_string(),
+        score_type: SCORE_TYPE.to_string(),
+        score_type_parameters: SCORE_TYPE_PARAMETERS.to_string(),
+        time_limit: Some(5.0),
+        memory_limit: Some(268_435_456),
+        is_active: true,
+    });
+    let bare = dataset_from_row(DatasetRow {
+        id: DATASET_ID,
+        task_id: TASK_ID,
+        task_type: BATCH.to_string(),
+        task_type_parameters: TASK_TYPE_PARAMETERS.to_string(),
+        score_type: SCORE_TYPE.to_string(),
+        score_type_parameters: SCORE_TYPE_PARAMETERS.to_string(),
+        time_limit: None,
+        memory_limit: None,
+        is_active: false,
+    });
 
     assert_eq!(
         limited,
@@ -178,6 +185,7 @@ fn a_dataset_row_maps_with_and_without_its_limits() {
             id: DATASET_ID,
             task_id: TASK_ID,
             task_type: BATCH.to_string(),
+            task_type_parameters: TASK_TYPE_PARAMETERS.to_string(),
             score_type: SCORE_TYPE.to_string(),
             score_type_parameters: SCORE_TYPE_PARAMETERS.to_string(),
             time_limit: Some(5.0),
@@ -259,6 +267,16 @@ fn the_dataset_queries_carry_the_score_type_parameters_as_raw_json_text() {
         assert!(
             query.contains("d.score_type_parameters::text AS score_type_parameters"),
             "{query} does not carry the raw score parameters"
+        );
+    }
+}
+
+#[test]
+fn the_dataset_queries_carry_the_task_type_parameters_as_raw_json_text() {
+    for query in [DATASET_BY_ID, JUDGEABLE_DATASETS] {
+        assert!(
+            query.contains("d.task_type_parameters::text AS task_type_parameters"),
+            "{query} does not carry the raw task type parameters"
         );
     }
 }
