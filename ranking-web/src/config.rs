@@ -3,6 +3,8 @@ use std::env;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 
+use crate::trusted_proxy::{parse_proxy_list, TrustedProxy};
+
 pub const DEFAULT_BIND: &str = "0.0.0.0:8890";
 
 /// Where the image keeps the vendored page. It is the directory the Python package
@@ -44,6 +46,8 @@ pub struct RankingConfig {
     /// The Redis the failure counters live in. Absent means the console cannot track
     /// failures, which is a refusal at login rather than an unguarded door.
     pub redis_url: Option<String>,
+    /// The socket peers whose forwarded address headers may be believed.
+    pub trusted_proxies: Vec<TrustedProxy>,
 }
 
 /// Every CAPTCHA key stays in config.toml and is never edited from the panel, as you
@@ -144,6 +148,7 @@ impl Default for RankingConfig {
             session_secret: None,
             captcha: CaptchaConfig::default(),
             redis_url: None,
+            trusted_proxies: Vec::new(),
         }
     }
 }
@@ -152,6 +157,8 @@ impl Default for RankingConfig {
 pub enum ConfigError {
     #[error("RANKING_BIND_ADDRESS is not a socket address: {0}")]
     InvalidBind(String),
+    #[error("RANKING_TRUSTED_PROXIES is invalid: {0}")]
+    InvalidTrustedProxy(String),
 }
 
 impl RankingConfig {
@@ -180,8 +187,14 @@ impl RankingConfig {
             session_secret: read_secret(&vars),
             captcha: read_captcha(&vars),
             redis_url: read_trimmed_optional(&vars, "RANKING_REDIS_URL"),
+            trusted_proxies: read_trusted_proxies(&vars)?,
         })
     }
+}
+
+fn read_trusted_proxies(vars: &HashMap<String, String>) -> Result<Vec<TrustedProxy>, ConfigError> {
+    let raw = read_trimmed(vars, "RANKING_TRUSTED_PROXIES");
+    parse_proxy_list(&raw).map_err(|error| ConfigError::InvalidTrustedProxy(error.to_string()))
 }
 
 fn read_bind(vars: &HashMap<String, String>) -> Result<SocketAddr, ConfigError> {
@@ -252,8 +265,7 @@ fn read_captcha(vars: &HashMap<String, String>) -> CaptchaConfig {
         let prefix = format!("CAPTCHA_{}", provider.wire_name().to_ascii_uppercase());
         let mut site_key = read_trimmed(vars, &format!("{prefix}_SITE_KEY"));
         let mut secret_key = read_trimmed(vars, &format!("{prefix}_SECRET_KEY"));
-        // WHY the fallback: a deployment that still sets only the legacy scalar
-        // keys must keep working; they stand in for the legacy provider's entry.
+        // A deployment that still sets only the legacy scalars keeps working.
         if *provider == legacy && site_key.is_empty() && secret_key.is_empty() {
             site_key = read_trimmed(vars, "CAPTCHA_SITE_KEY");
             secret_key = read_trimmed(vars, "CAPTCHA_SECRET_KEY");

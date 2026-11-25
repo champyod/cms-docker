@@ -607,6 +607,8 @@ services:
       RANKING_BIND_ADDRESS: ${RANKING_BIND_ADDRESS:-0.0.0.0}:${RANKING_LISTEN_PORT:-8890}
       # Which contest this board serves is not here either: the service reads the `services` row that names this (role, shard) on every board read, so re-pointing that row in the panel moves the board within seconds instead of a container recreate.
       RANKING_SHARD: ${RANKING_SHARD:-0}
+      # Comma-separated proxy IPs or CIDRs whose forwarded headers the login may trust.
+      RANKING_TRUSTED_PROXIES: ${RANKING_TRUSTED_PROXIES:-}
       # Where the image keeps the vendored page and the licence offer; both are image layout, so they are not operator configuration.
       RANKING_STATIC_DIR: /home/cmsuser/src/ranking-web/static
       CMS_CREDITS_FILE: /home/cmsuser/cms/credits.json

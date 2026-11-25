@@ -99,3 +99,26 @@ fn a_blank_path_disables_the_route_it_feeds() {
         .expect("blank is tolerated");
     assert_eq!(config.static_dir, None);
 }
+
+#[test]
+fn trusted_proxies_default_to_none() {
+    let config = RankingConfig::from_pairs(pairs(&[])).expect("defaults parse");
+    assert!(config.trusted_proxies.is_empty());
+}
+
+#[test]
+fn trusted_proxies_carry_networks_and_hosts() {
+    let config = RankingConfig::from_pairs(pairs(&[(
+        "RANKING_TRUSTED_PROXIES",
+        "198.51.100.0/24, 2001:db8::1",
+    )]))
+    .expect("a valid list");
+    assert_eq!(config.trusted_proxies.len(), 2);
+}
+
+#[test]
+fn a_trust_all_proxy_is_refused() {
+    let error = RankingConfig::from_pairs(pairs(&[("RANKING_TRUSTED_PROXIES", "0.0.0.0/0")]))
+        .expect_err("a trust-all network is rejected");
+    assert!(matches!(error, ConfigError::InvalidTrustedProxy(_)));
+}

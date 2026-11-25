@@ -1,3 +1,5 @@
+use std::net::IpAddr;
+
 use axum::extract::{Request, State};
 use axum::http::HeaderMap;
 use axum::middleware::Next;
@@ -6,6 +8,7 @@ use axum::response::{IntoResponse, Redirect, Response};
 use crate::auth::session;
 use crate::http::refuse;
 use crate::store::{load_appearance, sessions};
+use crate::trusted_proxy::{canonical_address, is_trusted_proxy, TrustedProxy};
 use crate::AppState;
 
 /// The protected-mode gate. It runs before every route except the four an anonymous
@@ -13,12 +16,7 @@ use crate::AppState;
 /// panel change takes effect on the next request rather than on the next deploy.
 pub async fn gate(State(state): State<AppState>, request: Request, next: Next) -> Response {
     let path = request.uri().path().to_string();
-    // WHY /diagnostics is exempt beside /healthz: both are operator-facing health
-    // surfaces, not scoreboard data. The admin panel reads this over the internal
-    // network to show a dropped-override warning, and it carries no session cookie —
-    // so under protected mode a gated /diagnostics would answer 302 and the panel
-    // could not tell "no rows dropped" from "refused". It exposes only three
-    // integers, the same class of fact /healthz already serves.
+    // /healthz and /diagnostics are operator health surfaces, not scoreboard data.
     if matches!(
         path.as_str(),
         "/healthz" | "/diagnostics" | "/login" | "/logout"
@@ -53,35 +51,51 @@ pub async fn gate(State(state): State<AppState>, request: Request, next: Next) -
     }
 }
 
-/// The client address the counters are scoped to. Behind the domain proxy the socket
-/// is the proxy, so a forwarded header is the only address that means anything.
+/// The client address the counters are scoped to.
 ///
-/// WHY the last hop and never the first: a vhost that appends to X-Forwarded-For
-/// keeps whatever the caller sent in front of the address our own proxy wrote, so
-/// the leftmost entry is caller-supplied and would let a caller choose its own
-/// lockout bucket. The rightmost entry is the hop the nearest proxy appended, and
-/// X-Real-IP is the address every vhost asserts from $remote_addr for the same
-/// request, which covers a path that carries no chain. Only a request with neither
-/// header has no caller to name.
-pub fn client_address(headers: &HeaderMap) -> String {
+/// A forwarded header is read only when the socket peer is in `trusted_proxies`;
+/// an untrusted caller always contributes its peer address, so it cannot choose a
+/// bucket by supplying a header. The rightmost non-empty hop is the one the nearest
+/// proxy appended; a malformed header falls back to the peer rather than an earlier
+/// caller-supplied entry.
+pub fn client_address(
+    headers: &HeaderMap,
+    peer: IpAddr,
+    trusted_proxies: &[TrustedProxy],
+) -> String {
+    let peer = canonical_address(peer);
+    if !is_trusted_proxy(peer, trusted_proxies) {
+        return peer.to_string();
+    }
+    forwarded_address(headers)
+        .map(canonical_address)
+        .unwrap_or(peer)
+        .to_string()
+}
+
+fn forwarded_address(headers: &HeaderMap) -> Option<IpAddr> {
     for value in [headers.get("x-forwarded-for"), headers.get("x-real-ip")]
         .into_iter()
         .flatten()
         .filter_map(|value| value.to_str().ok())
     {
-        if let Some(hop) = value.split(',').rev().find_map(|hop| {
-            let hop = hop.trim();
-            (!hop.is_empty()).then_some(hop)
-        }) {
-            return hop.to_string();
+        if let Some(address) = value
+            .split(',')
+            .rev()
+            .map(str::trim)
+            .find(|hop| !hop.is_empty())
+            .and_then(|hop| hop.parse::<IpAddr>().ok())
+        {
+            return Some(address);
         }
     }
-    "unknown".to_string()
+    None
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::trusted_proxy::parse_proxy_list;
 
     fn headers_of(entries: &[(&str, &str)]) -> HeaderMap {
         let mut headers = HeaderMap::new();
@@ -94,26 +108,112 @@ mod tests {
         headers
     }
 
+    fn address(raw: &str) -> IpAddr {
+        raw.parse().expect("a literal address")
+    }
+
+    fn proxies(raw: &[&str]) -> Vec<TrustedProxy> {
+        raw.iter()
+            .map(|entry| TrustedProxy::parse(entry).expect("a proxy network"))
+            .collect()
+    }
+
     #[test]
-    fn the_last_hop_is_the_address_and_the_first_is_never_trusted() {
-        let headers = headers_of(&[("x-forwarded-for", "1.2.3.4, 198.51.100.9")]);
-        assert_eq!(client_address(&headers), "198.51.100.9");
+    fn an_untrusted_peer_cannot_choose_its_bucket() {
+        let headers = headers_of(&[("x-forwarded-for", "198.51.100.7")]);
+        assert_eq!(
+            client_address(
+                &headers,
+                address("203.0.113.9"),
+                &proxies(&["198.51.100.0/24"])
+            ),
+            "203.0.113.9"
+        );
+    }
+
+    #[test]
+    fn a_trusted_peer_uses_the_last_hop_and_never_the_first() {
+        let headers = headers_of(&[("x-forwarded-for", "1.2.3.4, 203.0.113.7")]);
+        assert_eq!(
+            client_address(
+                &headers,
+                address("198.51.100.9"),
+                &proxies(&["198.51.100.0/24"])
+            ),
+            "203.0.113.7"
+        );
     }
 
     #[test]
     fn an_empty_trailing_hop_skips_back_to_the_asserted_one() {
         let headers = headers_of(&[("x-forwarded-for", "203.0.113.7, ")]);
-        assert_eq!(client_address(&headers), "203.0.113.7");
+        assert_eq!(
+            client_address(
+                &headers,
+                address("198.51.100.9"),
+                &proxies(&["198.51.100.0/24"])
+            ),
+            "203.0.113.7"
+        );
     }
 
     #[test]
-    fn a_path_with_no_chain_falls_back_to_the_real_address() {
+    fn a_trusted_path_with_no_chain_falls_back_to_the_real_address() {
         let headers = headers_of(&[("x-real-ip", "203.0.113.7")]);
-        assert_eq!(client_address(&headers), "203.0.113.7");
+        assert_eq!(
+            client_address(
+                &headers,
+                address("198.51.100.9"),
+                &proxies(&["198.51.100.0/24"])
+            ),
+            "203.0.113.7"
+        );
     }
 
     #[test]
-    fn a_request_no_proxy_spoke_for_has_no_address_to_share() {
-        assert_eq!(client_address(&HeaderMap::new()), "unknown");
+    fn a_trusted_peer_without_a_header_uses_its_own_address() {
+        assert_eq!(
+            client_address(
+                &HeaderMap::new(),
+                address("198.51.100.9"),
+                &proxies(&["198.51.100.0/24"])
+            ),
+            "198.51.100.9"
+        );
+    }
+
+    #[test]
+    fn a_malformed_nearest_hop_never_falls_back_to_a_caller_entry() {
+        let headers = headers_of(&[("x-forwarded-for", "203.0.113.7, garbage")]);
+        assert_eq!(
+            client_address(
+                &headers,
+                address("198.51.100.9"),
+                &proxies(&["198.51.100.0/24"])
+            ),
+            "198.51.100.9"
+        );
+    }
+
+    #[test]
+    fn a_mapped_peer_keeps_one_bucket_with_its_v4_address() {
+        assert_eq!(
+            client_address(
+                &HeaderMap::new(),
+                address("::ffff:198.51.100.9"),
+                &proxies(&["198.51.100.0/24"]),
+            ),
+            "198.51.100.9"
+        );
+    }
+
+    #[test]
+    fn a_list_of_networks_is_read_once() {
+        assert_eq!(
+            parse_proxy_list("198.51.100.0/24, 2001:db8::/32")
+                .expect("a list")
+                .len(),
+            2
+        );
     }
 }

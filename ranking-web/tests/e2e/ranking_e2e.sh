@@ -39,6 +39,8 @@ readonly PORT="${RANKING_E2E_PORT:-18890}"
 readonly BASE="http://127.0.0.1:${PORT}"
 readonly LOG="$(mktemp)"
 readonly WORK="$(mktemp -d)"
+SERVICE_TRUSTED_PROXIES="127.0.0.1/32"
+SERVICE_REDIS_URL="${REDIS_URL}"
 
 # The surface assertions live in their own file so this driver stays readable.
 # shellcheck source=surface_checks.sh
@@ -56,6 +58,50 @@ cleanup() {
     rm -rf "${WORK}"
 }
 trap cleanup EXIT
+
+stop_service() {
+    if [[ -n "${SERVICE_PID:-}" ]]; then
+        kill "${SERVICE_PID}" 2>/dev/null || true
+        wait "${SERVICE_PID}" 2>/dev/null || true
+        SERVICE_PID=""
+    fi
+}
+
+redis_url_with_database() {
+    python3 - "$1" "$2" <<'PY'
+import sys
+from urllib.parse import urlsplit, urlunsplit
+
+parts = urlsplit(sys.argv[1])
+print(urlunsplit((parts.scheme, parts.netloc, f"/{sys.argv[2]}", parts.query, parts.fragment)))
+PY
+}
+
+flush_redis_database() {
+    python3 - "$1" <<'PY'
+import socket
+import sys
+from urllib.parse import unquote, urlsplit
+
+parts = urlsplit(sys.argv[1])
+database = (parts.path or "/0").strip("/") or "0"
+with socket.create_connection((parts.hostname or "127.0.0.1", parts.port or 6379), timeout=5) as connection:
+    def command(*arguments):
+        payload = f"*{len(arguments)}\r\n".encode()
+        for argument in arguments:
+            data = str(argument).encode()
+            payload += f"${len(data)}\r\n".encode() + data + b"\r\n"
+        connection.sendall(payload)
+        reply = connection.recv(4096)
+        if not reply.startswith(b"+"):
+            raise SystemExit(f"redis refused {arguments[0]}: {reply!r}")
+
+    if parts.password:
+        command("AUTH", unquote(parts.username or ""), unquote(parts.password))
+    command("SELECT", database)
+    command("FLUSHDB")
+PY
+}
 
 require_tools() {
     for tool in psql curl python3; do
@@ -105,7 +151,8 @@ PY
 
 start_service() {
     RANKING_BIND_ADDRESS="127.0.0.1:${PORT}" \
-        RANKING_REDIS_URL="${REDIS_URL}" \
+        RANKING_REDIS_URL="${SERVICE_REDIS_URL}" \
+        RANKING_TRUSTED_PROXIES="${SERVICE_TRUSTED_PROXIES}" \
         RANKING_SESSION_SECRET="${SESSION_SECRET}" \
         RANKING_STATIC_DIR="${REPO}/ranking-web/static" \
         CMS_CREDITS_FILE="${REPO}/credits.json" \
@@ -240,7 +287,7 @@ console_login_refuses_an_admin_without_the_key() {
 }
 
 console_login_treats_a_malformed_credential_as_a_credential_failure() {
-    local ip="198.51.100.203" code i
+    local ip="198.51.100.203" code
     for _ in 1 2 3 4 5; do
         code="$(curl -sS -o /dev/null -w "%{http_code}" -H "X-Forwarded-For: ${ip}" \
             -d "username=e2e-bad" -d "password=e2e-secret" "${BASE}/login")"
@@ -256,20 +303,37 @@ console_login_treats_a_malformed_credential_as_a_credential_failure() {
 }
 
 console_login_rejects_an_oversized_username() {
-    local ip="198.51.100.204" code i long
+    local ip="198.51.100.204" code long
     long="$(python3 -c 'print("a" * 4096)')"
     for _ in 1 2 3 4 5; do
         code="$(curl -sS -o /dev/null -w "%{http_code}" -H "X-Forwarded-For: ${ip}" \
-            --data-urlencode "username=${long}" -d "password=e2e-secret" "${BASE}/login")"
+            --data-urlencode "username=${long}" -d "password=wrong" "${BASE}/login")"
         [[ "${code}" == "303" || "${code}" == "307" ]] ||
             fail "an oversized username should be a generic refusal, got ${code}"
     done
     code="$(curl -sS -o /dev/null -w "%{http_code}" -H "X-Forwarded-For: ${ip}" \
-        -d "username=e2e" -d "password=e2e-secret" "${BASE}/login")"
+        -d "username=e2e" -d "password=wrong" "${BASE}/login")"
     [[ "${code}" == "429" ]] ||
         fail "oversized usernames did not count toward the source lockout, got ${code}"
     grep -q 'refused oversized username' "${LOG}" || fail "oversized username left no log signal"
     pass "an oversized username is refused, logged and counted without a database lookup"
+}
+
+spoofed_forwarded_header_cannot_choose_a_bucket() {
+    local attempt code
+    for attempt in 1 2 3 4 5; do
+        code="$(curl -sS -o /dev/null -w "%{http_code}" \
+            -H "X-Forwarded-For: 203.0.113.${attempt}" \
+            -d "username=e2e" -d "password=wrong" "${BASE}/login")"
+        [[ "${code}" == "303" || "${code}" == "307" ]] ||
+            fail "a wrong password should be a generic refusal, got ${code}"
+    done
+    code="$(curl -sS -o /dev/null -w "%{http_code}" \
+        -H "X-Forwarded-For: 203.0.113.250" \
+        -d "username=e2e" -d "password=wrong" "${BASE}/login")"
+    [[ "${code}" == "429" ]] ||
+        fail "an untrusted caller changed its lockout bucket with a header, got ${code}"
+    pass "a spoofed forwarded header cannot choose a lockout bucket"
 }
 
 protected_mode_redirects() {
@@ -291,6 +355,15 @@ main() {
     prepare_console_schema
     apply_migrations
     seed_rows
+    seed_console_admin
+    flush_redis_database "$(redis_url_with_database "${REDIS_URL}" 15)"
+    SERVICE_TRUSTED_PROXIES="192.0.2.1/32"
+    SERVICE_REDIS_URL="$(redis_url_with_database "${REDIS_URL}" 15)"
+    start_service
+    spoofed_forwarded_header_cannot_choose_a_bucket
+    stop_service
+    SERVICE_TRUSTED_PROXIES="127.0.0.1/32"
+    SERVICE_REDIS_URL="${REDIS_URL}"
     start_service
     compare_to_oracle "/scores" "scores"
     compare_to_oracle "/history" "history"
@@ -306,7 +379,6 @@ main() {
     events_follow_a_write
     a_score_write_publishes_a_board_delta
     a_stale_event_id_is_answered_with_a_reinit
-    seed_console_admin
     console_login_treats_a_malformed_credential_as_a_credential_failure
     console_login_rejects_an_oversized_username
     protected_mode_redirects

@@ -1,6 +1,7 @@
 use std::collections::HashMap;
+use std::net::SocketAddr;
 
-use axum::extract::{Form, State};
+use axum::extract::{ConnectInfo, Form, State};
 use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Redirect, Response};
 
@@ -30,6 +31,7 @@ struct AttemptFacts<'a> {
 /// prerequisites for a login that means anything, and neither has a safe fallback.
 pub async fn submit(
     State(state): State<AppState>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
     Form(fields): Form<HashMap<String, String>>,
 ) -> Response {
@@ -44,7 +46,7 @@ pub async fn submit(
     if username.is_empty() || password.is_empty() {
         return Redirect::to("/login?error=empty").into_response();
     }
-    let address = client_address(&headers);
+    let address = client_address(&headers, peer.ip(), &state.config().trusted_proxies);
     let address_key = lockout::address_key(&address);
     if !lockout::username_within_limit(&username) {
         let facts = AttemptFacts {
