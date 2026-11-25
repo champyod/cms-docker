@@ -1,7 +1,9 @@
 //! The commit that turns grouped object writes into rows, in one transaction.
 //!
-//! [`group_by_object`] decides which rows go down together and [`ObjectWrite::seal`]
-//! refuses one that would be written unrecorded; the rest runs on one
+//! A batch's audit rows are its declaration that it must be recorded, but
+//! appending them belongs to the one writer that computes the hash chain; this
+//! layer refuses to store them unchained. A batch carrying audit rows is
+//! therefore refused before the transaction begins. Everything else runs on one
 //! [`sqlx::Transaction`] so a batch is all-or-nothing. The evaluation rows are
 //! each written inside a savepoint: the reference's `begin_nested` swallows one
 //! `IntegrityError` so a duplicate testcase cannot poison the whole batch.
@@ -9,23 +11,17 @@
 //! The completion rule reproduces `set_evaluation_outcome`: once the stored
 //! evaluation count for a submission and dataset equals the dataset's testcase
 //! count, the single enum value `ok` is stamped on the result row. Everything,
-//! including that stamp and the audit appends, is committed once.
+//! including that stamp, is committed once.
 
 use sqlx::postgres::PgConnection;
 use sqlx::Connection;
 
-use super::batch::{group_by_object, AuditRow, ObjectWrite, OperationType, WriteError};
+use super::batch::{ObjectWrite, OperationType};
 use super::shapes::{
     CompilationOutcome, EvaluationOutcome, EvaluationRow, ExecutableRow, ResultRow, ScoreRow,
 };
 use super::statements::{INSERT_EXECUTABLES, UPSERT_RESULT, UPSERT_SCORE};
 use crate::reads::{DatasetId, SubmissionId};
-
-/// The audit store's append-only event, one statement per row in the batch's
-/// order; the hash chain the store keeps expects that sequential append order.
-const INSERT_AUDIT: &str = "\
-    INSERT INTO audit_log (actor_id, verb, entity, entity_id, reason, result) \
-    VALUES ($1, $2, $3, $4, $5, $6)";
 
 /// The stored evaluations of one submission on one dataset.
 const COUNT_EVALUATIONS: &str = "\
@@ -47,9 +43,9 @@ const ROLLBACK_TO_SQL: &str = "ROLLBACK TO SAVEPOINT sp_evaluation";
 /// Why a commit failed before or while it reached the database.
 #[derive(Debug, thiserror::Error)]
 pub enum CommitError {
-    /// A batch carried no audit row, refused before any statement ran.
-    #[error(transparent)]
-    Write(#[from] WriteError),
+    /// A batch carries audit rows this layer cannot append inside the chain.
+    #[error("audit rows need the chained writer; until it computes the chain a stored row would be unchained")]
+    AuditNotWired,
     /// A statement or the transaction itself was refused by the driver.
     #[error(transparent)]
     Database(#[from] sqlx::Error),
@@ -57,28 +53,31 @@ pub enum CommitError {
 
 /// Commit grouped object writes into rows in one transaction.
 ///
-/// Each group is sealed, then its result, executables, evaluations, score and
-/// audit rows are written in that order. For an [`OperationType::Evaluation`]
-/// group, the completion rule stamps `evaluation_outcome = 'ok'` when the stored
-/// evaluation count equals the dataset's testcase count. One duplicate
-/// evaluation row is tolerated per row without losing the others.
+/// A batch carrying audit rows is refused before the transaction begins:
+/// appending those rows is the caller's work through the chained writer, and
+/// this layer will not store them unchained. Otherwise the result, executables,
+/// evaluations and score are written in that order; for an
+/// [`OperationType::Evaluation`] group the completion rule stamps
+/// `evaluation_outcome = 'ok'` when the stored evaluation count equals the
+/// dataset's testcase count. One duplicate evaluation row is tolerated per row
+/// without losing the others.
 ///
 /// # Errors
 ///
-/// Returns [`CommitError::Write`] when a group is unsealed, or
+/// Returns [`CommitError::AuditNotWired`] when a group carries audit rows, or
 /// [`CommitError::Database`] when a statement or the transaction fails.
 pub async fn commit(
     connection: &mut PgConnection,
     writes: &[ObjectWrite],
 ) -> Result<(), CommitError> {
-    let groups = group_by_object(writes)?;
-    let sealed: Vec<ObjectWrite> = groups
-        .into_iter()
-        .map(ObjectWrite::seal)
-        .collect::<Result<_, _>>()?;
+    // WHY fail closed before any transaction: the chain is computed by the
+    // writer, so a stored audit row here would be unchained and unverifiable.
+    if writes.iter().any(|group| !group.audit.is_empty()) {
+        return Err(CommitError::AuditNotWired);
+    }
 
     let mut transaction = connection.begin().await?;
-    for group in &sealed {
+    for group in writes {
         write_result(&mut transaction, &group.result).await?;
         if !group.executables.is_empty() {
             insert_executables(&mut transaction, &group.executables).await?;
@@ -87,9 +86,8 @@ pub async fn commit(
         if let Some(score) = &group.score {
             upsert_score(&mut transaction, score).await?;
         }
-        write_audit(&mut transaction, &group.audit).await?;
     }
-    for group in &sealed {
+    for group in writes {
         if group.operation == OperationType::Evaluation {
             apply_completion(&mut transaction, group.submission_id, group.dataset_id).await?;
         }
@@ -183,25 +181,6 @@ async fn upsert_score(connection: &mut PgConnection, row: &ScoreRow) -> Result<(
         .bind(row.ranking_score_details.clone())
         .execute(&mut *connection)
         .await?;
-    Ok(())
-}
-
-/// Append the audit rows one statement each, in the batch's order.
-///
-/// The store's `AuditEntry` hash chain requires sequential appends, and its
-/// `insert_entry` helper writes exactly one row, so no bulk insert is used.
-async fn write_audit(connection: &mut PgConnection, audit: &[AuditRow]) -> Result<(), sqlx::Error> {
-    for row in audit {
-        sqlx::query(INSERT_AUDIT)
-            .bind(row.actor_id)
-            .bind(row.verb.as_str())
-            .bind(row.entity.as_str())
-            .bind(row.entity_id.as_str())
-            .bind(row.reason.as_str())
-            .bind("ok")
-            .execute(&mut *connection)
-            .await?;
-    }
     Ok(())
 }
 

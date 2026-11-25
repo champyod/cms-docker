@@ -16,8 +16,9 @@
 //! so that a whole object is written in a single round trip.
 //!
 //! Nothing here opens a connection. These are the statements, the grouping that
-//! decides which rows go down together, and the audit rows that must accompany
-//! them.
+//! decides which rows go down together, and the audit rows a batch declares.
+//! Appending those audit rows is the caller's work, through the one writer that
+//! computes the hash chain; this layer refuses to store them unchained.
 //!
 //! The four files below hold one concern each, so that the statements, the rows
 //! they write, the batch that carries them and the commit that lands them are
@@ -28,14 +29,16 @@
 //!   outcome columns accept.
 //! - `batch`: the grouping that merges operations into a batch, and the audit
 //!   rows every batch must carry.
-//! - `commit`: the one transaction that executes the statements for a batch.
+//! - `commit`: the one transaction that executes the statements for a batch and
+//!   refuses to store audit rows it cannot chain.
 //!
 //! # Errors
 //!
-//! [`WriteError::MissingAudit`] refuses a batch carrying no audit row:
-//! [`group_by_object`], [`ObjectWrite::seal`] and [`commit`] all apply it, so a
-//! mutation cannot be written unrecorded. [`commit`] also surfaces a statement
-//! or transaction the driver refused as [`CommitError::Database`].
+//! [`group_by_object`] and [`ObjectWrite::seal`] refuse a batch carrying no
+//! audit row: `seal` is the batch's declaration that it must be recorded.
+//! [`commit`] refuses to store that declaration outside the chain, returning
+//! [`CommitError::AuditNotWired`] for any batch that carries audit rows. A
+//! statement the driver refused surfaces as [`CommitError::Database`].
 
 mod batch;
 mod commit;

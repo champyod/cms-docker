@@ -6,14 +6,13 @@
 //!
 //! WHY a scratch database: the shared test database is not reset between runs.
 //! WHY replica role: the frozen FKs would force seeding grandparent tables the
-//! commit never touches; the schema stays exactly as the fixture dumps it.
-//! WHY an extra audit_log table: init_db omits the thirteen Prisma-owned
-//! tables (schema/mod.rs), so production's audit_log is created here to mirror
-//! the deployment the audit crate writes to.
+//! commit never touches; the schema stays exactly as the fixture dumps it. No
+//! audit_log table is created: init_db omits the Prisma-owned tables, and the
+//! chained writer that appends to it is a separate slice this layer refuses.
 
 use cms_db::{
-    commit, AuditRow, DatasetId, EvaluationRow, ObjectWrite, OperationType, ResultRow, RowState,
-    SubmissionId,
+    commit, AuditRow, CommitError, DatasetId, EvaluationRow, ObjectWrite, OperationType, ResultRow,
+    RowState, SubmissionId,
 };
 use sqlx::postgres::PgConnection;
 use sqlx::{AssertSqlSafe, Connection, FromRow};
@@ -29,15 +28,6 @@ const DATASET: i32 = 20;
 const TESTCASE_A: i32 = 40;
 const TESTCASE_B: i32 = 41;
 
-/// The audit store's append-only event, one per statement (audit_second_store.sql).
-const CREATE_AUDIT_LOG: &str = "\
-    CREATE TABLE audit_log (\
-        id BIGSERIAL PRIMARY KEY, actor_id INTEGER, \
-        timestamp TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP, \
-        verb VARCHAR NOT NULL, entity VARCHAR NOT NULL, entity_id VARCHAR, \
-        before_values JSONB, after_values JSONB, reason VARCHAR, ip VARCHAR, \
-        session_id VARCHAR, result VARCHAR NOT NULL, entry_hash VARCHAR, prev_hash VARCHAR)";
-
 /// One dataset with two testcases and one submission; replica role disables the
 /// grandparent FKs, but NOT NULL, CHECK and domain constraints still apply.
 const SEED: &[&str] = &[
@@ -50,8 +40,8 @@ const SEED: &[&str] = &[
      VALUES (100, 1, 1, 1, '2020-01-01 00:00:00', 'c', true)",
 ];
 
-/// A connection with the frozen schema, replica role, the audit store's table
-/// and the parent rows, plus the base connection used to drop it again.
+/// A connection with the frozen schema, replica role and the parent rows, plus
+/// the base connection used to drop it again.
 async fn open() -> Option<(PgConnection, PgConnection)> {
     let url = schema_check::skip()?;
     let check_url = schema_check::with_database(&url, CHECK_DATABASE);
@@ -74,10 +64,6 @@ async fn open() -> Option<(PgConnection, PgConnection)> {
         .execute(&mut connection)
         .await
         .expect("disabling FK triggers for the write");
-    sqlx::raw_sql(AssertSqlSafe(CREATE_AUDIT_LOG))
-        .execute(&mut connection)
-        .await
-        .expect("creating the audit_log table");
     for &statement in SEED {
         sqlx::raw_sql(AssertSqlSafe(statement))
             .execute(&mut connection)
@@ -126,7 +112,7 @@ fn result_row() -> ResultRow {
     }
 }
 
-/// One audit row; the second verb differs so append order is observable.
+/// One audit row, for the batch that must be refused.
 fn audit_row(verb: &str) -> AuditRow {
     AuditRow {
         actor_id: Some(7),
@@ -139,7 +125,7 @@ fn audit_row(verb: &str) -> AuditRow {
     }
 }
 
-/// One Evaluation batch carrying the given evaluation rows.
+/// One Evaluation batch with no audit rows, carrying the given evaluation rows.
 fn batch(evaluations: Vec<EvaluationRow>) -> ObjectWrite {
     ObjectWrite {
         operation: OperationType::Evaluation,
@@ -149,7 +135,7 @@ fn batch(evaluations: Vec<EvaluationRow>) -> ObjectWrite {
         executables: Vec::new(),
         evaluations,
         score: None,
-        audit: vec![audit_row("evaluate"), audit_row("record")],
+        audit: Vec::new(),
     }
 }
 
@@ -205,18 +191,21 @@ async fn stored_result(connection: &mut PgConnection) -> StoredResult {
     .expect("reading the stored result")
 }
 
-async fn stored_audit_verbs(connection: &mut PgConnection) -> Vec<String> {
-    #[derive(FromRow)]
-    struct Row {
-        verb: String,
-    }
-    sqlx::query_as::<_, Row>("SELECT verb FROM audit_log ORDER BY id")
-        .fetch_all(connection)
+/// The three data tables the commit writes, before and after a refusal.
+async fn data_counts(connection: &mut PgConnection) -> (i64, i64, i64) {
+    let results: i64 = sqlx::query_scalar("SELECT count(*) FROM submission_results")
+        .fetch_one(&mut *connection)
         .await
-        .expect("reading the audit rows")
-        .into_iter()
-        .map(|row| row.verb)
-        .collect()
+        .expect("counting submission_results");
+    let evaluations: i64 = sqlx::query_scalar("SELECT count(*) FROM evaluations")
+        .fetch_one(&mut *connection)
+        .await
+        .expect("counting evaluations");
+    let executables: i64 = sqlx::query_scalar("SELECT count(*) FROM executables")
+        .fetch_one(&mut *connection)
+        .await
+        .expect("counting executables");
+    (results, evaluations, executables)
 }
 
 /// Two testcases evaluated: both rows land, the result row is written, and the
@@ -255,12 +244,6 @@ async fn two_evaluations_complete_the_result() {
     assert_eq!(result.compilation_tries, 0);
     assert_eq!(result.evaluation_tries, 3);
     assert_eq!(result.evaluation_outcome.as_deref(), Some("ok"));
-
-    assert_eq!(
-        stored_audit_verbs(&mut connection).await,
-        vec!["evaluate".to_string(), "record".to_string()],
-        "audit rows are appended in chain order",
-    );
 
     drop(connection);
     schema_check::drop_database(&mut base, CHECK_DATABASE).await;
@@ -317,6 +300,37 @@ async fn a_duplicate_row_does_not_abort_the_batch() {
     assert_eq!(stored[0].text, vec!["en: right", "th: ถูกต้อง"]);
     assert_eq!(stored[1].testcase_id, TESTCASE_B);
     assert_eq!(stored[1].execution_memory, Some(1024));
+
+    drop(connection);
+    schema_check::drop_database(&mut base, CHECK_DATABASE).await;
+}
+
+/// A batch carrying an audit row is refused before any transaction: this layer
+/// cannot append it inside the hash chain, so nothing reaches the three tables.
+#[tokio::test]
+async fn a_batch_with_an_audit_row_is_refused_unchained() {
+    let Some((mut base, mut connection)) = open().await else {
+        return;
+    };
+    let mut written = batch(vec![evaluation_row(TESTCASE_A), evaluation_row(TESTCASE_B)]);
+    written.audit = vec![audit_row("evaluate")];
+
+    let before = data_counts(&mut connection).await;
+    let error = commit(&mut connection, &[written])
+        .await
+        .expect_err("a batch carrying an audit row must be refused");
+    let message = error.to_string();
+    assert!(
+        matches!(error, CommitError::AuditNotWired),
+        "the refusal is AuditNotWired: {message}",
+    );
+    assert!(
+        message.contains("chain"),
+        "the error names the missing chained writer: {message}",
+    );
+    let after = data_counts(&mut connection).await;
+    assert_eq!(before, (0, 0, 0), "the three tables start empty");
+    assert_eq!(before, after, "refusing the batch wrote nothing");
 
     drop(connection);
     schema_check::drop_database(&mut base, CHECK_DATABASE).await;
