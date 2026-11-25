@@ -363,6 +363,7 @@ them at once. The split is now evidence-driven, not scheduled by taste:
 | S-6d3e submission inputs | one read for a submission job's records, files, managers, executables and languages | **merged** `d4bf98eb` (see note) |
 | S-6d3f job body export | exact 20/27-key worker bodies with defaults and round-trip tests | **merged** `496b3050` (see note) |
 | S-6d3g submission builder | `SubmissionInputs` to the exact compilation/evaluation body | **merged** `3f7de592` (see note) |
+| S-6d3h output parser | strict returned-body parsing into storable result fields | **merged** `08d4256c` (see note) |
 | S-5e2a task registry | `TaskType::of(key, params)`; the class-name key vs the human label | **merged** `dd37dd47` |
 | S-5e1 method context | `Method<C>` + generic `dispatch`/`Registry`/`Host`; the refactor that unblocks the worker | **merged** `e07a3ec2` |
 | S-8b submissions_status | the dashboard's status counts; the reconciliation bucket | **merged** `d69cc587` |
@@ -1096,8 +1097,19 @@ merged as `3f7de592`; the wrong-task-type control failed
 restoration. Lane gate **358 passed** for `cms-evaluation` + `cms-grading`; merged
 gate **178 targets, 1184 passed, 0 failed, 2 ignored**.
 
-The daemon is not deployable yet: worker dispatch, result writing, user-test
-inputs/builders, the binary and the compose entrypoint remain.
+### S-6d3h: worker output parser
+
+`cms-evaluation::worker_output` reads the result keys of a returned body through
+`JobKey`, keeps null distinct from an empty list or empty `plus`, preserves the
+outcome string, and refuses a wrong JSON type, a non-object `plus`, a missing
+`success`, or an invalid `user_output` digest by name. Lane commit `c081aa23`,
+merged as `08d4256c`; the wrong-type and bad-digest controls each failed named
+tests and passed after byte-identical restoration. Lane gate **62 passed** for
+`cms-evaluation`; merged gate **179 targets, 1194 passed, 0 failed, 2 ignored**.
+
+The daemon is not deployable yet: database result writes, grouping/completion,
+worker dispatch, user-test inputs/builders, the binary and the compose entrypoint
+remain.
 
 
 
