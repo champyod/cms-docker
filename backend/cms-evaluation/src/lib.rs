@@ -14,6 +14,7 @@ pub mod job;
 pub mod operation;
 pub mod plan;
 pub mod queue;
+pub mod result;
 pub mod service;
 pub mod sweep;
 
@@ -27,6 +28,7 @@ pub use plan::{
     compilation_priority, evaluation_priority, submission_operations, user_test_operations,
 };
 pub use queue::{EvaluationOperation, EvaluationQueue, QueueStatusEntry};
+pub use result::{worker_output, RunStats, WorkerOutput, WorkerOutputError};
 pub use service::Evaluation;
 pub use sweep::{contest_operations, submission_operations_by_id, user_test_operations_by_id};
 
