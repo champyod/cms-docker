@@ -229,6 +229,7 @@ commit names the lane tip and the gate result it was accepted on.
 | 2026-11-22 | `feat/rust-S3i-pgdump` | `7bb3952f`→`d7b453fe` | dumper from the prod-pinned image, fixture regenerated on PG 15, version check made strict. Parent's own control: the first attempt (deleting a FOREIGN KEY statement) proved only that the DDL runs, not that the comparison sees anything — repaired to `CASCADE`→`RESTRICT`, which failed at statement 187 with "224 statements expected, 224 created", exit 101, restored byte-identical. Merged tree: no host `pg_dump`, 117 binaries, 772 passed | `2461a695` |
 | 2026-11-25 | `feat/rust-S6d3i-writes` | `2ab37bd3` | the evaluations row set: the pinned `SELECT * FROM unnest(...)` could not fill three `varchar[]` columns (`42804`), and the statement test read SQL as text, so nothing executed it. Parent's own mutation dropping one `::varchar[]` cast failed `one_object_rows_round_trip_their_per_row_arrays` with `42804`, exit 101, restored byte-identically. Lane gate 62 targets / 396 passed; merged gate **190 targets, 1195 passed, 0 failed, 2 ignored** | `0cc770fd` |
 | 2026-11-25 | `feat/rust-S6d3j-commit` | `f82d931b` | one object's batch in one transaction. The audit write was rejected at review — no trigger fills the hash, so rows go back to the chained writer — and the refusal that replaced it made `group_by_object` → `commit` uncallable, fixed to a receipt. Parent's empty-receipt mutation failed `a_batch_hands_its_audit_rows_back`, exit 101, restored byte-identical. Lane gate 63 targets / 400 passed; merged gate **192 targets, 1204 passed, 0 failed, 2 ignored** | `0e9fbddf` |
+| 2026-11-25 | `feat/rust-api-surface` | `04eaed30` | the document Decision A needs before a route exists. Documentation only: no code, no gate. Its counts were re-derived by the parent (`239` server actions in 55 files whose first line is the `'use server'` directive; `270` would be the count including files without it), and the Python side matches at 55 | `a0327ee1` |
 
 Gate on the tree after all fifteen merges (`7408c34d`, plus the test fix `50a37ea3`), with a live
 database: `cargo fmt --check` exit 0; `cargo clippy --all-targets -- -D warnings` exit 0; `cargo test --
@@ -1229,3 +1230,34 @@ alone. Lane `572e3bc5`, merged `604b1697`; the disabled-delete control failed
 `a_recompilation_replaces_the_executable_set` with two rows instead of one and
 passed after byte-identical restoration. Lane gate **403 passed** for `cms-db`;
 merged gate **183 targets, 1213 passed, 0 failed, 2 ignored**.
+
+### S-8a: the write surface Decision A needs
+
+The operator chose A on 2026-11-25: the panel keeps its UI and calls a Rust write
+API; the Python admin's 75 routes and 22 templates are deleted. Before a route
+exists, the surface is measured in `dev/migration/API-SURFACE.md`:
+
+| Measure | Count | How it was counted |
+|---|---|---|
+| Panel action files | 55 | files whose first line is the `'use server'` directive |
+| Server actions in them | **239** | `export async function` in those files; `PHASE0-INVENTORY.md`'s 147 counted a narrower set |
+| Actions that write | 132 | 239 − 107 reads |
+| Python mutating handlers | 55 | `def post`/`def delete` across the 11 admin handler modules — matches the earlier claim |
+| Collapsed database-write operations | **62** | one route each, both UIs merged into one row |
+| Host-access operations, not API work | 12 | docker/filesystem/ssh; the panel or `tools/cms-tui` keeps them |
+| Read-only actions | 107 | appendix, kept out of the route count |
+
+Three rows the document could not settle, left as design questions rather than
+guessed into a route:
+
+- **activate / switch contest** (`admin-panel/src/app/actions/contests.ts:75`)
+  writes `contests.is_active` and also `config.toml`; Python has no equivalent
+  route, so the collapse has nothing to compare against.
+- **recalculate / rejudge** (`submissions.ts:293,537,574`) deletes `evaluations`
+  and `submission_results` rows *and* fires RPC to the EvaluationService: one
+  route owning both a transaction and an out-of-process effect.
+- **service / wiring / exposure registry** (`serviceWiring.ts:75-183`) writes the
+  registry tables and calls `runConfigSync()`, touching the host from a database
+  action.
+
+Documentation only: no code, no gate — the merge adds one markdown file.
