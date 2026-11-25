@@ -11,3 +11,6 @@ S-6d3j owns `backend/cms-db/src/writes/**`, `backend/cms-db/tests/**` and
 - Scope: one pure orchestration function: build one submission job body, dispatch
   it to one worker shard, parse every returned body into `WorkerOutput`. It does
   not load from the database, commit results, retry, or start a service loop.
+- Status: done — lane `31dc9e61`, merged `15f00296`; lane 73 passed, combined
+  merged gate **183 targets / 1210 passed / 0 failed / 2 ignored**; ignored-return
+  control red then byte-restored. Files released.
