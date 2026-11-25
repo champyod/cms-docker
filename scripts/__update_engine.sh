@@ -641,6 +641,7 @@ VAR_SPECS=(
   "Admin Panel|[admin]|RANKING_BIND_ADDRESS|str||0.0.0.0"
   "Admin Panel|[admin]|RANKING_SHARD|num||0"
   "Admin Panel|[admin]|RANKING_DOMAIN|str||ranking.cms.local"
+  "Admin Panel|[admin]|RANKING_TRUSTED_PROXIES|str||"
   "Admin Panel|[admin]|RANKING_SESSION_SECRET|secret||hex32"
   "Admin Panel|[admin]|ADMIN_COOKIE_DURATION|num||36000"
   "Admin Panel|[admin]|AUTH_SECRET|secret||hex32"
