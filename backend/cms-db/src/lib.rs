@@ -196,7 +196,7 @@ pub use usertest::{
     USER_TEST_FILE, USER_TEST_MANAGER, USER_TEST_RESULT,
 };
 pub use writes::{
-    group_by_object, AuditRow, CompilationOutcome, EvaluationOutcome, EvaluationRow, ExecutableRow,
-    ObjectWrite, OperationType, ResultRow, RowState, ScoreRow, WriteError, INSERT_EVALUATIONS,
-    INSERT_EXECUTABLES, UPSERT_RESULT, UPSERT_SCORE,
+    commit, group_by_object, AuditRow, CommitError, CompilationOutcome, EvaluationOutcome,
+    EvaluationRow, ExecutableRow, ObjectWrite, OperationType, ResultRow, RowState, ScoreRow,
+    WriteError, INSERT_EVALUATIONS, INSERT_EXECUTABLES, UPSERT_RESULT, UPSERT_SCORE,
 };

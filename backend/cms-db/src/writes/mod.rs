@@ -16,29 +16,37 @@
 //! so that a whole object is written in a single round trip.
 //!
 //! Nothing here opens a connection. These are the statements, the grouping that
-//! decides which rows go down together, and the audit rows that must accompany
-//! them.
+//! decides which rows go down together, and the audit rows a batch declares.
+//! Appending those audit rows is the caller's work, through the one writer that
+//! computes the hash chain; this layer refuses to store them unchained.
 //!
-//! The three files below hold one concern each, so that the statements, the rows
-//! they write and the batch that carries them are read apart:
+//! The four files below hold one concern each, so that the statements, the rows
+//! they write, the batch that carries them and the commit that lands them are
+//! read apart:
 //!
 //! - `statements`: the four column-exact statements.
 //! - `shapes`: the row each table is written as, and the two enum values its
 //!   outcome columns accept.
 //! - `batch`: the grouping that merges operations into a batch, and the audit
 //!   rows every batch must carry.
+//! - `commit`: the one transaction that executes the statements for a batch and
+//!   refuses to store audit rows it cannot chain.
 //!
 //! # Errors
 //!
-//! [`WriteError::MissingAudit`] is the only error the module produces:
-//! [`group_by_object`] and [`ObjectWrite::seal`] both refuse a batch carrying no
-//! audit row, so a mutation cannot be written unrecorded.
+//! [`group_by_object`] and [`ObjectWrite::seal`] refuse a batch carrying no
+//! audit row: `seal` is the batch's declaration that it must be recorded.
+//! [`commit`] refuses to store that declaration outside the chain, returning
+//! [`CommitError::AuditNotWired`] for any batch that carries audit rows. A
+//! statement the driver refused surfaces as [`CommitError::Database`].
 
 mod batch;
+mod commit;
 mod shapes;
 mod statements;
 
 pub use batch::{group_by_object, AuditRow, ObjectWrite, OperationType, RowState, WriteError};
+pub use commit::{commit, CommitError};
 pub use shapes::{
     CompilationOutcome, EvaluationOutcome, EvaluationRow, ExecutableRow, ResultRow, ScoreRow,
 };
