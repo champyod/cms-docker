@@ -358,6 +358,7 @@ them at once. The split is now evidence-driven, not scheduled by taste:
 | S-6d2 ES sweep | four contest-scoped candidate reads and the planned operations built from them | **merged** `a5920ce6` (see note) |
 | S-6d3a ES queue | priority-then-timestamp queue, duplicate refusal, cumulative status | **committed** `b5bb73a7` (see note) |
 | S-6d3b ES RPC context | named-object reads, `new_submission`/`new_user_test`, `queue_status` | **committed** `67569040` (see note) |
+| S-6d3c auto managers | task-type manager list, reusing Communication's existing `manager` name | **merged** `39490ba3` (see note) |
 | S-5e2a task registry | `TaskType::of(key, params)`; the class-name key vs the human label | **merged** `dd37dd47` |
 | S-5e1 method context | `Method<C>` + generic `dispatch`/`Registry`/`Host`; the refactor that unblocks the worker | **merged** `e07a3ec2` |
 | S-8b submissions_status | the dashboard's status counts; the reconciliation bucket | **merged** `d69cc587` |
@@ -1031,6 +1032,18 @@ candidate reads take an optional object id, so `new_submission` and
 Commit `67569040`; the negative control removing the object predicate failed
 `by_id_reads_return_only_the_named_object` and was restored byte-identically.
 Merged gate after both steps: **174 targets, 1162 passed, 0 failed, 2 ignored**.
+
+### S-6d3c: automatic managers
+
+`TaskType::auto_managers` returns an owned list from the closed enum: empty for
+Batch, BatchAndOutput, OutputOnly and TwoSteps, and the existing `manager` name
+for Communication. The Communication constant is visible to its parent and
+reused by the registry, so the name has one definition. Lane commit
+`e74156dd`, merged as `39490ba3`. The negative control making Communication empty
+failed `automatic_managers_are_exact_for_all_five_kinds` with left `[]` and right
+`["manager"]`, then passed after byte-identical restoration. Lane gate **299
+passed** for `cms-grading`; merged gate **174 targets, 1163 passed, 0 failed, 2
+ignored**.
 
 The daemon is not deployable yet: worker dispatch, result writing, user-test
 results, the binary and the compose entrypoint remain.
