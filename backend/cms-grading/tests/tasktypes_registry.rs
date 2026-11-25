@@ -95,3 +95,23 @@ fn parameters_are_refused_by_the_named_type_and_not_the_registry() {
         "the key is a registry entry, so only the parameters can be wrong"
     );
 }
+
+/// Parity with the reference: only Communication asks the service for its manager.
+#[test]
+fn automatic_managers_are_exact_for_all_five_kinds() {
+    let pinned: [(&str, &[&str]); 5] = [
+        ("Batch", &[]),
+        ("BatchAndOutput", &[]),
+        ("OutputOnly", &[]),
+        ("TwoSteps", &[]),
+        ("Communication", &["manager"]),
+    ];
+    for (key, names) in pinned {
+        let expected: Vec<String> = names.iter().map(|name| (*name).to_owned()).collect();
+        assert_eq!(
+            built(key).auto_managers(),
+            expected,
+            "the automatic managers of the {key} type"
+        );
+    }
+}
