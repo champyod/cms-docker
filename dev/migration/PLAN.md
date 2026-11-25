@@ -389,6 +389,7 @@ them at once. The split is now evidence-driven, not scheduled by taste:
 | S-6d3k worker dispatcher | persistent per-shard client, `execute_job_group`, reply/count refusals | **merged** `c35fefe7` (see note) |
 | S-6d3l submission runner | build one submission job, dispatch it, parse every returned body | **merged** `15f00296` (see note) |
 | S-6d3m executable replacement | compilation commit clears the old set before inserting the new one | **merged** `604b1697` (see note) |
+| S-6d3n complete result read | every `submission_results` column is read before a result is rewritten | **merged** `10608148` (see note) |
 | S-5e2a task registry | `TaskType::of(key, params)`; the class-name key vs the human label | **merged** `dd37dd47` |
 | S-5e1 method context | `Method<C>` + generic `dispatch`/`Registry`/`Host`; the refactor that unblocks the worker | **merged** `e07a3ec2` |
 | S-8b submissions_status | the dashboard's status counts; the reconciliation bucket | **merged** `d69cc587` |
@@ -1230,6 +1231,25 @@ alone. Lane `572e3bc5`, merged `604b1697`; the disabled-delete control failed
 `a_recompilation_replaces_the_executable_set` with two rows instead of one and
 passed after byte-identical restoration. Lane gate **403 passed** for `cms-db`;
 merged gate **183 targets, 1213 passed, 0 failed, 2 ignored**.
+
+### S-6d3n: complete result read
+
+`SubmissionResult` now carries `compilation_text`, stdout/stderr, CPU and wall
+time, memory, shard and both sandbox arrays in addition to its outcomes, tries
+and score columns. Both `result_by_id` and `get_submission_results` project and
+map the full row, so an evaluation can preserve the compilation record and a
+recompilation can clear it. Every Rust `submission_results` test fixture carries
+the same nine columns; the judging fixture uses connection-local temp tables,
+so it neither migrates stale tables nor races parallel tests. Lane tip
+`2262f4da`, merged `10608148`. Mapping `compilation_text` to an empty vector
+failed the named live read; removing the child-table reset failed the named FK
+test; both were restored byte-identically. Final merged gate **184 targets, 1216
+passed, 0 failed, 2 ignored**.
+
+The unrelated `commit_live` fixed-database-name race under default-parallel
+runs remains untouched; the accepted gate is serial. The daemon still needs the
+`WorkerOutput`-to-`ObjectWrite` mapping, audit receipt handling, service loop,
+user-test inputs/builders, binary and compose entrypoint.
 
 ### S-8a: the write surface Decision A needs
 
