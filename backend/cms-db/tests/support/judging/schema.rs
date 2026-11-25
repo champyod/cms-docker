@@ -1,16 +1,16 @@
-//! The schema a judging test needs, created once per test binary.
+//! The schema a judging test needs, created as connection-local `TEMP` tables.
 //!
 //! The DDL names the columns the queries in `task` and `submission` read, and keeps
 //! the foreign keys the reference declares: the dataset rules are carried by them,
-//! not by code. The fixture owns this schema, so a table of an older shape has to be
-//! dropped rather than migrated.
+//! not by code. Each connection owns a fresh copy, so parallel tests share no table
+//! and an older shape never has to be dropped or migrated.
 
 use sqlx::postgres::PgConnection;
 use sqlx::Connection;
 
 /// Every statement the fixture needs, in an order whose references already exist.
 const SCHEMA: &[&str] = &[
-    "CREATE TABLE IF NOT EXISTS tasks (
+    "CREATE TEMP TABLE tasks (
         id serial PRIMARY KEY,
         name varchar NOT NULL UNIQUE,
         title varchar NOT NULL,
@@ -33,7 +33,7 @@ const SCHEMA: &[&str] = &[
         score_precision integer NOT NULL DEFAULT 0,
         score_mode varchar NOT NULL DEFAULT 'max_tokened_last',
         active_dataset_id integer)",
-    "CREATE TABLE IF NOT EXISTS datasets (
+    "CREATE TEMP TABLE datasets (
         id serial PRIMARY KEY,
         task_id integer NOT NULL REFERENCES tasks (id) ON DELETE CASCADE,
         description varchar NOT NULL,
@@ -54,7 +54,7 @@ const SCHEMA: &[&str] = &[
             ON UPDATE SET NULL ON DELETE SET NULL;
     EXCEPTION WHEN duplicate_object THEN NULL;
     END $$",
-    "CREATE TABLE IF NOT EXISTS testcases (
+    "CREATE TEMP TABLE testcases (
         id serial PRIMARY KEY,
         dataset_id integer NOT NULL REFERENCES datasets (id) ON DELETE CASCADE,
         codename varchar NOT NULL,
@@ -62,7 +62,7 @@ const SCHEMA: &[&str] = &[
         input varchar NOT NULL,
         output varchar NOT NULL,
         UNIQUE (dataset_id, codename))",
-    "CREATE TABLE IF NOT EXISTS submissions (
+    "CREATE TEMP TABLE submissions (
         id serial PRIMARY KEY,
         opaque_id bigint NOT NULL,
         participation_id integer NOT NULL,
@@ -72,13 +72,20 @@ const SCHEMA: &[&str] = &[
         comment varchar NOT NULL DEFAULT '',
         official boolean NOT NULL DEFAULT true,
         UNIQUE (participation_id, opaque_id))",
-    "CREATE TABLE IF NOT EXISTS submission_results (
+    "CREATE TEMP TABLE submission_results (
         submission_id integer NOT NULL REFERENCES submissions (id) ON DELETE CASCADE,
         dataset_id integer NOT NULL REFERENCES datasets (id) ON DELETE CASCADE,
         compilation_outcome varchar,
         compilation_text varchar[] NOT NULL DEFAULT '{}',
         compilation_tries integer NOT NULL DEFAULT 0,
+        compilation_stdout varchar,
+        compilation_stderr varchar,
         compilation_time double precision,
+        compilation_wall_clock_time double precision,
+        compilation_memory bigint,
+        compilation_shard integer,
+        compilation_sandbox_paths varchar[],
+        compilation_sandbox_digests varchar[],
         evaluation_outcome varchar,
         evaluation_tries integer NOT NULL DEFAULT 0,
         score double precision,
@@ -87,7 +94,7 @@ const SCHEMA: &[&str] = &[
         public_score_details jsonb,
         ranking_score_details varchar[],
         PRIMARY KEY (submission_id, dataset_id))",
-    "CREATE TABLE IF NOT EXISTS executables (
+    "CREATE TEMP TABLE executables (
         id serial PRIMARY KEY,
         submission_id integer NOT NULL,
         dataset_id integer NOT NULL,
@@ -96,7 +103,7 @@ const SCHEMA: &[&str] = &[
         FOREIGN KEY (submission_id, dataset_id)
             REFERENCES submission_results (submission_id, dataset_id) ON DELETE CASCADE,
         UNIQUE (submission_id, dataset_id, filename))",
-    "CREATE TABLE IF NOT EXISTS evaluations (
+    "CREATE TEMP TABLE evaluations (
         id serial PRIMARY KEY,
         submission_id integer NOT NULL,
         dataset_id integer NOT NULL,
@@ -113,38 +120,26 @@ const SCHEMA: &[&str] = &[
         FOREIGN KEY (submission_id, dataset_id)
             REFERENCES submission_results (submission_id, dataset_id) ON DELETE CASCADE,
         UNIQUE (submission_id, dataset_id, testcase_id))",
-    "CREATE TABLE IF NOT EXISTS tokens (
+    "CREATE TEMP TABLE tokens (
         id serial PRIMARY KEY,
         submission_id integer NOT NULL UNIQUE REFERENCES submissions (id) ON DELETE CASCADE,
         timestamp timestamp NOT NULL DEFAULT now())",
 ];
 
-/// Create the schema, letting a concurrent test having created it already pass.
+/// Create the connection-local `TEMP` schema on this connection.
 pub async fn create(connection: &mut PgConnection) {
     for statement in SCHEMA {
         // The DDL is a constant of this file, and the driver still wants that
         // stated: a statement it did not see at compile time is interpolated data.
         let sql = sqlx::AssertSqlSafe(*statement);
-        if let Err(error) = sqlx::raw_sql(sql).execute(&mut *connection).await {
-            if !already_there(&error) {
-                panic!("creating the judging schema: {error}");
-            }
-        }
+        sqlx::raw_sql(sql)
+            .execute(&mut *connection)
+            .await
+            .expect("creating the judging schema");
     }
 }
 
-/// Whether the driver refused a statement only because the object exists.
-///
-/// Two tests run in parallel inside one binary, so both may reach `CREATE` first.
-fn already_there(error: &sqlx::Error) -> bool {
-    matches!(
-        error.as_database_error().and_then(|failed| failed.code()),
-        Some(code)
-            if code == "42P07" || code == "42710" || code == "42P16" || code == "23505"
-    )
-}
-
-/// A scratch database, and the schema in it, or `None` when the URL is unset.
+/// A connection whose own `TEMP` schema holds the judging tables.
 pub async fn open(url: &str) -> Result<PgConnection, sqlx::Error> {
     let mut connection = PgConnection::connect(url).await?;
     create(&mut connection).await;
