@@ -48,6 +48,25 @@ left over.
   `src/cms/io/rpc.py` as the contract it re-expresses, and `cms-svc/src/lib.rs:3` names
   `RemoteServiceClient._run`. So slice 0 is *finish and prove*, not *start*.
 
+### 1.2 The runtime surface, counted
+
+The goal is "no Python in any runtime path". Measured on `feat/rust-trunk-reconcile`
+at `637c88e9`:
+
+| Touchpoint | Count | Where |
+|---|---|---|
+| Services whose command is a Python entrypoint | **4 of 39** | `admin-web-server` → `cmsAdminWebServer`, `contest-web-server` → `cmsContestWebServer`, `evaluation-service` → `cmsEvaluationService`, `proxy-service` → `cmsProxyService` |
+| Services already Rust | 6 | `cms-log-service`, `cms-resource-service`, `cms-scoring`, `cms-checker`, `cms-worker`, `cms-ranking` |
+| Healthchecks that shell out to `python3 -c` | **4** | `docker-compose.yml:194,240,376,419`; two still `pgrep` the Python process name |
+| Image steps that install or run Python | **2 (+4 packages)** | `Dockerfile:75-78` installs `python3`, `python3-dev`, `python3-pip`, `python3-venv`; `:208` runs `python3 src/install.py venv`; `:223` runs `python3 install.py cms --devel` |
+| Shell scripts invoking python | **15** | `scripts/*.sh` |
+| CI lines naming python | 13 | `.github/workflows/ci.yml` |
+
+That is the unit the ratchet counts, and the reason the packaging slice cannot be
+"done" by the image alone: four services, four healthchecks, two image steps,
+fifteen scripts and thirteen CI lines all have to reach zero, and each service
+counts only once its command is a Rust binary.
+
 ---
 
 ## 2. The dependency graph, as measured
