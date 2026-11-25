@@ -356,6 +356,8 @@ them at once. The split is now evidence-driven, not scheduled by taste:
 | S-6c5 scoring daemon | `cms-scoring` RPC, sweeper/worker, binary and compose entrypoint | **merged** `b5216bf4` (see note) |
 | S-6d1 ES planner | predicates, retry bounds and per-dataset submission/user-test operations | **merged** `2b328100` (see note) |
 | S-6d2 ES sweep | four contest-scoped candidate reads and the planned operations built from them | **merged** `a5920ce6` (see note) |
+| S-6d3a ES queue | priority-then-timestamp queue, duplicate refusal, cumulative status | **committed** `b5bb73a7` (see note) |
+| S-6d3b ES RPC context | named-object reads, `new_submission`/`new_user_test`, `queue_status` | **committed** `67569040` (see note) |
 | S-5e2a task registry | `TaskType::of(key, params)`; the class-name key vs the human label | **merged** `dd37dd47` |
 | S-5e1 method context | `Method<C>` + generic `dispatch`/`Registry`/`Host`; the refactor that unblocks the worker | **merged** `e07a3ec2` |
 | S-8b submissions_status | the dashboard's status counts; the reconciliation bucket | **merged** `d69cc587` |
@@ -1009,6 +1011,30 @@ predicate was restored byte-identically. Lane gate **428 passed** for
 `cms-db` + `cms-evaluation`; the first merged run omitted `CMS_DB_TEST_URL` and
 13 live tests failed by name, then the merged gate passed with it set:
 **174 targets, 1157 passed, 0 failed, 2 ignored**.
+
+### S-6d3a: the EvaluationService queue
+
+`cms-evaluation::queue` orders by priority, then the object's timestamp, then
+insertion. A duplicate is refused while the same operation waits, while the same
+object on another dataset stays distinct. `status()` hides the testcase codename,
+keeps the earliest timestamp of the group and counts its multiplicity, which is
+the shape `queue_status` returns. Commit `b5bb73a7`; unit tests cover priority,
+timestamp, duplicate and grouping.
+
+### S-6d3b: the EvaluationService RPC context
+
+`Evaluation` owns the session, the runtime handle and the shared queue. The four
+candidate reads take an optional object id, so `new_submission` and
+`new_user_test` read only the named object rather than sweeping the contest.
+`queue_status` emits the reference's `item`/`priority`/`timestamp` rows.
+`workers_status` is the reference's empty map until the worker pool slice.
+Commit `67569040`; the negative control removing the object predicate failed
+`by_id_reads_return_only_the_named_object` and was restored byte-identically.
+Merged gate after both steps: **174 targets, 1162 passed, 0 failed, 2 ignored**.
+
+The daemon is not deployable yet: worker dispatch, result writing, user-test
+results, the binary and the compose entrypoint remain.
+
 
 
 
