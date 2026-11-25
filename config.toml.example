@@ -102,6 +102,7 @@ RANKING_SHARD = 0               # num; this ranking instance's shard in the serv
 RANKING_BIND_ADDRESS = "0.0.0.0" # str; address the ranking service binds inside its container (paired with RANKING_LISTEN_PORT); 0.0.0.0 keeps it reachable on the compose network, and RANKING_BIND_IP decides what is published on the host
 RANKING_PORT_EXTERNAL = 8890    # port; host port the ranking board is published on (RANKING_BIND_IP:RANKING_PORT_EXTERNAL:RANKING_LISTEN_PORT)
 RANKING_DOMAIN = "ranking.cms.local" # str; FQDN of the ranking vhost in the domain nginx; also a cert SAN and Traefik Host() rule
+RANKING_TRUSTED_PROXIES = ""    # str; comma-separated proxy IP/CIDR whose forwarded headers the login may trust; empty trusts none
 RANKING_SESSION_SECRET = ""     # secret; auto-generated if empty — signs the ranking console session cookie; empty makes the console refuse every login
 RANKING_LOGO_PATH = ""          # str; host path to ranking logo (png/jpg/gif/bmp) e.g. "./config/assets/logo.png" — synced to ranking volume on ./cms config sync (hot-swap, overwrites old)
 CMS_RANKING_LIB_DIR = "/var/local/lib/cms/ranking" # str; container path of the ranking logo volume the logo hot-swap writes into — must match the cms-ranking-data volume mount
