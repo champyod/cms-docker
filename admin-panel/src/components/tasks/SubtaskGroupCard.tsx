@@ -2,6 +2,9 @@
 
 import { useDroppable } from '@dnd-kit/core';
 import { Trash2 } from 'lucide-react';
+import { Button } from '@/components/core/Button';
+import { Input } from '@/components/core/Input';
+import { Select } from '@/components/core/Select';
 import { cn } from '@/lib/utils';
 import { SUBTASK_POOL_ZONE_ID, type SubtaskGroup } from './subtask-board';
 import { SubtaskChip } from './SubtaskChip';
@@ -16,7 +19,7 @@ interface SubtaskGroupCardProps {
   onMoveTestcase: (codename: string, targetGroupId: string | null) => void;
 }
 
-const FIELD_CLASSES = 'w-full px-2.5 py-1.5 bg-muted/40 border border-border rounded-lg text-foreground text-sm focus:outline-none focus:border-ring focus-visible:ring-2 focus-visible:ring-ring/50';
+const MOVE_PLACEHOLDER = 'Move to…';
 
 export function SubtaskGroupCard({ group, scoreType, canRemove, otherGroups, onUpdate, onRemove, onMoveTestcase }: SubtaskGroupCardProps): React.JSX.Element {
   const { setNodeRef, isOver } = useDroppable({ id: group.id });
@@ -33,15 +36,16 @@ function GroupHeader({ group, canRemove, onRemove }: { group: SubtaskGroup; canR
   return (
     <div className="flex items-center gap-2">
       <span className="text-sm font-semibold text-foreground">{group.name}</span>
-      <button
-        type="button"
+      <Button
+        variant="ghost"
+        iconOnly
+        icon={Trash2}
+        tooltip={`Remove ${group.name}`}
+        aria-label={`Remove ${group.name}`}
         onClick={onRemove}
         disabled={!canRemove}
-        aria-label={`Remove ${group.name}`}
-        className="ml-auto flex size-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-destructive disabled:opacity-30"
-      >
-        <Trash2 className="h-3.5 w-3.5" />
-      </button>
+        className="ml-auto size-11 shrink-0 rounded-lg hover:text-destructive"
+      />
     </div>
   );
 }
@@ -49,33 +53,27 @@ function GroupHeader({ group, canRemove, onRemove }: { group: SubtaskGroup; canR
 function GroupFields({ group, scoreType, onUpdate }: { group: SubtaskGroup; scoreType: string; onUpdate: (patch: Partial<SubtaskGroup>) => void }): React.JSX.Element {
   return (
     <div className="grid grid-cols-2 gap-2">
-      <div>
-        <label className="block text-xs font-bold text-muted-foreground uppercase mb-1">Max score</label>
-        <input
-          type="number"
-          min="0"
-          step="any"
-          value={group.maxScore}
-          onChange={(e) => onUpdate({ maxScore: e.target.value })}
-          placeholder="e.g. 40"
-          aria-label={`${group.name} max score`}
-          className={FIELD_CLASSES}
-        />
-      </div>
+      <Input
+        type="number"
+        min={0}
+        step="any"
+        label="Max score"
+        value={group.maxScore}
+        onChange={(event) => onUpdate({ maxScore: event.target.value })}
+        placeholder="e.g. 40"
+        aria-label={`${group.name} max score`}
+      />
       {scoreType === 'GroupThreshold' && (
-        <div>
-          <label className="block text-xs font-bold text-muted-foreground uppercase mb-1">Threshold</label>
-          <input
-            type="number"
-            min="0"
-            max="1"
-            step="any"
-            value={group.threshold}
-            onChange={(e) => onUpdate({ threshold: e.target.value })}
-            aria-label={`${group.name} threshold`}
-            className={FIELD_CLASSES}
-          />
-        </div>
+        <Input
+          type="number"
+          min={0}
+          max={1}
+          step="any"
+          label="Threshold"
+          value={group.threshold}
+          onChange={(event) => onUpdate({ threshold: event.target.value })}
+          aria-label={`${group.name} threshold`}
+        />
       )}
     </div>
   );
@@ -90,22 +88,22 @@ function GroupTestcases({ group, otherGroups, onMoveTestcase }: { group: Subtask
       {group.testcases.map((codename) => (
         <div key={codename} className="flex items-center gap-1.5">
           <SubtaskChip codename={codename} />
-          <select
-            value=""
-            onChange={(e) => {
-              const value = e.target.value;
-              if (value === '') return;
-              onMoveTestcase(codename, value === SUBTASK_POOL_ZONE_ID ? null : value);
-            }}
-            aria-label={`Move ${codename} to another subtask`}
-            className="min-w-0 flex-1 px-1.5 py-0.5 text-xs bg-muted/40 border border-border rounded-md text-foreground focus:outline-none focus:border-ring focus-visible:ring-2 focus-visible:ring-ring/50"
-          >
-            <option value="">Move to…</option>
-            <option value={SUBTASK_POOL_ZONE_ID}>Unassigned</option>
-            {otherGroups.map((candidate) => (
-              <option key={candidate.id} value={candidate.id}>{candidate.name}</option>
-            ))}
-          </select>
+          <div className="min-w-0 flex-1">
+            <Select
+              value=""
+              placeholder={MOVE_PLACEHOLDER}
+              onChange={(event) => {
+                const value = event.target.value;
+                if (value === '') return;
+                onMoveTestcase(codename, value === SUBTASK_POOL_ZONE_ID ? null : value);
+              }}
+              aria-label={`Move ${codename} to another subtask`}
+              options={[
+                { value: SUBTASK_POOL_ZONE_ID, label: 'Unassigned' },
+                ...otherGroups.map((candidate) => ({ value: candidate.id, label: candidate.name })),
+              ]}
+            />
+          </div>
         </div>
       ))}
     </div>
