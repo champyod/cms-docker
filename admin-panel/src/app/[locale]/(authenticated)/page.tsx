@@ -2,7 +2,7 @@ import { getDictionary } from '@/i18n';
 import { listBreadcrumbs } from '@/lib/navigation/breadcrumbs';
 import { prisma } from '@/lib/prisma';
 import { getServiceStatus } from '@/app/actions/services';
-import { DashboardState, DashboardSurface } from '@/components/dashboard/DashboardSurface';
+import { DashboardState, DashboardSurface, fill } from '@/components/dashboard/DashboardSurface';
 import { DashboardPage } from '@/components/patterns/DashboardPage';
 // Why the bare form: this page is a server component, so the activity row cannot read the
 // reviewer's own zone from a client context; the zone of record is the one this process renders in.
@@ -115,6 +115,7 @@ export default async function AdminHomePage({
     status: serviceStatus.status,
     running: serviceStatus.running,
     total: serviceStatus.total,
+    down: serviceStatus.down,
     checkedAt: formatInZone(new Date().toISOString()),
   };
 
@@ -123,10 +124,15 @@ export default async function AdminHomePage({
       title={dict.dashboard.welcome}
       description={dict.dashboard.description}
       state={<DashboardState service={service} labels={dashboardLabels} stats={stats} />}
+      totals={[
+        { label: labels.stats.totalUsers, value: stats.usersCount, reference: fill(labels.stats.enrolled, stats.activeContesters) },
+        { label: labels.stats.totalContests, value: stats.contestsCount, reference: fill(labels.stats.activeNow, stats.activeContestsCount) },
+        { label: labels.stats.totalSubmissions, value: stats.submissionsCount, reference: fill(labels.stats.pending, stats.pendingSubmissions) },
+        { label: labels.servicesTitle, value: `${service.running}/${service.total}`, reference: labels.servicesDetail },
+      ]}
+      locale={locale}
     >
       <DashboardSurface
-        stats={stats}
-        service={service}
         activity={recentActivity.map((item) => ({
           id: item.id,
           username: item.username,
@@ -134,7 +140,7 @@ export default async function AdminHomePage({
           when: item.timestamp ? formatInZone(item.timestamp.toISOString()) : '',
         }))}
         labels={dashboardLabels}
-      locale={locale}
+        locale={locale}
       />
     </DashboardPage>
   );

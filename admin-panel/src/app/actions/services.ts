@@ -148,18 +148,25 @@ export async function getServiceStatus() {
             afterValues: { error: error instanceof Error ? error.name : 'UnknownError' },
             result: 'failure',
         });
-        return { status: 'down' as const, running: 0, total: 0 };
+        return { status: 'down' as const, running: 0, total: 0, down: [] };
     }
 }
 
-type ServiceStatusSummary = { status: 'ok' | 'degraded' | 'down'; running: number; total: number };
+type ServiceStatusSummary = {
+    status: 'ok' | 'degraded' | 'down';
+    running: number;
+    total: number;
+    /** The services that are not running, named: a rollup alone cannot say what to fix. */
+    down: { name: string; state: string }[];
+};
 
 function summariseCmsContainers(stdout: string): ServiceStatusSummary {
-    if (!stdout.trim()) return { status: 'down', running: 0, total: 0 };
+    if (!stdout.trim()) return { status: 'down', running: 0, total: 0, down: [] };
 
     const lines = stdout.trim().split('\n');
     let running = 0;
     let total = 0;
+    const down: { name: string; state: string }[] = [];
 
     for (const line of lines) {
         const parsed = JSON.parse(line);
@@ -167,6 +174,7 @@ function summariseCmsContainers(stdout: string): ServiceStatusSummary {
         if (name.startsWith('cms-') || name.includes('cms')) {
             total++;
             if (parsed.State === 'running') running++;
+            else down.push({ name, state: String(parsed.State ?? 'unknown') });
         }
     }
 
@@ -175,7 +183,7 @@ function summariseCmsContainers(stdout: string): ServiceStatusSummary {
         : running === 0 ? 'down'
         : 'degraded';
 
-    return { status, running, total };
+    return { status, running, total, down };
 }
 
 export async function updateServer() {

@@ -28,6 +28,8 @@ export interface DashboardServiceState {
   status: StatusType;
   running: number;
   total: number;
+  /** Named, because a count cannot tell the reader what to fix. */
+  down: { name: string; state: string }[];
   checkedAt: string;
 }
 
@@ -60,14 +62,10 @@ const ALERT_TONE: Record<StatusType, 'success' | 'warning' | 'destructive'> = {
 
 /** Data in, markup out: the page keeps the queries and this keeps the rules. */
 export function DashboardSurface({
-  stats,
-  service,
   activity,
   labels,
   locale,
 }: {
-  stats: DashboardStats;
-  service: DashboardServiceState;
   activity: DashboardActivityRow[];
   labels: DashboardLabels;
   locale?: string;
@@ -97,30 +95,18 @@ export function DashboardSurface({
   ];
 
   return (
-    <div className="space-y-4">
-      <StatGrid
-        locale={locale}
-        totals={[
-          { label: labels.stats.totalUsers, value: stats.usersCount, reference: fill(labels.stats.enrolled, stats.activeContesters) },
-          { label: labels.stats.totalContests, value: stats.contestsCount, reference: fill(labels.stats.activeNow, stats.activeContestsCount) },
-          { label: labels.stats.totalSubmissions, value: stats.submissionsCount, reference: fill(labels.stats.pending, stats.pendingSubmissions) },
-          { label: labels.servicesTitle, value: `${service.running}/${service.total}`, reference: labels.servicesDetail },
-        ]}
+    <Card className="p-0">
+      <div className="px-4 py-3">
+        <Text variant="h2">{labels.activity.title}</Text>
+      </div>
+      <ResponsiveTable
+        columns={columns}
+        rows={activity}
+        getRowKey={(row) => row.id}
+        getRowClassName={() => ROW_HEIGHT_CLASS}
+        emptyState={<Text variant="muted">{labels.activity.empty}</Text>}
       />
-
-      <Card className="p-0">
-        <div className="px-4 py-3">
-          <Text variant="h2">{labels.activity.title}</Text>
-        </div>
-        <ResponsiveTable
-          columns={columns}
-          rows={activity}
-          getRowKey={(row) => row.id}
-          getRowClassName={() => ROW_HEIGHT_CLASS}
-          emptyState={<Text variant="muted">{labels.activity.empty}</Text>}
-        />
-      </Card>
-    </div>
+    </Card>
   );
 }
 
@@ -145,7 +131,17 @@ export function DashboardState({
   }
   return (
     <InlineAlert tone={ALERT_TONE[service.status]} title={labels.serviceState[service.status]} announce="polite">
-      {`${service.running}/${service.total}, ${fill(labels.stats.pending, stats.pendingSubmissions)}`}
+      <p>{`${service.running}/${service.total}, ${fill(labels.stats.pending, stats.pendingSubmissions)}`}</p>
+      {service.down.length > 0 && (
+        <ul className="mt-2 space-y-1">
+          {service.down.map((container) => (
+            <li key={container.name} className="flex items-baseline gap-2">
+              <span className="font-mono text-xs">{container.name}</span>
+              <span className="text-xs">{container.state}</span>
+            </li>
+          ))}
+        </ul>
+      )}
     </InlineAlert>
   );
 }
