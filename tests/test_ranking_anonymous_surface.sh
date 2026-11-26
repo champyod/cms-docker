@@ -67,6 +67,8 @@ check "a masked face serves the bundled dummy" \
     has "${RANKING}/src/entity_routes.rs" 'identity\.masked\(\) => return bundled'
 check "events map live and replayed payloads" \
     has "${RANKING}/src/events.rs" 'masked_frame'
+check "diagnostics reports the active identity policy" \
+    has "${RANKING}/src/http.rs" 'identity_masked: identity\.masked\(\)'
 check "the client no longer offers an unmask checkbox" \
     has "${RANKING}/static/Perspectives.js" 'anon-locked'
 check "the client does not mark a checked anonymous box" \
