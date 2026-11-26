@@ -84,6 +84,17 @@ impl Ledger {
         &self.board
     }
 
+    /// How many distinct contests the board draws a row for. Read by /diagnostics beside the
+    /// override scopes: a per-contest board reports one here per shown contest that has a
+    /// participation, where the single folded board reported one for the whole service.
+    pub fn contests_on_board(&self) -> usize {
+        self.board
+            .iter()
+            .map(|row| row.contest_id)
+            .collect::<std::collections::BTreeSet<_>>()
+            .len()
+    }
+
     /// Every row the fold dropped, so /diagnostics can say whether the board is missing
     /// anything. The causes below partition it.
     pub fn skipped_subchanges(&self) -> usize {

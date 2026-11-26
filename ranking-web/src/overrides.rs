@@ -113,6 +113,20 @@ pub struct ContestScope {
 }
 
 impl ContestScope {
+    /// Whether this contest carries no folded action at all.
+    pub fn is_empty(&self) -> bool {
+        self.hidden.users.is_empty()
+            && self.hidden.teams.is_empty()
+            && self.renamed.users.is_empty()
+            && self.renamed.teams.is_empty()
+            && self.scored.users.is_empty()
+            && self.scored.teams.is_empty()
+            && self.pinned.users.is_empty()
+            && self.pinned.teams.is_empty()
+            && self.guests.is_empty()
+            && self.frozen_at.is_none()
+    }
+
     pub fn hides(&self, kind: TargetKind, key: &str) -> bool {
         self.hidden.get(kind).contains(key)
     }
@@ -374,6 +388,16 @@ impl Overrides {
 
     pub fn skipped(&self) -> usize {
         self.skipped
+    }
+
+    /// How many contests hold at least one folded action. Read by /diagnostics so an
+    /// operator can see the per-contest fold is live: with two contests shown and one
+    /// override each this is 2, and a regression that folds into one set reports 1.
+    pub fn scoped_contests(&self) -> usize {
+        self.scopes
+            .values()
+            .filter(|scope| !scope.is_empty())
+            .count()
     }
 
     pub fn hides(&self, kind: TargetKind, key: &str) -> bool {

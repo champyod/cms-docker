@@ -212,6 +212,8 @@ fn the_diagnostics_surface_keeps_its_keys_and_adds_the_causes() {
         withheld_task_hides: 1,
         renamed_task_hides: 2,
         unmatched_task_hides: 3,
+        contests_on_board: 1,
+        contests_with_overrides: 1,
     })
     .expect("the diagnostics serialize");
 

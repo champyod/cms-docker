@@ -360,12 +360,33 @@ pub async fn load_standings(pool: &PgPool, served: ServedContest) -> Result<Stan
     let team_names = load_team_names(pool).await?;
     let overrides = load_overrides(pool, &shown).await?;
     let ledger = assemble_ledger(pool, &shown, &users, &overrides).await?;
+    announce_per_contest_board(&ledger, &overrides);
     Ok(Standings {
         ledger,
         users,
         team_names,
         overrides,
     })
+}
+
+/// Says once, in the service log, that the board is drawing per-contest rows with
+/// per-contest override scopes — the line an operator greps when a board looks wrong
+/// after a multi-contest change. WHY once: the board is rebuilt on every notification and
+/// on the 60 s belt, so a line per build would bury the log; the fact does not change
+/// between builds because it is a property of the shipped code, not of the data.
+fn announce_per_contest_board(ledger: &Ledger, overrides: &Overrides) {
+    static ANNOUNCED: std::sync::Once = std::sync::Once::new();
+    let contests = ledger.contests_on_board();
+    let scopes = overrides.scoped_contests();
+    if contests < 2 || scopes < 2 {
+        return;
+    }
+    ANNOUNCED.call_once(|| {
+        eprintln!(
+            "cms-ranking: per-contest board active: contests_on_board={contests} \
+             contests_with_overrides={scopes}"
+        );
+    });
 }
 
 /// One row of the projection snapshot `SNAPSHOT_SQL` reads: a task of a contest, or a contest

@@ -86,6 +86,12 @@ check "a row carries a contest-scoped DOM id" \
 check "the contest column is styled" \
     has "${RANKING}/static/Ranking.css" '#Scoreboard_cols col\.contest'
 
+check "the diagnostics counts the contests on the board and their scopes" \
+    has "${RANKING}/src/http.rs" 'contests_with_overrides: standings\.overrides\.scoped_contests\(\)'
+check "a contest with no override reads an empty scope" \
+    has "${RANKING}/src/overrides.rs" 'pub fn is_empty\(&self\) -> bool'
+check "ranks restart in each contest" \
+    has "${RANKING}/tests/overrides.rs" 'fn ranks_restart_in_each_contest'
 check "the live scope suite covers two shown contests" \
     has "${RANKING}/tests/override_scope.rs" 'a_user_in_two_shown_contests_gets_one_row_per_contest'
 check "the live scope suite covers one user with two rows" \

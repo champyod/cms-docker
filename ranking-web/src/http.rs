@@ -65,6 +65,13 @@ pub struct Diagnostics {
     /// The task hides naming neither a projected contest nor a projected task: nothing in the
     /// snapshot explains the key.
     pub unmatched_task_hides: usize,
+    /// How many contests the board draws a row for. Beside `contests_with_overrides` it is
+    /// the cheap proof that rows are per contest rather than folded into one board.
+    pub contests_on_board: usize,
+    /// How many contests hold at least one active override. A row override filed under one
+    /// contest must raise this only for its own contest; two contests with one override each
+    /// report 2, and a fold that lost the contest reports 1.
+    pub contests_with_overrides: usize,
 }
 
 /// Why the reason is a value and not a Response: clippy::result_large_err is right
@@ -420,6 +427,8 @@ async fn diagnostics(State(state): State<AppState>) -> Response {
             withheld_task_hides: standings.ledger.withheld_task_hides(),
             renamed_task_hides: standings.ledger.renamed_task_hides(),
             unmatched_task_hides: standings.ledger.unmatched_task_hides(),
+            contests_on_board: standings.ledger.contests_on_board(),
+            contests_with_overrides: standings.overrides.scoped_contests(),
         }),
         Err(error) => refuse(&error.to_string()),
     }

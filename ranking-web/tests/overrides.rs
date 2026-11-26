@@ -212,6 +212,49 @@ fn a_score_override_in_one_contest_does_not_replace_the_other() {
     assert_eq!(c2.score, 20.0, "C2 keeps its own score");
 }
 
+#[test]
+fn the_diagnostics_counts_two_contests_and_two_override_scopes() {
+    let overrides = Overrides::fold(&[
+        override_row_in(1, "user", "u0", "rename", Some("First Contest")),
+        override_row_in(2, "user", "u0", "rename", Some("Second Contest")),
+    ]);
+    let ledger = assemble_two_contests(&overrides);
+    assert_eq!(ledger.contests_on_board(), 2, "two contests carry a row");
+    assert_eq!(
+        overrides.scoped_contests(),
+        2,
+        "each override stays in its own contest scope"
+    );
+}
+
+#[test]
+fn a_contest_with_no_override_is_not_counted_as_a_scope() {
+    let overrides = Overrides::fold(&[override_row_in(1, "user", "u0", "hide", None)]);
+    let ledger = assemble_two_contests(&overrides);
+    assert_eq!(ledger.contests_on_board(), 1, "the C1 row is hidden");
+    assert_eq!(
+        overrides.scoped_contests(),
+        1,
+        "only C1 carries an override"
+    );
+}
+
+#[test]
+fn ranks_restart_in_each_contest() {
+    let overrides = Overrides::default();
+    let ledger = assemble_two_contests(&overrides);
+    let rows: Vec<(i32, i64)> = ledger
+        .board()
+        .iter()
+        .map(|row| (row.contest_id, row.rank.unwrap_or(0)))
+        .collect();
+    assert_eq!(rows.len(), 2);
+    assert!(
+        rows.iter().all(|(_contest, rank)| *rank == 1),
+        "each contest has its own first place: {rows:?}"
+    );
+}
+
 fn board_row<'a>(ledger: &'a Ledger, key: &str) -> &'a BoardRow {
     ledger
         .board()
