@@ -18,7 +18,12 @@ const ICON: Record<ThemePreference, typeof Sun> = {
   dark: Moon,
 };
 
-/** The icon shows the choice itself, or follow-system and light look identical whenever the OS is light. */
+/**
+ * One control, three states: system, light, dark. The icon shows the choice itself, not only
+ * the painted mode — otherwise "follow system" and "light" look identical whenever the OS is
+ * light, and the person cannot tell which one they picked. The tooltip names the next state,
+ * so the cycle is predictable before it is pressed.
+ */
 export function ThemeToggle(): React.JSX.Element {
   const { preference, cyclePreference } = useTheme();
 
@@ -41,7 +46,7 @@ export function ThemeToggle(): React.JSX.Element {
       variant="ghost"
       size="sm"
       iconOnly
-      tooltip={`Theme: ${LABEL[preference]}: switch to ${upcoming.toLowerCase()}`}
+      tooltip={`Theme: ${LABEL[preference]} — switch to ${upcoming.toLowerCase()}`}
       onClick={cyclePreference}
     >
       <motion.span

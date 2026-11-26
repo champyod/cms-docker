@@ -6,8 +6,7 @@ import type { RouteId } from '@/lib/navigation/types';
 import { getDictionary } from '@/i18n';
 import { getUserTeams } from '@/lib/people-read-models';
 import { parseRecordId, readRecordOrNotFound } from '@/lib/queries/record-access';
-import { ListPage } from '@/components/patterns/ListPage';
-import { UserTeamsEmpty, UserTeamsTab } from '@/components/users/UserTeamsTab';
+import { UserTeamsTab } from '@/components/users/UserTeamsTab';
 
 async function authorizeUserTab(routeId: RouteId): Promise<ReadonlySet<string>> {
   const route = ROUTE_REGISTRY.find((candidate) => candidate.id === routeId);
@@ -30,13 +29,5 @@ export default async function UserTeamsPage({ params }: { params: Promise<{ loca
   await authorizeUserTab('people.user-tabs.teams');
   const dictionary = await getDictionary(locale);
   const memberships = await readRecordOrNotFound(async () => ((await getUserTeams(id)) ?? null));
-  return (
-    <ListPage
-      // The user's record shell renders this tab's name, the user, the trail and the tab rail.
-      ownsHeader={false}
-      empty={memberships.length === 0 ? <UserTeamsEmpty copy={dictionary.users} /> : undefined}
-    >
-      <UserTeamsTab memberships={memberships} copy={dictionary.users} missing={dictionary.common.notSet} locale={locale as 'en' | 'th'} />
-    </ListPage>
-  );
+  return <UserTeamsTab memberships={memberships} navigation={dictionary.navigation} copy={dictionary.users} locale={locale as 'en' | 'th'} />;
 }

@@ -31,16 +31,6 @@ function block(selectorRegex) {
 
 const light = block(/^:root,\s*\n\.light\s*\{/m);
 const dark = block(/^\.dark\s*\{/m);
-// High contrast is an override layer, so a mode is its base block plus the overrides on top. It is
-// measured like any other mode: a palette nobody measures is a palette nobody can claim.
-const highContrast = { ...light, ...block(/^\.high-contrast\s*\{/m) };
-const darkHighContrast = { ...dark, ...block(/^\.dark\.high-contrast\s*\{/m) };
-const MODES = [
-  ['light', light],
-  ['dark', dark],
-  ['high-contrast', highContrast],
-  ['dark high-contrast', darkHighContrast],
-];
 
 /** sRGB relative luminance for #rgb/#rrggbb; oklch() is not accepted here by design. */
 function luminance(value) {
@@ -90,19 +80,17 @@ const REQUIRED = [
   'primary', 'primary-foreground', 'secondary', 'secondary-foreground', 'muted',
   'muted-foreground', 'accent', 'accent-foreground', 'destructive', 'destructive-foreground',
   'success', 'success-foreground', 'warning', 'warning-foreground', 'info', 'info-foreground',
-  'border', 'input', 'ring', 'motion-fast', 'motion-moderate', 'motion-slow', 'ease-standard',
+  'border', 'input', 'ring', 'text-label', 'text-body', 'text-card', 'text-section',
+  'text-page', 'text-display', 'motion-fast', 'motion-moderate', 'motion-slow', 'ease-standard',
 ];
 
-// The type ladder lives on Tailwind's own step names, in rem, so the reader's text-size preference
-// reaches every size. The chain is measured in px at a 16px root: 12 x 1.2, six steps.
-const TYPE_CHAIN = { xs: 12, sm: 14.4, base: 17.28, lg: 20.74, xl: 24.88, '2xl': 29.86 };
-const TYPE_STEPS = new Set(Object.keys(TYPE_CHAIN));
+const TYPE_CHAIN = { 'text-label': 12, 'text-body': 14.4, 'text-card': 17.28, 'text-section': 20.74, 'text-page': 24.88, 'text-display': 29.86 };
 const RADIUS_ALLOWED = new Set(['0px', '2px', '4px', '9999px']);
 
 const problems = [];
 const lines = [];
 
-for (const [mode, tokens] of MODES) {
+for (const [mode, tokens] of [['light', light], ['dark', dark]]) {
   for (const name of REQUIRED) {
     if (!(name in tokens)) problems.push(`${mode}: token --${name} is missing`);
   }
@@ -120,26 +108,14 @@ for (const [mode, tokens] of MODES) {
   }
 }
 
-const theme = block(/^@theme inline\s*\{/m);
-for (const [step, expected] of Object.entries(TYPE_CHAIN)) {
-  const value = theme[`text-${step}`];
-  if (!value) {
-    problems.push(`@theme: --text-${step} is missing, so text-${step} would fall back to Tailwind's default`);
-    continue;
-  }
-  if (!value.endsWith('rem')) {
-    problems.push(`@theme: --text-${step} is ${value}, a fixed unit does not follow the text-size preference`);
-    continue;
-  }
-  const px = Number.parseFloat(value) * 16;
-  if (Math.abs(px - expected) > 0.02) {
-    problems.push(`@theme: --text-${step} is ${value} (${px.toFixed(2)}px at a 16px root), the 12 x 1.2 chain gives ${expected}px`);
-  }
-  lines.push(`type  text-${step}: ${value} (${px.toFixed(2)}px)`);
-}
-for (const name of Object.keys(theme)) {
-  if (name.startsWith('text-') && !TYPE_STEPS.has(name.slice(5)) && !name.endsWith('--line-height')) {
-    problems.push(`@theme: --${name} is a seventh type step; the ladder has six`);
+for (const [name, expected] of Object.entries(TYPE_CHAIN)) {
+  for (const [mode, tokens] of [['light', light], ['dark', dark]]) {
+    const value = tokens[name];
+    if (!value) continue;
+    const px = Number.parseFloat(value);
+    if (Math.abs(px - expected) > 0.01) {
+      problems.push(`${mode}: ${name} is ${value}, the 12 x 1.2 chain gives ${expected}px`);
+    }
   }
 }
 

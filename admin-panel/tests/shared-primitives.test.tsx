@@ -6,7 +6,6 @@ import { FormField, SelectField, TextareaField } from '@/components/core/FormFie
 import { InlineAlert } from '@/components/core/InlineAlert';
 import { RowActions, type RowAction } from '@/components/core/RowActions';
 import { ModalFooter } from '@/components/core/ModalFooter';
-import { renderToStaticMarkup } from 'react-dom/server';
 import { SectionCard } from '@/components/core/SectionCard';
 import { NameDialog } from '@/components/core/NameDialog';
 
@@ -62,7 +61,9 @@ describe('SelectField', () => {
 
 describe('RowActions', () => {
   it('right-aligns the cluster so the actions hug the row edge', () => {
-    // The cluster owns its own right alignment, so no caller can forget it.
+    // Why pinned: the row is a right-aligned action column, so the cluster owns its
+    // own right alignment instead of every caller passing justify-end and one
+    // forgetting it.
     render(<RowActions ariaLabel="Task actions" actions={EDIT_DELETE} />);
     expect(screen.getByRole('group', { name: 'Task actions' }).className).toContain('justify-end');
   });
@@ -154,34 +155,6 @@ describe('SectionCard', () => {
     render(<SectionCard title="Datasets" expanded onToggle={onToggle} actions={<button type="button">Create</button>}><p>Body</p></SectionCard>);
     fireEvent.click(screen.getByRole('button', { name: 'Create' }));
     expect(onToggle).not.toHaveBeenCalled();
-  });
-
-  it('names the heading with the title alone, never with the count or the description', () => {
-    render(
-      <SectionCard title="Statements" count={12} description={<p>No statements uploaded yet.</p>}>
-        <p>Body</p>
-      </SectionCard>,
-    );
-    // An exact name match fails the moment the count joins the heading.
-    expect(screen.getByRole('heading', { level: 2, name: 'Statements' })).not.toBeNull();
-    expect(screen.queryByRole('heading', { name: /12/ })).toBeNull();
-    expect(screen.queryByRole('heading', { name: /No statements/ })).toBeNull();
-  });
-
-  it('renders the same heading level and size whether the section collapses or not', () => {
-    const plain = renderToStaticMarkup(<SectionCard title="Statements"><p>Body</p></SectionCard>);
-    const collapsible = renderToStaticMarkup(
-      <SectionCard title="Statements" expanded onToggle={() => undefined}><p>Body</p></SectionCard>,
-    );
-    for (const html of [plain, collapsible]) {
-      expect(html).toContain('<h2');
-      expect(html).toContain('text-base');
-    }
-  });
-
-  it('pads its own body so content never sits flush against the card edge', () => {
-    const html = renderToStaticMarkup(<SectionCard title="Statements"><p>Body</p></SectionCard>);
-    expect(html).toMatch(/px-4 pb-4[^>]*><p>Body/);
   });
 });
 

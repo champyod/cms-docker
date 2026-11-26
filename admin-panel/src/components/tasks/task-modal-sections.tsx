@@ -4,28 +4,10 @@ import { Info } from 'lucide-react';
 
 import { ApplyLimitsButton } from '@/components/limits/ApplyLimitsButton';
 import { LimitField } from '@/components/core/LimitField';
-import { Input } from '@/components/core/Input';
-import { Select, type SelectOption } from '@/components/core/Select';
-import { LABEL_CLASSES } from '@/components/core/fieldStyles';
 import { useDictionary } from '@/hooks/useDictionary';
 import { interpolate } from '@/lib/interpolate';
 import { normalizeNonNegativeInt, type LimitFieldName } from '@/lib/limits';
-import { cn } from '@/lib/utils';
 import type { TaskData } from '@/app/actions/tasks';
-
-const FIELD_LABEL = cn('mb-2 block', LABEL_CLASSES);
-
-const SCORE_MODES: readonly SelectOption[] = [
-  { value: 'max', label: 'Max' },
-  { value: 'max_subtask', label: 'Max Subtask' },
-  { value: 'max_tokened_last', label: 'Max Tokened Last' },
-];
-
-const FEEDBACK_LEVELS: readonly SelectOption[] = [
-  { value: 'restricted', label: 'Restricted' },
-  { value: 'oi_restricted', label: 'OI Restricted' },
-  { value: 'full', label: 'Full' },
-];
 
 export function InfoButton({ text }: { text: string }): React.JSX.Element {
   return (
@@ -78,28 +60,28 @@ export function GeneralTab({ formData, onChange }: TabProps): React.JSX.Element 
   return (
     <div className="space-y-6">
       <div>
-        <label htmlFor="task-name" className={FIELD_LABEL}>
+        <label className="block text-xs font-bold text-muted-foreground uppercase mb-2">
           Task Name (Short ID)
           <InfoButton text="Unique identifier (e.g., 'aplusb'). Only letters, numbers, underscores and dashes allowed." />
         </label>
-        <Input
-          id="task-name"
+        <input
           type="text"
           value={formData.name}
           onChange={(e) => onChange({ ...formData, name: e.target.value })}
           placeholder="e.g., aplusb"
           required
+          className="w-full px-4 py-3 bg-muted/50 border border-border rounded-xl text-foreground focus:outline-none focus:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 transition-colors"
         />
       </div>
       <div>
-        <label htmlFor="task-title" className={FIELD_LABEL}>Title</label>
-        <Input
-          id="task-title"
+        <label className="block text-xs font-bold text-muted-foreground uppercase mb-2">Title</label>
+        <input
           type="text"
           value={formData.title}
           onChange={(e) => onChange({ ...formData, title: e.target.value })}
           placeholder="e.g., A Plus B Problem"
           required
+          className="w-full px-4 py-3 bg-muted/50 border border-border rounded-xl text-foreground focus:outline-none focus:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 transition-colors"
         />
       </div>
     </div>
@@ -111,38 +93,44 @@ export function GradingTab({ formData, onChange }: TabProps): React.JSX.Element 
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
         <div>
-          <label htmlFor="task-score-mode" className={FIELD_LABEL}>
+          <label className="block text-xs font-bold text-muted-foreground uppercase mb-2">
             Score Mode
             <InfoButton text="Defines how the final score is calculated from multiple datasets/submissions." />
           </label>
-          <Select
-            id="task-score-mode"
+          <select
             value={formData.score_mode}
             onChange={(e) => onChange({ ...formData, score_mode: e.target.value })}
-            options={SCORE_MODES}
-          />
+            className="w-full px-4 py-3 bg-muted/50 border border-border rounded-xl text-foreground focus:outline-none focus:border-ring focus-visible:ring-2 focus-visible:ring-ring/50"
+          >
+            <option value="max">Max</option>
+            <option value="max_subtask">Max Subtask</option>
+            <option value="max_tokened_last">Max Tokened Last</option>
+          </select>
         </div>
         <div>
-          <label htmlFor="task-feedback-level" className={FIELD_LABEL}>
+          <label className="block text-xs font-bold text-muted-foreground uppercase mb-2">
             Feedback Level
             <InfoButton text="Determines how much information is shown to the participant after a submission." />
           </label>
-          <Select
-            id="task-feedback-level"
+          <select
             value={formData.feedback_level}
             onChange={(e) => onChange({ ...formData, feedback_level: e.target.value })}
-            options={FEEDBACK_LEVELS}
-          />
+            className="w-full px-4 py-3 bg-muted/50 border border-border rounded-xl text-foreground focus:outline-none focus:border-ring focus-visible:ring-2 focus-visible:ring-ring/50"
+          >
+            <option value="restricted">Restricted</option>
+            <option value="oi_restricted">OI Restricted</option>
+            <option value="full">Full</option>
+          </select>
         </div>
       </div>
       <div>
-        <label htmlFor="task-score-precision" className={FIELD_LABEL}>Score Precision</label>
-        <Input
-          id="task-score-precision"
+        <label className="block text-xs font-bold text-muted-foreground uppercase mb-2">Score Precision</label>
+        <input
           type="number"
           value={formData.score_precision ?? ''}
           onChange={(e) => onChange({ ...formData, score_precision: e.target.value ? parseInt(e.target.value, 10) : null })}
           placeholder="0"
+          className="w-full px-4 py-3 bg-muted/50 border border-border rounded-xl text-foreground focus:outline-none focus:border-ring focus-visible:ring-2 focus-visible:ring-ring/50"
         />
         <p className="text-xs text-muted-foreground mt-1">Number of decimal places for score.</p>
       </div>
@@ -167,8 +155,8 @@ function ThrottleOverrideField({ formData, onChange }: TabProps): React.JSX.Elem
       : interpolate(throttle.overrideSeconds, { seconds: value });
   return (
     <div className="space-y-1 md:col-span-2" data-field="evaluation_throttle_delay_s">
-      <label htmlFor="evaluation_throttle_delay_s" className={FIELD_LABEL}>{throttle.overrideLabel} (sec)</label>
-      <Input
+      <label htmlFor="evaluation_throttle_delay_s" className="block text-xs font-bold text-muted-foreground uppercase mb-2">{throttle.overrideLabel} (sec)</label>
+      <input
         id="evaluation_throttle_delay_s"
         type="number"
         min={0}
@@ -176,6 +164,7 @@ function ThrottleOverrideField({ formData, onChange }: TabProps): React.JSX.Elem
         placeholder={throttle.overridePlaceholder}
         value={value ?? ''}
         onChange={(e) => onChange({ ...formData, evaluation_throttle_delay_s: normalizeNonNegativeInt(e.target.value) })}
+        className="w-full px-4 py-3 bg-muted/50 border border-border rounded-xl text-foreground focus:outline-none focus:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 transition-colors"
       />
       <p className="text-xs text-muted-foreground">{throttle.overrideHint}</p>
       <p className="text-xs font-medium text-primary">{stateHint}</p>
@@ -185,7 +174,8 @@ function ThrottleOverrideField({ formData, onChange }: TabProps): React.JSX.Elem
 
 export function LimitsTab({ formData, onChange }: TabProps): React.JSX.Element {
   const limits = useDictionary().limits;
-  // Why a partial: the label map covers the whole family, the hint map only fields that need explaining.
+  // Why the cast to a partial: the label map covers the whole family, the hint map only the
+  // fields that need explaining.
   const hints: Partial<Record<TaskLimitField, string>> = limits.hints;
 
   return (
@@ -205,7 +195,8 @@ export function LimitsTab({ formData, onChange }: TabProps): React.JSX.Element {
         ))}
         <ThrottleOverrideField formData={formData} onChange={onChange} />
       </div>
-      {/* Why here: it pushes the four shared limits to the contest kind, a second way out of the same fields. */}
+      {/* Why at the tab's foot: it pushes the values the four shared limits hold right now to the
+          other kind (contests), so the button reads as a second way out of the same fields. */}
       <div className="flex justify-end">
         <ApplyLimitsButton
           kinds={['contest']}

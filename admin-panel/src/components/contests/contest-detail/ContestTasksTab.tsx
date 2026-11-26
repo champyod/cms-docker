@@ -25,6 +25,7 @@ function useTabLocale(): string {
 }
 
 export function ContestTasksTab({ data }: ContestTasksTabProps): React.JSX.Element {
+  const [expanded, setExpanded] = useState(true);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const actions = useContestTaskActions(data.contestId);
   const refresh = useTabRefresh();
@@ -51,9 +52,11 @@ export function ContestTasksTab({ data }: ContestTasksTabProps): React.JSX.Eleme
       <ContestTasksSection
         contestId={data.contestId}
         tasks={[...data.tasks]}
+        expanded={expanded}
         locale={locale}
         permissionKeys={data.permissionKeys}
         copy={dict}
+        onToggle={() => setExpanded((previous) => !previous)}
         onAddTask={() => actions.setIsTaskModalOpen(true)}
         onAttachTasks={() => actions.setIsTaskModalOpen(true)}
         onRemoveTask={(taskId) => { void actions.handleRemoveTask(taskId); }}

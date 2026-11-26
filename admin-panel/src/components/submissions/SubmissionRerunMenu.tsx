@@ -13,7 +13,7 @@ function RerunMenuItem({ label, onSelect }: {
     <button
       type="button"
       role="menuitem"
-      className="block w-full rounded-md px-2 py-1.5 text-left text-sm text-destructive hover:bg-destructive/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+      className="block w-full rounded-md px-2 py-1.5 text-left text-sm text-destructive hover:bg-destructive/10 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
       onClick={onSelect}
     >
       {label}

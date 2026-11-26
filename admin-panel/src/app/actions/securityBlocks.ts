@@ -103,7 +103,12 @@ export async function readBannedAddresses(): Promise<BannedAddressView> {
   };
 }
 
-/** The ledger row is the operator's record; a row whose expiry has passed is closed before the list is read. */
+/**
+ * Every login lockout, read from the ledger the web servers write to. The counter a
+ * lockout is enforced from lives in the shared store; this row is the operator's record
+ * of it, so a row whose expiry has passed is closed before the list is read rather than
+ * shown as a live lockout nobody can lift.
+ */
 export async function readLoginLockouts(): Promise<readonly SecurityBlock[]> {
   await ensurePermission('security:read');
   await ensurePermission('lockout:read');
@@ -138,7 +143,10 @@ export async function queueUnban(jail: string, ip: string, reason: string): Prom
     requestedAt: new Date().toISOString(),
   });
   if (built.request === null) return { success: false, error: built.errors.join('; ') };
-  // The request is consumed when the agent next runs, so a panel that has never seen state can still queue one.
+  // WHY a missing agent report is not a refusal: the request is consumed when the
+  // agent next runs, so a panel that has never seen state can still queue one.
+  // Refusing without state is what made every unban dead on a host whose agent was
+  // down, leaving an operator no recovery path but a manual edit.
   const state = await readAgentState();
   if (isKnownUnbanned(state, jail, ip)) {
     return { success: false, error: `${ip} is not currently banned in ${jail}` };
@@ -166,7 +174,7 @@ export async function unlockLoginLockout(username: string, ip: string, reason: s
   revalidatePath(BLOCKS_PAGE_PATH, 'page');
   return {
     success: true,
-    message: closed > 0 ? `Lockout lifted for ${username}` : `No open lockout row for ${username}: the in-memory counter was cleared`,
+    message: closed > 0 ? `Lockout lifted for ${username}` : `No open lockout row for ${username} — the in-memory counter was cleared`,
   };
 }
 
@@ -174,7 +182,12 @@ export type LoginActivityResult =
   | { readonly ok: true; readonly rows: readonly LoginActivity[] }
   | { readonly ok: false; readonly error: string };
 
-/** The counters are the enforcement; absent Redis they are unreadable, which is reported rather than shown as an empty list. */
+/**
+ * Every live login-failure counter, read from the shared store. The counters are
+ * the enforcement; the ledger read above is the record of the lockouts they
+ * produced. Absent Redis the counters are unreadable, which is reported rather
+ * than shown as an empty list.
+ */
 export async function readLoginActivity(): Promise<LoginActivityResult> {
   await ensurePermission('security:read');
   await ensurePermission('lockout:read');
@@ -187,14 +200,22 @@ export async function readLoginActivity(): Promise<LoginActivityResult> {
   }
 }
 
-/** A detail of the already-audited list above, so it writes no audit row of its own. */
+/**
+ * The attempts behind one live counter, read lazily when an operator expands the
+ * row. It is a detail of the already-audited list above, so it writes no audit row
+ * of its own.
+ */
 export async function readCounterAttempts(key: string): Promise<CounterAttemptsResult> {
   await ensurePermission('security:read');
   await ensurePermission('lockout:read');
   return listCounterAttempts(key);
 }
 
-/** The clear routes through the counter's own namespace, so a ranking-surface key clears exactly as a contest one does. */
+/**
+ * Lifts one live counter. The clear routes through the counter's own namespace,
+ * so a ranking-surface key is cleared from this page exactly as a contest one is
+ * — the divergence the ranking screen used to paper over with its own prefix.
+ */
 export async function clearLoginActivity(key: string, reason: string): Promise<BlocksActionResult> {
   await ensurePermission('lockout:unlock');
   if (reason.trim().length === 0) return { success: false, error: 'A reason is required to lift a lockout' };

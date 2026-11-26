@@ -282,12 +282,12 @@ function BatchQueue({
       {pending.map((entry) => (
         <li
           key={pendingKey(entry)}
-          className="flex items-center gap-2 rounded-full border border-border bg-muted px-3 py-1 text-xs text-muted-foreground"
+          className="flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs text-primary"
         >
           <span>{`${entry.targetKind} ${entry.targetKey}`}</span>
           <button
             type="button"
-            className="text-muted-foreground hover:text-foreground"
+            className="text-primary/70 hover:text-primary"
             aria-label={`${copy.batchRemove} ${entry.targetKey}`}
             onClick={() => onRemove(pendingKey(entry))}
           >

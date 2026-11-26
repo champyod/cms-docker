@@ -17,11 +17,13 @@ export async function MonitorConfigSection(): Promise<React.ReactElement> {
   const enhanced = process.env.MONITOR_ENHANCED === '1';
 
   if (!enhanced) {
-    // The settings group above owns the title and the frame; this is the one fact it cannot know.
     return (
-      <p className="text-sm text-muted-foreground">
-        Monitor enhancement disabled (set MONITOR_ENHANCED=1 in .env).
-      </p>
+      <div className="bg-card backdrop-blur-xl border border-border rounded-2xl p-6">
+        <h2 className="text-lg font-semibold text-foreground mb-2">Monitor Configuration</h2>
+        <p className="text-muted-foreground text-sm">
+          Monitor enhancement disabled (set MONITOR_ENHANCED=1 in .env).
+        </p>
+      </div>
     );
   }
 

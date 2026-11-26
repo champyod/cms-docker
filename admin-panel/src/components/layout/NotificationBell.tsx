@@ -14,7 +14,17 @@ interface NotificationBellProps {
   onSeen: () => void;
 }
 
-/** The count clears on the open transition, the one state change every opening path passes through. */
+/**
+ * System alert bell: the critical admin actions and unusual-activity warnings the notification service
+ * holds, rendered as a count over its own panel.
+ *
+ * Why the bell renders and does not listen: the service owns the connection, the dedup and the
+ * alerting, so this stays the same bell whether its alerts arrive from the audit stream or from a
+ * later channel.
+ *
+ * Why the count is cleared on the transition and not on the press: the panel opens from the bell,
+ * and that one state change is the only place every opening path passes through.
+ */
 export function NotificationBell({ events, unread, onClear, onSeen }: NotificationBellProps): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const anchorRef = useRef<HTMLDivElement>(null);
@@ -39,7 +49,7 @@ export function NotificationBell({ events, unread, onClear, onSeen }: Notificati
         <span className="relative flex">
           <BellRing className="size-4" />
           {unread > 0 && (
-            <span className="absolute -top-1.5 -right-1.5 min-w-4 h-4 px-0.5 rounded-full bg-destructive text-xs font-bold text-white flex items-center justify-center animate-pulse">
+            <span className="absolute -top-1.5 -right-1.5 min-w-4 h-4 px-0.5 rounded-full bg-destructive text-[10px] font-bold text-white flex items-center justify-center animate-pulse">
               {unread > 9 ? '9+' : unread}
             </span>
           )}

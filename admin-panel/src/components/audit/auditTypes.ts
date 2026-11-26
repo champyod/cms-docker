@@ -16,12 +16,13 @@ export interface AuditFilterValues {
   toDate?: string;
 }
 
-/** The count and page number belong to the layout's footer; a table carrying them is a second place they could disagree. */
 export interface AuditTableProps {
   entries: AuditLogRow[];
+  total: number;
+  totalPages: number;
+  currentPage: number;
+  filters: AuditFilterValues;
   dict: AuditDict;
+  permissionKeys: string[];
   sort?: ListSortInput;
-  /** True when the address asked for the live cursor; the table then reloads on a new row. */
-  autoRefresh?: boolean;  /** common.notSet: a cell whose value the record does not hold. */
-  readonly missing: string;
 }

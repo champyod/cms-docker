@@ -50,7 +50,7 @@ function TableRow({ table, selected, disabled, locked, onToggle }: TableRowProps
             {locked && (
                 <span
                     title="Pulled in because a selected table stores a digest that resolves into it; removing it would make those rows unrestorable."
-                    className="ml-auto inline-flex items-center gap-1 text-xs font-bold uppercase tracking-widest text-sky-300 shrink-0"
+                    className="ml-auto inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-sky-300 shrink-0"
                 >
                     <Lock className="size-3" />
                     Required
@@ -59,7 +59,7 @@ function TableRow({ table, selected, disabled, locked, onToggle }: TableRowProps
             {!locked && table.needsLargeObjects === true && (
                 <span
                     title="Rows reference large objects, so fsobjects must be in the same dump."
-                    className="ml-auto text-xs font-bold uppercase tracking-widest text-amber-400 shrink-0"
+                    className="ml-auto text-[10px] font-bold uppercase tracking-widest text-amber-400 shrink-0"
                 >
                     LO
                 </span>
@@ -76,12 +76,14 @@ export function BackupSelectionSection({ onBackupComplete, locationId }: BackupS
     const handleToggle = (name: string) => {
         setSelected((current) => {
             const next = current.includes(name) ? current.filter((entry) => entry !== name) : [...current, name];
-            // Required tables come back automatically, so deselecting the last consumer is not a two-step act.
+            // Required tables come back automatically, so deselecting the last consumer
+            // of the large-object subtree is not a two-step act the user has to know about.
             return withRequiredTables(next);
         });
     };
 
-    // The confirmation dialog and pg_dump receive the same set, the required tables included.
+    // The dump the server runs is this list, the required tables included: what the
+    // confirmation dialog names and what pg_dump receives are the same set.
     const orderedSelection = useMemo(() => withRequiredTables(selected), [selected]);
     const validation = useMemo(() => validateTableSelection([...orderedSelection]), [orderedSelection]);
 

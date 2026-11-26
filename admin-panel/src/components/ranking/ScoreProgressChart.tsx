@@ -23,6 +23,11 @@ export interface ScoreProgressChartProps {
   readonly className?: string;
 }
 
+/**
+ * Responsive progress bar chart for contestant scores.
+ * Scales fluidly across container widths without fixed sizing.
+ * Allows independent toggling of X-axis and Y-axis labels.
+ */
 export function ScoreProgressChart({
   entries,
   showXLabels,
@@ -136,7 +141,7 @@ export function ScoreProgressChart({
               >
                 <div className="h-1.5 w-px bg-border" />
                 {showXLabels ? (
-                  <span className="font-mono text-xs text-muted-foreground mt-0.5">
+                  <span className="font-mono text-[10px] text-muted-foreground mt-0.5">
                     {tick.value}
                   </span>
                 ) : null}

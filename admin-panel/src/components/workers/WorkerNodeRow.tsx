@@ -3,8 +3,6 @@
 import { useState, type ReactElement } from 'react';
 import { ChevronDown, ChevronUp, Trash2, Wifi, WifiOff } from 'lucide-react';
 import { Badge } from '@/components/core/Badge';
-import { Button } from '@/components/core/Button';
-import { Input } from '@/components/core/Input';
 import { StatusPill } from '@/components/core/StatusPill';
 import type { WorkerNodeListRow } from '@/lib/worker-nodes';
 
@@ -16,6 +14,9 @@ interface WorkerNodeRowProps {
   onEdit?: (key: string, field: 'host' | 'port', value: string) => void;
 }
 
+const INPUT_CLASS =
+  'bg-background/80 border border-border rounded-md px-2.5 py-1.5 text-sm text-foreground font-mono outline-none focus:border-ring/60';
+
 function workerLabel(row: WorkerNodeListRow): string {
   return row.host || row.key;
 }
@@ -26,26 +27,21 @@ function EndpointField({ row, canManage, onEdit }: WorkerNodeRowProps): ReactEle
   }
   return (
     <>
-      <div className="min-w-0 flex-1">
-        <Input
-          type="text"
-          value={row.host}
-          onChange={(event) => onEdit(row.key, 'host', event.target.value)}
-          placeholder="Host (e.g., cms-worker-0)"
-          aria-label={`Host for worker ${workerLabel(row)}`}
-          className="font-mono"
-        />
-      </div>
-      <div className="w-20">
-        <Input
-          type="number"
-          value={row.port}
-          onChange={(event) => onEdit(row.key, 'port', event.target.value)}
-          placeholder="26000"
-          aria-label={`Port for worker ${workerLabel(row)}`}
-          className="font-mono"
-        />
-      </div>
+      <input
+        value={row.host}
+        onChange={(event) => onEdit(row.key, 'host', event.target.value)}
+        placeholder="Host (e.g., cms-worker-0)"
+        aria-label={`Host for worker ${workerLabel(row)}`}
+        className={`flex-1 min-w-0 ${INPUT_CLASS}`}
+      />
+      <input
+        value={row.port}
+        onChange={(event) => onEdit(row.key, 'port', event.target.value)}
+        type="number"
+        placeholder="26000"
+        aria-label={`Port for worker ${workerLabel(row)}`}
+        className={`w-20 ${INPUT_CLASS}`}
+      />
     </>
   );
 }
@@ -54,7 +50,8 @@ export function WorkerNodeRow(props: WorkerNodeRowProps): ReactElement {
   const { index, row, canManage, onRemove } = props;
   const live = row.live;
   const [expanded, setExpanded] = useState(false);
-  // A row the stream names but the configuration does not carry has no entry to act on, so both controls would write nothing.
+  // Why: a row the live stream names but the configuration does not carry has no entry for
+  // Remove or Edit to act on, so both would look functional and write nothing.
   const editable = canManage && row.configured;
 
   return (
@@ -72,15 +69,13 @@ export function WorkerNodeRow(props: WorkerNodeRowProps): ReactElement {
         {live?.lagging && <Badge variant="destructive">{`${live.tasks} queued`}</Badge>}
 
         {editable && onRemove && (
-          <Button
-            variant="ghost"
-            iconOnly
-            icon={Trash2}
-            tooltip={`Remove worker ${row.host}`}
-            aria-label={`Remove worker ${row.host}`}
+          <button
             onClick={() => onRemove(row.key)}
-            className="ml-auto size-11 shrink-0 hover:text-destructive"
-          />
+            aria-label={`Remove worker ${row.host}`}
+            className="ml-auto flex size-8 shrink-0 items-center justify-center rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
         )}
       </div>
 
@@ -96,22 +91,20 @@ export function WorkerNodeRow(props: WorkerNodeRowProps): ReactElement {
           {live.uptime && <span>up {live.uptime}</span>}
           {live.restarts > 0 && <span className="text-warning">restarts: {live.restarts}</span>}
           {live.lastLog && (
-            <Button
-              variant="link"
-              size="sm"
-              icon={expanded ? ChevronUp : ChevronDown}
+            <button
               onClick={() => setExpanded((value) => !value)}
               aria-label="Toggle worker log"
-              className="ml-auto text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+              className="ml-auto inline-flex items-center gap-1 text-info hover:text-info/80"
             >
+              {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
               log
-            </Button>
+            </button>
           )}
         </div>
       )}
 
       {!live && (
-        <div className="mt-1.5 text-xs text-muted-foreground">No telemetry yet: is this worker deployed?</div>
+        <div className="mt-1.5 text-xs text-muted-foreground">No telemetry yet — is this worker deployed?</div>
       )}
 
       {expanded && live?.lastLog && (

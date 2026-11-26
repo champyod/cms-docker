@@ -26,7 +26,7 @@ export function ContainerAutoRestartSection({ autoRestart, onToggle }: Container
           type="button"
           role="switch"
           aria-checked={autoRestart}
-          aria-label={`Auto-restart ${autoRestart ? 'enabled' : 'disabled'}: click to ${autoRestart ? 'disable' : 'enable'}`}
+          aria-label={`Auto-restart ${autoRestart ? 'enabled' : 'disabled'} — click to ${autoRestart ? 'disable' : 'enable'}`}
           onClick={onToggle}
           className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
         >

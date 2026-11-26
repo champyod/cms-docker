@@ -18,7 +18,9 @@ import { highlightedLines } from './source-highlight';
 /** Rows the collapsed view shows; the rest of a long file stays one click away. */
 const PREVIEW_ROW_COUNT = 12;
 
-// The syntax colours come from the panel's own tokens, so the box must not paint a surface of its own.
+// Why no surface class on the scroll box: the code reads as part of the card it sits in, and the
+// syntax colours come from the panel's own tokens in globals.css rather than from a bundled theme
+// whose background would paint the panel a colour of its own.
 const SCROLL_CLASS = 'source-code max-h-96 overflow-auto rounded-lg border border-border p-3';
 const ROW_CLASS = 'grid min-h-5 items-start leading-5';
 const COMPARE_COLUMNS = 'grid-cols-[2.25rem_2.25rem_1rem_minmax(0,1fr)]';
@@ -60,7 +62,18 @@ export interface SubmissionSourceViewerProps {
   readonly previous?: SubmissionPreviousModel | null;
 }
 
-/** One view: the previous submission is the gutter, so one scroll answers what it stores and what it changed. */
+/**
+ * The submission's own source, rendered as code with its diff to the previous submission inline.
+ *
+ * Why one view and not a source viewer beside a comparison: both read the same bytes for the same
+ * file, so two panels showed the same code twice and left the reader to line the copies up by eye.
+ * Here the previous submission is the gutter — a removed line carries its own number and text
+ * where the current source would sit — so one scroll answers "what does this store" and "what did
+ * it change" together, and a submission with no predecessor is the same view with a plain gutter.
+ * A predecessor that stored no file, or whose file this reader may not open, leaves nothing to
+ * diff: the comparison is then a note naming which of the two it is, never a summary of a
+ * comparison the panel did not run.
+ */
 export function SubmissionSourceViewer({ source, previous = null }: SubmissionSourceViewerProps): React.JSX.Element {
   const copy = useDictionary().submissions.record.source;
   const current = readableSource(source);
@@ -82,7 +95,9 @@ export function SubmissionSourceViewer({ source, previous = null }: SubmissionSo
   );
 }
 
-// Both digests are asked for in the same pass, so the diff never renders against half a comparison.
+// Why the digest: the code bytes are a content-addressed fsobject, so the panel asks for them only
+// once the viewer is on screen — and asks for the previous submission's in the same pass, so the
+// diff never renders against half a comparison.
 function useSourceBytes(current: ReadableSource | null, previous: ReadableSource | null): {
   readonly bytes: SourceBytes | null;
   readonly failed: string | null;
@@ -119,7 +134,9 @@ function useSourceBytes(current: ReadableSource | null, previous: ReadableSource
   return { bytes, failed };
 }
 
-// A line only the previous submission had and a line only this one has are the two halves of one change.
+// Why a number per side: a line only the previous submission had and a line only this one has are
+// the two halves of one change, and a reader has to be able to name either side's line — the same
+// reason a unified diff keeps both columns.
 function buildRows(bytes: SourceBytes, language: string | null): readonly DiffRow[] {
   const current = highlightedLines(bytes.current, language);
   if (bytes.previous === null) {
@@ -134,7 +151,8 @@ function buildRows(bytes: SourceBytes, language: string | null): readonly DiffRo
   }));
 }
 
-// A removed row shows the previous submission's line: that is the side of the change it belongs to.
+// A removed row shows the previous submission's line, because that is the side of the change the
+// line belongs to; every other row shows the line this submission stores.
 function rowHtml(row: LineDiffRow, current: readonly string[], before: readonly string[]): string {
   const number = row.kind === 'removed' ? row.leftNumber : row.rightNumber;
   if (number === null) return '';
@@ -157,7 +175,8 @@ function SourceBody({ summary, bytes, failed, previous, emptyLabel, hiddenLabel,
   return <SourceDiff bytes={bytes} summary={summary} previous={previous} />;
 }
 
-// An unreadable file is a permission boundary, so the viewer names the key instead of reading as missing data.
+// Why an explicit reason: an unreadable file is a permission boundary, so the panel names the key
+// instead of rendering an empty viewer that reads as missing data.
 function HiddenSource({ label }: { readonly label: string }): React.JSX.Element {
   return (
     <InlineAlert tone="info" density="compact">
@@ -198,7 +217,7 @@ function DiffSummary({ previous, current, added, removed }: {
   return (
     <p className="text-xs text-muted-foreground">
       {interpolate(compare.previous, { id: previous })} → {interpolate(compare.current, { id: current })}
-      {', '}
+      {' · '}
       {added === 0 && removed === 0 ? compare.equal : interpolate(compare.summary, { added, removed })}
     </p>
   );
@@ -215,7 +234,11 @@ function SourceDiff({ bytes, summary, previous }: {
   const [wrap, setWrap] = useState(true);
 
   const showCompare = bytes.previous !== null;
-  // No predecessor file and no permission to open one both leave nothing to diff, and each says so in its own words.
+  // Why a state per cause and not a bare "previous or nothing": a predecessor that stored no file
+  // and one whose file this reader may not open both leave nothing to diff, and each says so in its
+  // own words — the in-place states the two-card view kept. Reporting the comparison summary in
+  // either case would assert a result for a comparison the panel never made, which reads to the
+  // reviewer as "the sources are equal" and is the one thing this view must not do.
   const previousNote = previous === null || showCompare
     ? null
     : previous.source === null ? 'empty' : 'hidden';

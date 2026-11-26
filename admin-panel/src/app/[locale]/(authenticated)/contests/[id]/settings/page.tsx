@@ -5,14 +5,14 @@ import { ROUTE_REGISTRY } from '@/lib/navigation/registry';
 import type { RouteId } from '@/lib/navigation/types';
 import { getContestSettings } from '@/lib/queries/contest-detail';
 import { parseRecordId, readRecordOrNotFound } from '@/lib/queries/record-access';
-import { SettingsPage } from '@/components/patterns/SettingsPage';
 import { ContestSettingsTab } from '@/components/contests/contest-detail/ContestSettingsTab';
 
 type ContestRouteProps = {
   params: Promise<{ locale: string; id: string }>;
 };
 
-// The page resolves the registry route itself so a disabled or narrowed descriptor 404s before the data is read.
+// Why: the reader enforces the same keys, but the page must resolve the exact
+// registry route first so a disabled or narrowed descriptor 404s before data.
 async function authorizeContestTab(routeId: RouteId): Promise<ReadonlySet<string>> {
   const route = ROUTE_REGISTRY.find((candidate) => candidate.id === routeId);
   if (!route || !route.enabled) notFound();
@@ -27,26 +27,11 @@ async function authorizeContestTab(routeId: RouteId): Promise<ReadonlySet<string
   }
 }
 
-export default async function ContestSettingsPage({ params }: ContestRouteProps): Promise<React.JSX.Element> {
+export default async function ContestSettingsPage({ params }: ContestRouteProps) {
   const { id } = await params;
   const contestId = parseRecordId(id);
   if (contestId === null) notFound();
   await authorizeContestTab('contests.tabs.settings');
   const data = await readRecordOrNotFound(() => getContestSettings(contestId));
-  return (
-    <SettingsPage
-      // The record shell above renders the contest's name, its trail and its tabs.
-      ownsHeader={false}
-      groups={[
-        {
-          key: 'contest',
-          title: 'Contest Settings',
-          description: 'How this contest presents itself, and what it lets contestants do.',
-          // The toggles change the contestant side, not the operator's screen, so the group says so before one is flipped.
-          scope: 'Every contestant of this contest: nobody else.',
-          children: <ContestSettingsTab data={data} />,
-        },
-      ]}
-    />
-  );
+  return <ContestSettingsTab data={data} />;
 }

@@ -2,36 +2,12 @@
 import { act, cleanup, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  CoreServicesSection,
-  CountersSection,
-  MetricsSection,
-  ResourceWorkersSection,
-  ResourcesProvider,
-  TrafficSection,
-} from '@/components/resources/ResourceView';
+import { ResourceView } from '@/components/resources/ResourceView';
 import { DictionaryProvider } from '@/components/providers/DictionaryProvider';
 import type { ResourceFrame, ServerStats, StatsSource, WorkerNodeView } from '@/lib/live-frames';
 import type { LiveSectionReads } from '@/lib/live/frames';
 import en from '@/dictionaries/en.json';
 import { encodedFrame } from './stream-frames';
-
-/**
- * The five sections the page's board renders, composed here without a layout: the surface under
- * test is what each section shows, and the board above it is not this suite's subject.
- */
-function ResourceView(): React.JSX.Element {
-  return (
-    <ResourcesProvider>
-      <CoreServicesSection />
-      <CountersSection />
-      <ResourceWorkersSection />
-      <MetricsSection />
-      <TrafficSection />
-    </ResourcesProvider>
-  );
-}
-
 
 /**
  * Why this drives frames in rather than rendering a prop: the source label and the pending cards are

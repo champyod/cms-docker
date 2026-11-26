@@ -17,12 +17,21 @@ interface ContestSource {
   readonly id: number | null;
 }
 
-// The page exists to show what each source holds, so the mismatch names them instead of a boolean.
+// Why three named sources and not a boolean: the page exists to show what each one holds, and a
+// reader who sees "mismatch" has to be able to tell which of them to go and fix.
 const DATABASE_SOURCE = 'the database';
 const CONFIGURED_SOURCE = 'the configured CONTEST_ID';
 const REGISTRY_SOURCE = 'the service registry';
 
-/** CONTEST_ID is the bootstrap a stack without a contests table reads, so a running stack may serve a contest it never named. */
+/**
+ * The three values the page compares. WHY the container's CONTEST_ID is labelled as
+ * configuration and not as what is served: it is the bootstrap a stack with no contests
+ * table yet is read from, so a running stack may serve a contest this id never named.
+ *
+ * WHY the registry is listed only when the read said the registry answered: the deployment
+ * default answers with the id the database holds, so listing it as a third source would show the
+ * database's own value twice and read as a disagreement with itself.
+ */
 function contestSources(
   activeContestId: number | null,
   dbActiveContestId: number | null,
@@ -37,7 +46,13 @@ function contestSources(
   ];
 }
 
-/** A majority names the holder of the odd value out, not every pair that differs. */
+/**
+ * The sources that disagree: those holding a value most of the others already agree on.
+ *
+ * WHY a majority and not "any pair that differs": when two sources hold contest 1 and one holds
+ * 5, the honest report names the one holding 5, not all three — naming the two that agree sends
+ * the operator to change a value that is right.
+ */
 function disagreeingSources(sources: readonly ContestSource[]): string[] {
   const held = sources.filter((source) => source.id !== null);
   if (held.length < 2) return [];
@@ -95,7 +110,7 @@ export function MismatchBanner({
                 .
                 {describeMismatch(disagreeing)}
                 {' '}{disagreeing.includes(REGISTRY_SOURCE)
-                    ? 'An enabled registry row that names a contest decides what is served, so edit it in the panel\'s service registry (Infrastructure, Services): activating another contest cannot clear this.'
+                    ? 'An enabled registry row that names a contest decides what is served, so edit it in the panel\'s service registry (Infrastructure, Services) — activating another contest cannot clear this.'
                     : 'This can happen after a failed deploy or manual edits. The database row is the deployment default; what a running instance actually serves is the registry row for its shard, so write that row in the panel (Infrastructure, Services) and the instance follows within seconds.'}
             </Text>
         </InlineAlert>

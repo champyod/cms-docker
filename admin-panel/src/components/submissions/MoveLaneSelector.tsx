@@ -16,7 +16,7 @@ interface MoveLaneSelectorProps {
   canMove: boolean;
 }
 
-const FIELD_CLASSES = 'w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-destructive/20';
+const FIELD_CLASSES = 'w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-destructive/20';
 const MAX_REASON_LENGTH = 500;
 const MAX_LANE_LENGTH = 64;
 
@@ -119,7 +119,7 @@ export function MoveLaneSelector({ submissionId, lanes, onMoved, allowCreate = f
             {reasonError && (
               <p id="move-lane-reason-error" role="alert" className="text-xs text-destructive ml-1">{reasonError}</p>
             )}
-            <p id="move-lane-reason-hint" className="text-xs text-muted-foreground ml-1">Required: recorded with the lane move.</p>
+            <p id="move-lane-reason-hint" className="text-xs text-muted-foreground ml-1">Required — recorded with the lane move.</p>
           </div>
           <span className="text-xs text-muted-foreground tabular-nums shrink-0" aria-hidden="true">{reason.length}/{MAX_REASON_LENGTH}</span>
         </div>

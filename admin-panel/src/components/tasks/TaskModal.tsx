@@ -7,10 +7,10 @@ import type { TaskData } from '@/app/actions/tasks';
 import { apiClient } from '@/lib/apiClient';
 import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { Dialog } from '@/components/core/Dialog';
-import { Button } from '@/components/core/Button';
 import { ResponsiveModalShell } from '@/components/core/ResponsiveModalShell';
 import { ModalFooter } from '@/components/core/ModalFooter';
 import { InlineAlert } from '@/components/core/InlineAlert';
+import { cn } from '@/lib/utils';
 import { parseIntervalToSeconds } from '@/lib/task-intervals';
 import { getFieldAccess, type FieldAccess } from '@/lib/field-permissions';
 import { hasEffectivePermission } from '@/lib/permission-engine';
@@ -172,7 +172,8 @@ export function TaskModal({ isOpen, onClose, task, onSuccess, permissionKeys }: 
         return;
       }
       const savedTaskId = task ? task.id : (typeof result.id === 'number' ? result.id : undefined);
-      // The task is already saved, so a statement failure is reported without blocking the close.
+      // The task is already saved, so a statement failure is reported without
+      // blocking the close — the file can be re-added from the Overview tab.
       if (savedTaskId !== undefined && statementQueue.length > 0) {
         const { failed } = await uploadStatements(savedTaskId, statementQueue);
         if (failed.length > 0) toast.error(`Task saved, but these statements failed: ${failed.join(', ')}`);
@@ -198,7 +199,8 @@ export function TaskModal({ isOpen, onClose, task, onSuccess, permissionKeys }: 
 
   if (!isOpen) return null;
 
-  // A submit in flight cannot be recalled, so cancelling through it would close over an unresolved save.
+  // Why the guard: a submit already in flight cannot be recalled, so cancelling
+  // through it would close the dialog over an unresolved save.
   const cancel = (): void => {
     if (!loading) onClose();
   };
@@ -227,17 +229,19 @@ export function TaskModal({ isOpen, onClose, task, onSuccess, permissionKeys }: 
           sidebar={
             <>
               {TAB_CONFIG.filter((tab) => tab.id !== 'statements' || canCreateStatement).map((tab) => (
-                <Button
+                <button
                   key={tab.id}
-                  variant={activeTab === tab.id ? 'secondary' : 'ghost'}
-                  size="sm"
-                  icon={tab.icon}
-                  aria-pressed={activeTab === tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className="w-full justify-start max-sm:flex-1 max-sm:justify-center max-sm:rounded-md max-sm:border max-sm:border-border max-sm:px-3 max-sm:py-2"
+                  className={cn(
+                    'flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors max-sm:flex-1 max-sm:justify-center max-sm:rounded-md max-sm:border max-sm:border-border max-sm:px-3 max-sm:py-2',
+                    activeTab === tab.id
+                      ? 'bg-primary/10 text-primary ring-1 ring-ring/50'
+                      : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                  )}
                 >
+                  <tab.icon className="h-4 w-4" />
                   {tab.label}
-                </Button>
+                </button>
               ))}
             </>
           }
@@ -250,7 +254,7 @@ export function TaskModal({ isOpen, onClose, task, onSuccess, permissionKeys }: 
                   {/* The type lives on the task's dataset, so a task dialog cannot show
                       it as a field — say where the decision is made instead. */}
                   <p className="text-xs text-muted-foreground">
-                    Task type is set on the task&apos;s dataset, not here: the dataset chooses Batch, Communication or TwoSteps.
+                    Task type is set on the task&apos;s dataset, not here — the dataset chooses Batch, Communication or TwoSteps.
                   </p>
                   <GeneralTab formData={formData} onChange={setFormData} />
                 </div>

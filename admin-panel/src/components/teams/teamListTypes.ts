@@ -7,8 +7,9 @@ import type { TeamListCopy } from './TeamListTable';
 export interface TeamListProps {
   readonly initialTeams: readonly TeamSummary[];
   readonly permissionKeys: readonly string[];
-  /** Labels for the edit dialog the table's row action opens. */
   readonly navigation: Dictionary['navigation'];
   readonly copy: TeamListCopy;
+  /** The affordance label for the docs link, not the documentation's own name. */
+  readonly docsLinkLabel: Dictionary['docs']['viewDocumentation'];
   readonly initialSort?: ListSortInput;
 }

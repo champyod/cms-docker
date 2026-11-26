@@ -1,14 +1,12 @@
 'use client';
 
 import { Users, Clock, Network, Calendar, Key } from 'lucide-react';
-import { Checkbox } from '@/components/core/Checkbox';
-import { Input } from '@/components/core/Input';
 import { PasswordFieldWithKind } from '@/components/core/PasswordFieldWithKind';
-import { Select } from '@/components/core/Select';
 import { useDictionary } from '@/hooks/useDictionary';
 import type { ParticipationFormData } from './useParticipationForm';
 
 const LABEL_CLASSES = 'mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-muted-foreground';
+const FIELD_CLASSES = 'w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50';
 
 interface Props {
   formData: ParticipationFormData;
@@ -22,41 +20,39 @@ export function ParticipationFormFields({ formData, onChange, teams }: Props) {
     <>
       <div>
         <label className={LABEL_CLASSES}><Users className="h-3 w-3" /> Team</label>
-        <Select
-          value={formData.team_id ?? ''}
-          onChange={(e) => onChange({ team_id: e.target.value ? parseInt(e.target.value, 10) : null })}
-          options={[
-            { value: '', label: 'No Team' },
-            ...teams.map((team) => ({ value: String(team.id), label: `${team.name} (${team.code})` })),
-          ]}
-        />
+        <select value={formData.team_id ?? ''} onChange={(e) => onChange({ team_id: e.target.value ? parseInt(e.target.value, 10) : null })} className={FIELD_CLASSES}>
+          <option value="">No Team</option>
+          {teams.map((team) => <option key={team.id} value={team.id}>{team.name} ({team.code})</option>)}
+        </select>
       </div>
       <div className="grid grid-cols-2 gap-4">
-        <div className="rounded-lg bg-muted/30 p-3 transition-colors hover:bg-muted/50">
-          <Checkbox label="Hidden" description="Hide from ranking" checked={formData.hidden} onChange={(e) => onChange({ hidden: e.target.checked })} />
-        </div>
-        <div className="rounded-lg bg-muted/30 p-3 transition-colors hover:bg-muted/50">
-          <Checkbox label="Unrestricted" description="Bypass limits" checked={formData.unrestricted} onChange={(e) => onChange({ unrestricted: e.target.checked })} />
-        </div>
+        <label className="flex cursor-pointer items-center gap-3 rounded-lg bg-muted/30 p-3 transition-colors hover:bg-muted/50">
+          <input type="checkbox" checked={formData.hidden} onChange={(e) => onChange({ hidden: e.target.checked })} className="h-4 w-4 rounded" />
+          <div><div className="text-sm font-medium text-foreground">Hidden</div><div className="text-xs text-muted-foreground">Hide from ranking</div></div>
+        </label>
+        <label className="flex cursor-pointer items-center gap-3 rounded-lg bg-muted/30 p-3 transition-colors hover:bg-muted/50">
+          <input type="checkbox" checked={formData.unrestricted} onChange={(e) => onChange({ unrestricted: e.target.checked })} className="h-4 w-4 rounded" />
+          <div><div className="text-sm font-medium text-foreground">Unrestricted</div><div className="text-xs text-muted-foreground">Bypass limits</div></div>
+        </label>
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div>
           <label className={LABEL_CLASSES}><Clock className="h-3 w-3" /> Extra Time (seconds)</label>
-          <Input type="number" min="0" value={formData.extra_time_seconds} onChange={(e) => onChange({ extra_time_seconds: parseInt(e.target.value, 10) || 0 })} />
+          <input type="number" min="0" value={formData.extra_time_seconds} onChange={(e) => onChange({ extra_time_seconds: parseInt(e.target.value, 10) || 0 })} className={FIELD_CLASSES} />
         </div>
         <div>
           <label className={LABEL_CLASSES}><Clock className="h-3 w-3" /> Delay Time (seconds)</label>
-          <Input type="number" min="0" value={formData.delay_time_seconds} onChange={(e) => onChange({ delay_time_seconds: parseInt(e.target.value, 10) || 0 })} />
+          <input type="number" min="0" value={formData.delay_time_seconds} onChange={(e) => onChange({ delay_time_seconds: parseInt(e.target.value, 10) || 0 })} className={FIELD_CLASSES} />
         </div>
       </div>
       <div>
         <label className={LABEL_CLASSES}><Network className="h-3 w-3" /> {ipCopy.label}</label>
-        <Input type="text" value={formData.ip} onChange={(e) => onChange({ ip: e.target.value })} placeholder={ipCopy.placeholder} />
+        <input type="text" value={formData.ip} onChange={(e) => onChange({ ip: e.target.value })} placeholder={ipCopy.placeholder} className={FIELD_CLASSES} />
         <p className="mt-1 text-xs text-muted-foreground">{ipCopy.hint}</p>
       </div>
       <div>
         <label className={LABEL_CLASSES}><Calendar className="h-3 w-3" /> Starting Time (USACO-style)</label>
-        <Input type="datetime-local" value={formData.starting_time} onChange={(e) => onChange({ starting_time: e.target.value })} />
+        <input type="datetime-local" value={formData.starting_time} onChange={(e) => onChange({ starting_time: e.target.value })} className={FIELD_CLASSES} />
         <p className="mt-1 text-xs text-muted-foreground">Time of first login for per-user time contests</p>
       </div>
       <div>

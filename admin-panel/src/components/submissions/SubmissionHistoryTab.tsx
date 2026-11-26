@@ -7,13 +7,13 @@ import { useFormatTimestamp } from '@/components/layout/TimezoneProvider';
 import { useDictionary } from '@/hooks/useDictionary';
 
 export interface SubmissionHistoryTabProps {
+  readonly submissionId: number;
   readonly history: SubmissionHistoryResult;
 }
 
 function HistoryRow({ entry }: { readonly entry: SubmissionHistoryEntry }): React.JSX.Element {
   const formatTimestamp = useFormatTimestamp();
-  const dict = useDictionary();
-  const labels = dict.submissions.record.history;
+  const labels = useDictionary().submissions.record.history;
   return (
     <li className="rounded-lg border border-border bg-muted/40 px-3 py-2">
       <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
@@ -23,7 +23,7 @@ function HistoryRow({ entry }: { readonly entry: SubmissionHistoryEntry }): Reac
         </span>
         <span>
           <span className="text-muted-foreground">{labels.actor}: </span>
-          <span className="font-medium text-foreground">{entry.actor_name ?? dict.common.notSet}</span>
+          <span className="font-medium text-foreground">{entry.actor_name ?? '—'}</span>
         </span>
         <span>
           <span className="text-muted-foreground">{labels.action}: </span>
@@ -44,13 +44,17 @@ function HistoryRow({ entry }: { readonly entry: SubmissionHistoryEntry }): Reac
   );
 }
 
-export function SubmissionHistoryTab({ history }: SubmissionHistoryTabProps): React.JSX.Element {
+export function SubmissionHistoryTab({ submissionId, history }: SubmissionHistoryTabProps): React.JSX.Element {
   const dictionary = useDictionary();
+  const heading = dictionary.submissions.history.label
+    + ' — ' + dictionary.navigation.evaluation['submission-record'].label
+    + ' #' + submissionId;
   if (!history.success) {
     return <InlineAlert tone="destructive" density="compact">{history.error}</InlineAlert>;
   }
   return (
     <Card className="space-y-3">
+      <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{heading}</h3>
       {history.data.length === 0 ? (
         <p className="text-sm text-muted-foreground">{dictionary.submissions.history.empty}</p>
       ) : (

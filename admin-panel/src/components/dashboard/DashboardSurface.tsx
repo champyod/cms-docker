@@ -2,8 +2,7 @@ import { CheckCircle2 } from 'lucide-react';
 
 import { Card } from '@/components/core/Card';
 import { InlineAlert } from '@/components/core/InlineAlert';
-import { ROW_HEIGHT_CLASS, ResponsiveTable, type ResponsiveColumn } from '@/components/core/ResponsiveTable';
-import { StatGrid } from '@/components/core/StatGrid';
+import { ResponsiveTable, type ResponsiveColumn } from '@/components/core/ResponsiveTable';
 import { Text } from '@/components/core/Typography';
 import type { StatusType } from '@/components/core/StatusBadge';
 
@@ -28,8 +27,6 @@ export interface DashboardServiceState {
   status: StatusType;
   running: number;
   total: number;
-  /** Named, because a count cannot tell the reader what to fix. */
-  down: { name: string; state: string }[];
   checkedAt: string;
 }
 
@@ -60,15 +57,24 @@ const ALERT_TONE: Record<StatusType, 'success' | 'warning' | 'destructive'> = {
   down: 'destructive',
 };
 
-/** Data in, markup out: the page keeps the queries and this keeps the rules. */
+const ROW_HEIGHT = 'h-8'; // 32px, the density default from DESIGN-PREFERENCE topic 5
+
+/**
+ * The dashboard as data in, markup out, so the page keeps the queries and this keeps the rules:
+ * the state of the service comes before any count (topic 8d: the main message is the state, not
+ * the number), colour appears only where it *means* something, and the activity list is a table
+ * with 32px rows rather than a stack of cards.
+ */
 export function DashboardSurface({
+  stats,
+  service,
   activity,
   labels,
-  locale,
 }: {
+  stats: DashboardStats;
+  service: DashboardServiceState;
   activity: DashboardActivityRow[];
   labels: DashboardLabels;
-  locale?: string;
 }): React.JSX.Element {
   const columns: ResponsiveColumn<DashboardActivityRow>[] = [
     {
@@ -95,53 +101,70 @@ export function DashboardSurface({
   ];
 
   return (
-    <Card className="p-0">
-      <div className="px-4 py-3">
-        <Text variant="h2">{labels.activity.title}</Text>
+    <div className="space-y-4">
+      {service.status === 'ok' ? (
+        // Nothing is wrong, so nothing interrupts: a quiet line carries the state and its age.
+        <p className="flex items-center gap-2 text-sm text-muted-foreground">
+          <CheckCircle2 className="size-4 text-success" aria-hidden />
+          <span>{labels.serviceState.ok}</span>
+          <span aria-hidden>·</span>
+          <span>{fill(labels.checkedAt, service.checkedAt)}</span>
+        </p>
+      ) : (
+        <InlineAlert
+          tone={ALERT_TONE[service.status]}
+          title={labels.serviceState[service.status]}
+          announce="polite"
+        >
+          {`${service.running}/${service.total} · ${fill(labels.stats.pending, stats.pendingSubmissions)}`}
+        </InlineAlert>
+      )}
+
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+        <Stat label={labels.stats.totalUsers} value={stats.usersCount} reference={fill(labels.stats.enrolled, stats.activeContesters)} />
+        <Stat label={labels.stats.totalContests} value={stats.contestsCount} reference={fill(labels.stats.activeNow, stats.activeContestsCount)} />
+        <Stat label={labels.stats.totalSubmissions} value={stats.submissionsCount} reference={fill(labels.stats.pending, stats.pendingSubmissions)} />
+        <Stat
+          label={labels.servicesTitle}
+          value={`${service.running}/${service.total}`}
+          reference={labels.servicesDetail}
+        />
       </div>
-      <ResponsiveTable
-        columns={columns}
-        rows={activity}
-        getRowKey={(row) => row.id}
-        getRowClassName={() => ROW_HEIGHT_CLASS}
-        emptyState={<Text variant="muted">{labels.activity.empty}</Text>}
-      />
-    </Card>
+
+      <Card className="p-0">
+        <div className="px-4 py-3">
+          <Text variant="h2">{labels.activity.title}</Text>
+        </div>
+        <ResponsiveTable
+          columns={columns}
+          rows={activity}
+          getRowKey={(row) => row.id}
+          getRowClassName={() => ROW_HEIGHT}
+          emptyState={<Text variant="muted">{labels.activity.empty}</Text>}
+        />
+      </Card>
+    </div>
   );
 }
 
-/** A number that is not a status must not look like one. */
-export function DashboardState({
-  service,
-  labels,
-  stats,
+/**
+ * Label, number, reference — the same three slots in every cell, so four cards read as one row.
+ * No decorative icon and no colour: a number that is not a status must not look like one.
+ */
+function Stat({
+  label,
+  value,
+  reference,
 }: {
-  service: DashboardServiceState;
-  labels: DashboardLabels;
-  stats: Pick<DashboardStats, 'pendingSubmissions'>;
+  label: string;
+  value: number | string;
+  reference: string;
 }): React.JSX.Element {
-  if (service.status === 'ok') {
-    return (
-      <p className="flex items-center gap-2 text-sm text-muted-foreground">
-        <CheckCircle2 className="size-4 text-success" aria-hidden />
-        <span>{labels.serviceState.ok},</span>
-        <span>{fill(labels.checkedAt, service.checkedAt)}</span>
-      </p>
-    );
-  }
   return (
-    <InlineAlert tone={ALERT_TONE[service.status]} title={labels.serviceState[service.status]} announce="polite">
-      <p>{`${service.running}/${service.total}, ${fill(labels.stats.pending, stats.pendingSubmissions)}`}</p>
-      {service.down.length > 0 && (
-        <ul className="mt-2 space-y-1">
-          {service.down.map((container) => (
-            <li key={container.name} className="flex items-baseline gap-2">
-              <span className="font-mono text-xs">{container.name}</span>
-              <span className="text-xs">{container.state}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </InlineAlert>
+    <Card className="flex flex-col gap-1 p-4">
+      <Text variant="label">{label}</Text>
+      <span className="text-[length:var(--text-page)] leading-tight font-semibold tabular-nums">{value}</span>
+      <Text variant="muted">{reference}</Text>
+    </Card>
   );
 }

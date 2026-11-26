@@ -40,14 +40,15 @@ export function UserTable({
   );
 
   const columns = useMemo(
-    () => buildUserColumns({ selectedIds, allSelected, partlySelected, selectAllLabel, onToggleAll, onToggleOne, missing: dict.common.notSet }),
-    [selectedIds, allSelected, partlySelected, selectAllLabel, onToggleAll, onToggleOne, dict.common.notSet],
+    () => buildUserColumns({ selectedIds, allSelected, partlySelected, selectAllLabel, onToggleAll, onToggleOne }),
+    [selectedIds, allSelected, partlySelected, selectAllLabel, onToggleAll, onToggleOne],
   );
 
   const getRowClassName = (row: UserRow): string | undefined =>
     selectedIds.has(row.user.id) ? ROW_SELECTED_CLASSES.join(' ') : undefined;
 
-  // Shared by desktop rows and mobile cards, so both layouts stay touch-sized.
+  // Why: shared by desktop rows and mobile cards, with 44px targets kept
+  // in this fragment so both layouts stay touch-sized.
   const renderRowActions = useCallback(
     (row: UserRow) => {
       const { user } = row;

@@ -47,7 +47,8 @@ vi.mock('@/lib/evaluation-read-model-judging-state', () => ({
 
 vi.mock('@/i18n', () => ({ getDictionary: vi.fn(async () => en) }));
 
-// The live indicator's copy comes from the dictionary the layout supplies in the browser.
+// Why the dictionary is handed over without its provider: the record header now carries the live
+// indicator, whose copy comes from the same dictionary the layout's page supplies in the browser.
 vi.mock('@/hooks/useDictionary', async () => {
   const actual = await vi.importActual<typeof import('@/hooks/useDictionary')>('@/hooks/useDictionary');
   const dictionary = await vi.importActual<{ default: Dictionary }>('@/dictionaries/en.json');
@@ -226,7 +227,9 @@ function breadcrumbHrefs(html: string): string[] {
 
 describe('Submission record breadcrumbs', () => {
   it('closes the trail on the submissions list the record lives under', () => {
-    // The submissions list is the record's real parent and the reader's way back up.
+    // Why Home and the list are the two links: the group is a section with no page
+    // of its own, while the submissions list is the record's real parent and the
+    // reader's way back up out of the record.
     expect(breadcrumbHrefs(recordHtml)).toEqual(['/en', '/en/evaluation/submissions']);
   });
 
@@ -274,12 +277,12 @@ describe('Submission record header identity', () => {
 
   it('heads the record with the task it was sent for and names the submitter below', () => {
     expect(submissionHeading(BASE)).toBe('aplusb');
-    expect(submissionDescription(BASE)).toBe('Ada Lovelace, ada');
+    expect(submissionDescription(BASE)).toBe('Ada Lovelace · ada');
   });
 
   it('leads with the full name and keeps the handle behind it', () => {
     const onlyFirst = { ...BASE, user: { id: 5, username: 'ada', firstName: 'Ada', lastName: null } };
-    expect(submissionDescription(onlyFirst)).toBe('Ada, ada');
+    expect(submissionDescription(onlyFirst)).toBe('Ada · ada');
   });
 
   it('falls back to the username when the name columns are denied or empty', () => {
@@ -294,7 +297,7 @@ describe('Submission record header identity', () => {
     const taskless = { ...BASE, task: null };
 
     expect(submissionHeading(taskless)).toBe('#19');
-    expect(submissionDescription(taskless)).toBe('Ada Lovelace, ada');
+    expect(submissionDescription(taskless)).toBe('Ada Lovelace · ada');
   });
 
   it('falls back to the language when the submitter is hidden from this reader', () => {
@@ -332,7 +335,7 @@ describe('Submission record status pill', () => {
 
   it('states score, judging phase, and the official flag as one info pill', () => {
     expect(submissionStatus({ phase: 'done', totalScore: 100 }, true, LABELS))
-      .toEqual({ kind: 'info', title: '100.0 pts, Done, ★ Official' });
+      .toEqual({ kind: 'info', title: '100.0 pts · Done · ★ Official' });
   });
 
   it('shows Judging… when a requeue has cleared every result row', () => {
@@ -401,7 +404,7 @@ describe('Submission record header composition', () => {
   });
 
   it('passes the judging state as an info status instead of a blocking one', () => {
-    expect(composedHtml).toContain('100.0 pts, Done, ★ Official');
+    expect(composedHtml).toContain('100.0 pts · Done · ★ Official');
     expect(composedHtml).toContain('Record body');
   });
 
@@ -412,7 +415,7 @@ describe('Submission record header composition', () => {
   });
 
   it('leads the description with the full name ahead of the handle', () => {
-    expect(composedHtml).toContain('Ada Lovelace, ada');
+    expect(composedHtml).toContain('Ada Lovelace · ada');
   });
 
   it('links the previous submission chip to the compare section of the summary', () => {

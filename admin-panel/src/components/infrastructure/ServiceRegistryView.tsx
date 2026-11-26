@@ -3,26 +3,30 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
+import { Tabs } from '@/components/core/Tabs';
+import { useConfirm } from '@/hooks/useConfirm';
+import { useDictionary } from '@/hooks/useDictionary';
+import { useToast } from '@/components/providers/ToastProvider';
+import { collectWiringProblems } from '@/lib/service-wiring-problems';
+import { exposureOwnerships, type ExposureOwnership } from '@/lib/service-wiring-ownership';
+import { hasEffectivePermission } from '@/lib/permission-engine';
+import { interpolate } from '@/lib/interpolate';
 import {
   removeExposureAction,
   removeServiceAction,
   removeWiringAction,
 } from '@/app/actions/serviceWiring';
-import { useConfirm } from '@/hooks/useConfirm';
-import { useDictionary } from '@/hooks/useDictionary';
-import { useToast } from '@/components/providers/ToastProvider';
-import { exposureOwnerships, type ExposureOwnership } from '@/lib/service-wiring-ownership';
-import { hasEffectivePermission } from '@/lib/permission-engine';
-import { interpolate } from '@/lib/interpolate';
-import type {
-  ExposureRecord,
-  ServiceRecord,
-  WiringRecord,
-  WriteResult,
+import {
+  type ExposureRecord,
+  type ServiceRecord,
+  type WiringRecord,
+  type WriteResult,
 } from '@/lib/service-wiring-contract';
 import { RegistryEntryDialog } from './RegistryEntryDialog';
 import { RegistrySection } from './RegistrySection';
 import { ExposureApplyNotice, type ExposureApplyReport } from './ExposureApplyNotice';
+import { RegistryProblems } from './RegistryProblems';
+import { PreviewPanel } from './PreviewPanel';
 import { exposureColumns, registryRowActions, serviceColumns, wiringColumns } from './registry-columns';
 import { persist, type RegistryWriteResult } from './registry-mutations';
 import {
@@ -38,46 +42,42 @@ import {
   type Kind,
 } from './registry-spec';
 
-interface RegistryKindSectionProps {
-  /** The one record kind this section lists; the page mounts one section per kind. */
-  readonly kind: Kind;
-  readonly services: ServiceRecord[];
-  readonly wirings: WiringRecord[];
-  readonly exposures: ExposureRecord[];
-  readonly contests: ContestOption[];
-  readonly permissionKeys: readonly string[];
+interface ServiceRegistryViewProps {
+  services: ServiceRecord[];
+  wirings: WiringRecord[];
+  exposures: ExposureRecord[];
+  contests: ContestOption[];
+  title: string;
+  description: string;
+  permissionKeys: readonly string[];
   /** The hostnames the deployment's own front declares: an exposure must not claim one. */
-  readonly frontVhosts: readonly string[];
+  frontVhosts?: readonly string[];
 }
 
-/**
- * One record kind of the registry: its rows, its add and edit dialog, and its removal.
- *
- * WHY the state is here and not on the page: the dialog, the pending flag and the front's verdict
- * all describe a single save against a single kind, and a board section is the largest thing they
- * can be scoped to without one kind's half-finished edit bleeding into another's.
- *
- * WHY it takes the raw records instead of columns: the columns carry render functions, which a
- * server page cannot hand to a client component — and the row actions they render are the same
- * permission-gated cluster for every kind.
- */
-export function RegistryKindSection({
-  kind,
+type TabId = Kind | 'preview';
+
+const TAB_IDS: readonly TabId[] = ['service', 'wiring', 'exposure', 'preview'];
+
+export function ServiceRegistryView({
   services,
   wirings,
+  frontVhosts = [],
   exposures,
   contests,
+  title,
+  description,
   permissionKeys,
-  frontVhosts,
-}: RegistryKindSectionProps): React.JSX.Element {
+}: ServiceRegistryViewProps): React.JSX.Element {
   const copy = useDictionary().infrastructure.services;
   const router = useRouter();
   const { addToast } = useToast();
-  const [openKind, setOpenKind] = useState<Kind | null>(null);
+  const [activeTab, setActiveTab] = useState<TabId>('service');
+  const [kind, setKind] = useState<Kind | null>(null);
   const [draft, setDraft] = useState<Draft>({});
   const [pending, setPending] = useState(false);
   const [applyReport, setApplyReport] = useState<ExposureApplyReport | null>(null);
   const confirm = useConfirm();
+  const problems = collectWiringProblems(services, wirings, exposures, frontVhosts);
   // The ownership comes from the renderer's own refusal rule, so the screen and the sync cannot
   // disagree about which route `config.toml` owns.
   const owners = exposureOwnerships(exposures, services, frontVhosts);
@@ -85,11 +85,10 @@ export function RegistryKindSection({
   const ownershipOf = (id: number): ExposureOwnership | null => ownerById.get(id) ?? null;
   // Why the same key on both: the screen offers only what its server actions already demand.
   const canControl = hasEffectivePermission(new Set(permissionKeys), 'container:control');
-  const nameOf = (id: number): string => services.find((service) => service.id === id)?.name ?? `#${id}`;
 
   const open = (next: Kind, seed: Draft): void => {
     setDraft(seed);
-    setOpenKind(next);
+    setKind(next);
   };
 
   /** Keeps the front's verdict on the screen, not only in a toast the operator may miss. */
@@ -99,7 +98,7 @@ export function RegistryKindSection({
     }
     if (result.success) {
       addToast({ type: 'success', title: result.outcome === 'applied' ? copy.apply.applied : done });
-      setOpenKind(null);
+      setKind(null);
       router.refresh();
       return;
     }
@@ -119,12 +118,12 @@ export function RegistryKindSection({
   };
 
   const submit = async (): Promise<void> => {
-    if (openKind === null) return;
+    if (kind === null) return;
     setPending(true);
     try {
-      const label = copyText(copy, KIND_LABEL_KEY[openKind]);
-      const rowLabel = openKind === 'exposure' ? exposureDraftLabel(draft) : label;
-      finish(await persist(openKind, draft, copy), interpolate(copy.toast.savedTitle, { kind: label }), rowLabel);
+      const label = copyText(copy, KIND_LABEL_KEY[kind]);
+      const rowLabel = kind === 'exposure' ? exposureDraftLabel(draft) : label;
+      finish(await persist(kind, draft, copy), interpolate(copy.toast.savedTitle, { kind: label }), rowLabel);
     } catch (error) {
       addToast({
         type: 'error',
@@ -136,12 +135,35 @@ export function RegistryKindSection({
     }
   };
 
-  return (
-    <div className="space-y-4">
-      {kind === 'exposure' && <ExposureApplyNotice report={applyReport} />}
+  const nameOf = (id: number): string => services.find((service) => service.id === id)?.name ?? `#${id}`;
 
-      {kind === 'service' && (
+  const tabLabels: Record<TabId, string> = {
+    service: copy.tabs.services,
+    wiring: copy.tabs.wirings,
+    exposure: copy.tabs.exposures,
+    preview: copy.tabs.preview,
+  };
+
+  return (
+    <div className="space-y-6">
+      <header className="space-y-1">
+        <h1 className="text-lg font-medium text-foreground">{title}</h1>
+        <p className="text-sm text-muted-foreground">{description}</p>
+      </header>
+
+      <RegistryProblems problems={problems} copy={copy} />
+
+      <Tabs
+        items={TAB_IDS.map((id) => ({ id, label: tabLabels[id] }))}
+        activeId={activeTab}
+        ariaLabel={copy.tabs.ariaLabel}
+        onSelect={(id): void => setActiveTab(id as TabId)}
+      />
+
+      {activeTab === 'service' && (
         <RegistrySection
+          title={copy.kinds.service}
+          count={services.length}
           empty={copy.empty.service}
           addLabel={copy.actions.addService}
           onAdd={(): void => open('service', { ...BLANK.service })}
@@ -157,8 +179,10 @@ export function RegistryKindSection({
         />
       )}
 
-      {kind === 'wiring' && (
+      {activeTab === 'wiring' && (
         <RegistrySection
+          title={copy.kinds.wiring}
+          count={wirings.length}
           empty={copy.empty.wiring}
           addLabel={copy.actions.addWiring}
           onAdd={(): void => open('wiring', { ...BLANK.wiring })}
@@ -179,37 +203,44 @@ export function RegistryKindSection({
         />
       )}
 
-      {kind === 'exposure' && (
-        <RegistrySection
-          empty={copy.empty.exposure}
-          addLabel={copy.actions.addExposure}
-          onAdd={(): void => open('exposure', { ...BLANK.exposure })}
-          canAdd={canControl}
-          columns={exposureColumns(copy, nameOf, ownershipOf)}
-          rows={exposures}
-          getRowKey={(exposure) => exposure.id}
-          actionsHeader={copy.columns.actions}
-          renderRowActions={(exposure) => registryRowActions(copy, permissionKeys, {
-            // A curated route is moved in `config.toml`; offering an editor here would promise a
-            // change the next sync refuses.
-            onEdit: ownershipOf(exposure.id)?.kind === 'curated'
-              ? undefined
-              : (): void => open('exposure', draftOfExposure(exposure)),
-            onRemove: (): void => {
-              void remove(`${exposure.hostname}${exposure.path}`, () => removeExposureAction(exposure.id));
-            },
-          })}
-        />
+      {activeTab === 'exposure' && (
+        <div className="space-y-4">
+          <ExposureApplyNotice report={applyReport} />
+          <RegistrySection
+            title={copy.kinds.exposure}
+            count={exposures.length}
+            empty={copy.empty.exposure}
+            addLabel={copy.actions.addExposure}
+            onAdd={(): void => open('exposure', { ...BLANK.exposure })}
+            canAdd={canControl}
+            columns={exposureColumns(copy, nameOf, ownershipOf)}
+            rows={exposures}
+            getRowKey={(exposure) => exposure.id}
+            actionsHeader={copy.columns.actions}
+            renderRowActions={(exposure) => registryRowActions(copy, permissionKeys, {
+              // A curated route is moved in `config.toml`; offering an editor here would promise a
+              // change the next sync refuses.
+              onEdit: ownershipOf(exposure.id)?.kind === 'curated'
+                ? undefined
+                : (): void => open('exposure', draftOfExposure(exposure)),
+              onRemove: (): void => {
+                void remove(`${exposure.hostname}${exposure.path}`, () => removeExposureAction(exposure.id));
+              },
+            })}
+          />
+        </div>
       )}
 
+      {activeTab === 'preview' && <PreviewPanel />}
+
       <RegistryEntryDialog
-        kind={openKind}
+        kind={kind}
         draft={draft}
         pending={pending}
         contests={contests}
         services={services}
         onChange={(key, value): void => setDraft((current) => ({ ...current, [key]: value }))}
-        onClose={(): void => setOpenKind(null)}
+        onClose={(): void => setKind(null)}
         onSubmit={(): void => { void submit(); }}
       />
     </div>

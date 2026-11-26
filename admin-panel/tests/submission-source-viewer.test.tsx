@@ -17,7 +17,8 @@ afterEach(() => {
   cleanup();
 });
 
-// The bytes are a fixture: reassigning digest-current would leak a different source into every later test.
+// Why readonly: the bytes are a fixture, not state a test may rewrite. A test that reassigned
+// digest-current here would hand every later test the wrong source.
 const DIGEST_FILES: Readonly<Record<string, string>> = {
   'digest-prev': 'int main() {\n  return 1;\n}\n',
   'digest-current': 'int main() {\n  return 0;\n}\n',
@@ -91,7 +92,8 @@ describe('Submission source and diff', () => {
 
     await waitFor(() => expect(container.textContent).toContain('return 0;'));
     const box = scrollBox(container);
-    // The syntax colours are scoped to .source-code in globals.css, so the block inherits the card's colour.
+    // Why the class and not a background utility: the syntax colours are scoped to `.source-code`
+    // in globals.css, so the block inherits the card's colour instead of painting its own.
     expect(box.className).toContain('source-code');
     expect(box.className).not.toContain('hljs');
     expect(box.className).not.toContain('bg-');
@@ -103,7 +105,8 @@ describe('Submission source and diff', () => {
 
     await waitFor(() => expect(container.textContent).toContain('return 0;'));
     expect(mockGetFileByDigest).toHaveBeenCalledTimes(1);
-    // No predecessor bytes means no comparison; the row says which fact is missing.
+    // No predecessor bytes means no comparison: the row says which fact is missing rather than keeping
+    // the previous column or claiming a result of its own.
     expect(container.textContent).toContain(en.submissions.record.compare.previousEmpty);
     expect(container.textContent).not.toContain('Previous #7');
     expect(rowsOf(container, 'same')).toHaveLength(3);
@@ -125,7 +128,9 @@ describe('Submission source and diff', () => {
   });
 
   it('reports no changes when the two sources are line-identical', async () => {
-    // Two references to a content-addressed file are identical by definition, and the fixture stays untouched.
+    // Why one digest for both sides: two references to a content-addressed file are identical by
+    // definition, which is exactly what this case needs — and it leaves the fixture alone, where
+    // reassigning digest-current would have leaked a different source into every later test.
     const container = renderViewer(readableSource(19, 'digest-current'), previousSource(readableSource(7, 'digest-current')));
 
     await waitFor(() => expect(container.textContent).toContain('No line changes between the two sources.'));
@@ -136,7 +141,7 @@ describe('Submission source and diff', () => {
   it('never asks for the bytes when the reader lacks file:read', () => {
     const container = renderViewer({ submissionId: 19, language: 'cpp', sourceReadable: false });
 
-    expect(container.textContent).toContain('Hidden: requires file:read');
+    expect(container.textContent).toContain('Hidden — requires file:read');
     expect(mockGetFileByDigest).not.toHaveBeenCalled();
   });
 

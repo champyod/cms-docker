@@ -1,10 +1,6 @@
 import { notFound } from 'next/navigation';
-import { DetailPage } from '@/components/patterns/DetailPage';
 import { SubmissionEvaluationTab } from '@/components/submissions/SubmissionEvaluationTab';
-import { getDictionary } from '@/i18n';
 import { getSubmissionEvaluation } from '@/lib/evaluation-read-models';
-import { formatCount } from '@/lib/format-number';
-import type { SubmissionEvaluationModel } from '@/lib/evaluation-read-model-types';
 import { isRoutePermitted } from '@/lib/navigation/permissions';
 import { ROUTE_REGISTRY } from '@/lib/navigation/registry';
 import type { RouteId } from '@/lib/navigation/types';
@@ -26,37 +22,16 @@ async function authorizeSubmissionTab(routeId: RouteId): Promise<ReadonlySet<str
   }
 }
 
-// A readable zero is the only failure; a null outcome is still running and a non-numeric verdict is not this page's to judge.
-function failedCount(model: SubmissionEvaluationModel): number {
-  return model.evaluations.filter((row) => {
-    if (row.outcome === null) return false;
-    const score = Number(row.outcome);
-    return Number.isFinite(score) && score <= 0;
-  }).length;
-}
-
 export default async function SubmissionEvaluationPage({ params }: { params: Promise<{ locale: string; id: string }> }): Promise<React.JSX.Element> {
-  const { locale, id: rawId } = await params;
+  const { id: rawId } = await params;
   const id = parseRecordId(rawId);
   if (id === null) notFound();
   const effective = await authorizeSubmissionTab('evaluation.submission-tabs.evaluation');
-  const dictionary = await getDictionary(locale);
   const model = await readRecordOrNotFound(() => getSubmissionEvaluation(id));
-  const copy = dictionary.submissions.record;
   return (
-    <DetailPage
-      ownsHeader={false}
-      facts={[
-        { term: copy.evaluation.testcases, value: formatCount(model.evaluations.length, locale) },
-        { term: copy.evaluation.failed, value: formatCount(failedCount(model), locale) },
-      ]}
-    >
-      <SubmissionEvaluationTab
-        missing={dictionary.common.notSet}
-        copy={dictionary.submissions.record.testcases}
-        model={model}
-        canReadTestcase={hasEffectivePermission(effective, 'testcase:read')}
-      />
-    </DetailPage>
+    <SubmissionEvaluationTab
+      model={model}
+      canReadTestcase={hasEffectivePermission(effective, 'testcase:read')}
+    />
   );
 }

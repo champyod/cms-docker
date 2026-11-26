@@ -1,62 +1,7 @@
-import { BoardPage, type BoardSection } from '@/components/patterns/BoardPage';
-import {
-  CoreServicesSection,
-  CountersSection,
-  MetricsSection,
-  ResourceWorkersSection,
-  ResourcesProvider,
-  TrafficSection,
-} from '@/components/resources/ResourceView';
-import { getDictionary } from '@/i18n';
+import { ResourceView } from '@/components/resources/ResourceView';
 import { authorizeRoutePage } from '@/lib/navigation/page-authorization';
 
-export default async function InfrastructureResourcesPage({
-  params,
-}: {
-  params: Promise<{ locale: string }>;
-}): Promise<React.JSX.Element> {
-  const { locale } = await params;
+export default async function InfrastructureResourcesPage(): Promise<React.JSX.Element> {
   await authorizeRoutePage('infrastructure.resources');
-  const dict = await getDictionary(locale);
-  const sections: readonly BoardSection[] = [
-    {
-      key: 'services',
-      title: dict.resources.title,
-      description: 'The services that answer for this deployment, and whether each is up.',
-      rows: <CoreServicesSection />,
-    },
-    {
-      key: 'counters',
-      title: 'CPU and memory',
-      description: 'The host’s own two figures, each with the source the reading came from.',
-      rows: <CountersSection />,
-    },
-    {
-      key: 'workers',
-      title: dict.resources.workerNodes,
-      description: 'The worker fleet as the monitor reports it, or the reason it could not be read.',
-      rows: <ResourceWorkersSection />,
-    },
-    {
-      key: 'metrics',
-      title: dict.resources.systemMetrics,
-      description: 'Uptime, load average and the network totals since the host started.',
-      rows: <MetricsSection />,
-    },
-    {
-      key: 'traffic',
-      title: 'Network traffic',
-      description: 'The newest lines the proxy logged, and how many of them to keep on screen.',
-      rows: <TrafficSection />,
-    },
-  ];
-  return (
-    <ResourcesProvider>
-      <BoardPage
-        // The infrastructure module shell above renders the title, the description and the trail.
-        ownsHeader={false}
-        sections={sections}
-      />
-    </ResourcesProvider>
-  );
+  return <ResourceView />;
 }

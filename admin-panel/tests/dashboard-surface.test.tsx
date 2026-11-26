@@ -1,8 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
-import { DashboardState, DashboardSurface, fill, type DashboardLabels } from '@/components/dashboard/DashboardSurface';
-import { DashboardPage } from '@/components/patterns/DashboardPage';
+import { DashboardSurface, fill, type DashboardLabels } from '@/components/dashboard/DashboardSurface';
 
 const labels: DashboardLabels = {
   serviceState: { ok: 'All services are running', degraded: 'Some services are not running', down: 'Services have stopped' },
@@ -34,25 +33,14 @@ const activity = [
   { id: 2, username: 'malee', taskName: 'decoder', when: '14:01' },
 ];
 
-// The page is now the composition of an archetype and a surface, so the tests render it the way
-// the route does - the ordering guarantee belongs to the archetype, not to string order in one file.
 function render(status: 'ok' | 'degraded' | 'down') {
-  const service = { status, running: 3, total: 4, down: status === 'ok' ? [] : [{ name: 'cms-evaluation-service', state: 'exited' }], checkedAt: '14:00' } as const;
   return renderToStaticMarkup(
-    <DashboardPage
-      breadcrumbs={[{ label: 'Home', href: '/' }]}
-      title="Welcome back"
-      state={<DashboardState service={service} labels={labels} stats={stats} />}
-      totals={[
-        { label: labels.stats.totalUsers, value: stats.usersCount, reference: fill(labels.stats.enrolled, stats.activeContesters) },
-        { label: labels.stats.totalContests, value: stats.contestsCount, reference: fill(labels.stats.activeNow, stats.activeContestsCount) },
-        { label: labels.stats.totalSubmissions, value: stats.submissionsCount, reference: fill(labels.stats.pending, stats.pendingSubmissions) },
-        { label: labels.servicesTitle, value: `${service.running}/${service.total}`, reference: labels.servicesDetail },
-      ]}
-      locale="en"
-    >
-      <DashboardSurface activity={activity} labels={labels} />
-    </DashboardPage>
+    <DashboardSurface
+      stats={stats}
+      service={{ status, running: 3, total: 4, checkedAt: '14:00' }}
+      activity={activity}
+      labels={labels}
+    />
   );
 }
 
@@ -97,19 +85,6 @@ describe('DashboardSurface', () => {
     expect(html).not.toContain('<button');
     expect(html).not.toContain('<select');
     expect(html).not.toContain('<input');
-  });
-
-  it('names the services that are not running, because a count cannot say what to fix', () => {
-    const html = render('degraded');
-
-    expect(html).toContain('cms-evaluation-service');
-    expect(html).toContain('exited');
-  });
-
-  it('names nothing when every service is running', () => {
-    const html = render('ok');
-
-    expect(html).not.toContain('cms-evaluation-service');
   });
 
   it('fills the count placeholder without touching the rest of the sentence', () => {

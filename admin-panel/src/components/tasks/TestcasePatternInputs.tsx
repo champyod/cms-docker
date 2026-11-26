@@ -51,7 +51,7 @@ export function TestcasePatternInputs({
       </div>
       <div className="flex flex-col items-end gap-1 pb-0.5">
         <button onClick={onBackToMethod} className="text-xs text-muted-foreground underline hover:text-foreground">Change Method</button>
-        {pastedNotice && <span className="text-xs text-muted-foreground">Pasted: lint skipped.</span>}
+        {pastedNotice && <span className="text-xs text-info">Pasted — lint skipped.</span>}
       </div>
     </div>
   );

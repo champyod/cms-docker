@@ -3,7 +3,6 @@
 import { AlertTriangle, Database, ExternalLink, FileText } from 'lucide-react';
 
 import { buildSelectionColumn } from '@/components/core/SelectionColumn';
-import { Badge } from '@/components/core/Badge';
 import type { ResponsiveColumn } from '@/components/core/ResponsiveTable';
 import type { ListSelection } from '@/hooks/useListSelection';
 import { cn } from '@/lib/utils';
@@ -70,7 +69,7 @@ export function buildTaskColumns({ selection, onOpen }: TaskColumnArgs): Respons
                 </div>
               </div>
             )}
-            <button onClick={(event) => { event.stopPropagation(); onOpen(task.id); }} data-shortcut-primary className={cn('flex items-center gap-2 hover:underline underline-offset-2 transition-colors truncate', hasErrors && 'text-muted-foreground')}>
+            <button onClick={(event) => { event.stopPropagation(); onOpen(task.id); }} data-shortcut-primary className={cn('flex items-center gap-2 hover:text-primary transition-colors truncate', hasErrors && 'text-muted-foreground')}>
               {task.name}
               <ExternalLink className="w-3 h-3 opacity-50" />
             </button>
@@ -99,7 +98,7 @@ export function buildTaskColumns({ selection, onOpen }: TaskColumnArgs): Respons
         task.contest_tasks.length > 0 ? (
           <div className="flex flex-wrap gap-1">
             {task.contest_tasks.map((membership) => (
-              <Badge key={membership.contests.id} variant="indigo" className="normal-case tracking-normal font-medium">{membership.contests.name}</Badge>
+              <span key={membership.contests.id} className="px-2 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary border border-primary/20">{membership.contests.name}</span>
             ))}
           </div>
         ) : (

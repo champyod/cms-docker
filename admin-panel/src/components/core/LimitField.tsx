@@ -117,7 +117,7 @@ export function LimitField({
           title={unlimitedLabel}
           className={cn(
             'flex h-10 shrink-0 items-center gap-2 rounded-md border px-3 outline-none transition-colors',
-            'focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-2',
+            'focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]',
             isUnlimited
               ? 'border-primary/50 bg-primary/10 text-primary'
               : 'border-input bg-muted/30 text-muted-foreground hover:text-foreground'

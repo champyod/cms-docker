@@ -46,7 +46,9 @@ function toOutcome(result: Extract<SavedSecretResult, { success: true }>): Secre
   return result.kind === 'bcrypt' ? { kind: 'bcrypt' } : { kind: 'plaintext', value: result.value };
 }
 
-/** The secret arrives once per mount, and a failed request releases the latch so Reveal retries. */
+/** Why the request is latched in a ref: the secret arrives once per mount, so a
+ * Hide/Reveal pair must not re-request it. A failed request releases the latch so the
+ * next Reveal retries. */
 function useSecretReveal(onReveal: () => Promise<SavedSecretResult>): SecretRevealView {
   const [outcome, setOutcome] = useState<SecretOutcome>({ kind: 'pending' });
   const [isOpen, setIsOpen] = useState(false);
@@ -134,10 +136,10 @@ export function SavedSecretReveal({ label, canReveal, onReveal }: SavedSecretRev
         onToggle={toggle}
       />
       {!canReveal && (
-        <p className="text-xs text-muted-foreground">Read-only: you lack the reveal permission.</p>
+        <p className="text-xs text-muted-foreground">Read-only — you lack the reveal permission.</p>
       )}
       {outcome.kind === 'bcrypt' && (
-        <p className="text-xs text-muted-foreground">Stored hashed: irreversible. Typing a new value replaces it.</p>
+        <p className="text-xs text-amber-400/80">Stored hashed — irreversible. Typing a new value replaces it.</p>
       )}
       {error !== '' && <p className="text-xs text-destructive">{error}</p>}
     </div>

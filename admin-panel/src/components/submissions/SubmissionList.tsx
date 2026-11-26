@@ -1,6 +1,7 @@
 'use client';
 
-import { BadgeCheck, Eye, FileCode, RefreshCw } from 'lucide-react';
+import { BadgeCheck, Eye, FileCode, HelpCircle, RefreshCw } from 'lucide-react';
+import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 import { useState } from 'react';
@@ -13,6 +14,7 @@ import type { ResponsiveColumn } from '@/components/core/ResponsiveTable';
 import { RowActions } from '@/components/core/RowActions';
 import { buildSelectionColumn } from '@/components/core/SelectionColumn';
 import { RecordList } from '@/components/list/RecordList';
+import { RecordListPager } from '@/components/list/RecordListPager';
 import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { useAppRouter } from '@/hooks/useAppRouter';
 import { useConfirm } from '@/hooks/useConfirm';
@@ -28,22 +30,37 @@ import type { SubmissionListItem } from '@/types';
 
 import { buildSubmissionColumns } from './submissionColumns';
 import { BatchRecalcBar, SubmissionBulkActions } from './BatchRecalcBar';
-import type { SubmissionFilters } from './SubmissionFiltersCard';
+import { SubmissionFiltersCard, type SubmissionFilters } from './SubmissionFiltersCard';
 import { SubmissionRequeueToasts, watchSubmissionsForCompletion } from './SubmissionRequeueToasts';
 
 export type { SubmissionFilters };
 
 export interface SubmissionListProps {
   readonly initialSubmissions: readonly SubmissionListItem[];
+  readonly totalPages: number;
+  readonly currentPage: number;
   readonly navigation: Dictionary['navigation'];
   readonly initialSort?: ListSortInput;
-  /** Absent means everything, not nothing. */
+  /**
+   * The active narrowing. Optional because the list is also rendered without one, and
+   * an absent filter means "everything" rather than "nothing".
+   */
   readonly filters?: SubmissionFilters;
-  /** Resolved on the server from the same keys the requeue paths gate on. */
+  /**
+   * Whether the reader may requeue, single or in bulk. Resolved on the server from the
+   * same four keys both requeue paths gate on, so neither control can appear to someone
+   * the action would refuse.
+   */
   readonly canRecalculate?: boolean;
-  /** Resolved from submission:update, the key the official flag re-checks on every call. */
+  /**
+   * Whether the reader may flip the official flag. Resolved from `submission:update`, the
+   * key `toggleSubmissionOfficial` re-checks on every call.
+   */
   readonly canOfficial?: boolean;
-  /** Resolved from submission:update, the key the bulk comment actions re-check. */
+  /**
+   * Whether the reader may write the comment field in bulk. Resolved from the same
+   * `submission:update` key the bulk comment actions re-check on every call.
+   */
   readonly canComment?: boolean;
 }
 
@@ -51,10 +68,33 @@ function recordHref(locale: string, submission: SubmissionListItem): string {
   return buildRoute(locale, 'evaluation.submission-record', { id: submission.id });
 }
 
-// The desktop row and the mobile card render the same cluster, so the size target is shared.
+function SubmissionListHeader({ locale, currentPage, totalPages }: {
+  locale: string;
+  currentPage: number;
+  totalPages: number;
+}): React.JSX.Element {
+  const dict = useDictionary();
+  return (
+    <div className="flex flex-wrap items-center justify-end gap-2">
+      <Link href={`${buildRoute(locale, 'system.docs')}#submissions`} className="flex h-11 w-11 items-center justify-center p-1 hover:bg-accent rounded-full transition-colors text-muted-foreground hover:text-primary" title={dict.docs.viewDocumentation}>
+        <HelpCircle className="w-4 h-4" />
+      </Link>
+      <div className="text-sm text-muted-foreground">
+        Page {currentPage} of {totalPages}
+      </div>
+    </div>
+  );
+}
+
+// Why one fragment for the size: the desktop row and the mobile card render the same
+// cluster, so a per-layout target would drift the two apart.
 const ROW_ACTION_TARGET = 'min-h-11 min-w-11';
 
-/** The range applies on pointer-down so the end row's own toggle cannot fight it. */
+/**
+ * The checkbox cell of a selectable column, with the shift-range wiring around it:
+ * the range is applied on pointer-down so the end row's own toggle cannot fight it,
+ * and the click that follows is cancelled only when a range was actually taken.
+ */
 function withShiftSelection(
   column: ResponsiveColumn<SubmissionListItem>,
   onSelectorPointerDown: (event: React.PointerEvent<HTMLSpanElement>, submission: SubmissionListItem) => void,
@@ -73,7 +113,7 @@ function withShiftSelection(
   };
 }
 
-export function SubmissionList({ initialSubmissions, navigation, initialSort, filters = {}, canRecalculate = false, canOfficial = false, canComment = false }: SubmissionListProps): React.JSX.Element {
+export function SubmissionList({ initialSubmissions, totalPages, currentPage, navigation, initialSort, filters = {}, canRecalculate = false, canOfficial = false, canComment = false }: SubmissionListProps): React.JSX.Element {
   const [submissions] = useSyncedState(initialSubmissions);
   const pathname = usePathname();
   const locale = pathname.split('/')[1] || 'en';
@@ -85,7 +125,8 @@ export function SubmissionList({ initialSubmissions, navigation, initialSort, fi
   const { recalculateSubmissionConfirm, toggleOfficialConfirm } = useConfirmationCopy();
   const reasonPrompt = useReasonPrompt();
   const [pendingRejudge, setPendingRejudge] = useState<number | null>(null);
-  // The row action opens the record, so its accessible name comes from the record's own key.
+  // Why the generated record label: the row action opens the submission record,
+  // so its accessible name comes from the same bilingual key the record uses.
   const recordLabel = navigation.evaluation['submission-record'].label;
 
   const submissionIds = submissions.map((submission) => submission.id);
@@ -96,7 +137,9 @@ export function SubmissionList({ initialSubmissions, navigation, initialSort, fi
     router.push(recordHref(locale, submission));
   };
 
-  // The server requires a justification on every requeue, so the dialog collects it.
+  // Why the reason dialog instead of a bare confirm: the server requires the
+  // justification on every requeue, and the dialog that collects it carries the
+  // same confirmation copy the single-submission control has always shown.
   const rejudge = (submissionId: number): void => {
     const base = recalculateSubmissionConfirm('score');
     reasonPrompt.ask({
@@ -167,10 +210,15 @@ export function SubmissionList({ initialSubmissions, navigation, initialSort, fi
       handleSelectorPointerDown,
       handleSelectorClickCapture,
     ),
-    ...buildSubmissionColumns(dict.common.notSet),
+    ...buildSubmissionColumns(),
   ];
 
-  // Page 4 of one order is not page 4 of another, so the sort resets the number.
+  const handlePageChange = (newPage: number): void => {
+    const url = new URL(window.location.href);
+    url.searchParams.set('page', newPage.toString());
+    router.push(url.toString());
+  };
+
   const applySort = (next: ListSortInput): void => {
     const url = new URL(window.location.href);
     if (next !== null && next !== undefined) {
@@ -179,6 +227,24 @@ export function SubmissionList({ initialSubmissions, navigation, initialSort, fi
     } else {
       url.searchParams.delete('sort');
       url.searchParams.delete('dir');
+    }
+    url.searchParams.set('page', '1');
+    router.push(url.toString());
+  };
+
+  // Why page resets here too: page 4 of the unfiltered list is not page 4 of a narrowed
+  // one, so keeping it would show an empty page that looks like "no matches".
+  const applyFilters = (next: SubmissionFilters): void => {
+    const url = new URL(window.location.href);
+    const narrowing: readonly (readonly [string, string | number | undefined])[] = [
+      ['contest', next.contestId],
+      ['task', next.taskId],
+      ['user', next.userId],
+      ['search', next.search],
+    ];
+    for (const [key, value] of narrowing) {
+      if (value === undefined || value === '') url.searchParams.delete(key);
+      else url.searchParams.set(key, String(value));
     }
     url.searchParams.set('page', '1');
     router.push(url.toString());
@@ -216,6 +282,8 @@ export function SubmissionList({ initialSubmissions, navigation, initialSort, fi
 
   return (
     <div className="space-y-6">
+      <SubmissionListHeader locale={locale} currentPage={currentPage} totalPages={totalPages} />
+      <SubmissionFiltersCard filters={filters} onApply={applyFilters} />
       {canRecalculate || canOfficial || canComment ? (
         <BulkActionBar selectedCount={selection.selectedCount} countLabel={dict.states.selection.count} clearLabel={dict.states.selection.clear} onClear={selection.clear}>
           <SubmissionBulkActions
@@ -245,6 +313,7 @@ export function SubmissionList({ initialSubmissions, navigation, initialSort, fi
         sort={initialSort}
         onSortChange={applySort}
       />
+      <RecordListPager currentPage={currentPage} totalPages={totalPages} onPageChange={handlePageChange} />
       <ReasonDialog request={reasonPrompt.request} onClose={reasonPrompt.close} onSubmit={reasonPrompt.submit} />
       <SubmissionRequeueToasts submissions={submissions} />
     </div>

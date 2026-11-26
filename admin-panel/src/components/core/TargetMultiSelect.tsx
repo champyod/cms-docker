@@ -64,7 +64,7 @@ export function TargetMultiSelect({
         onChange={(event) => setSearch(event.target.value)}
         placeholder={copy.searchPlaceholder}
         aria-label={label}
-        className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50"
+        className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
       />
 
       <div className="flex items-center justify-between gap-2">

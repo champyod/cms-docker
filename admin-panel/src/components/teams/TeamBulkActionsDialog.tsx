@@ -3,9 +3,6 @@
 import { useState } from 'react';
 
 import { Dialog } from '@/components/core/Dialog';
-import { Input } from '@/components/core/Input';
-import { Select, type SelectOption } from '@/components/core/Select';
-import { Textarea } from '@/components/core/Textarea';
 import { ModalFooter } from '@/components/core/ModalFooter';
 import { InlineAlert } from '@/components/core/InlineAlert';
 import { addUsersToTeamByUsername, applyTeamParticipationSettings } from '@/app/actions/team-members';
@@ -31,9 +28,7 @@ interface TeamBulkActionsDialogProps {
 
 type TriState = 'no-change' | 'yes' | 'no';
 
-function isTriState(value: string): value is TriState {
-  return value === 'no-change' || value === 'yes' || value === 'no';
-}
+const inputClassName = 'w-full px-3 py-2 bg-background/60 border border-border rounded-lg text-foreground text-sm placeholder:text-muted-foreground focus:outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/30 transition-colors';
 
 function triStateToBoolean(value: TriState): boolean | undefined {
   if (value === 'yes') return true;
@@ -48,32 +43,31 @@ function optionalSeconds(value: string): number | undefined {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
-function triStateOptions(copy: Dictionary['teams']): readonly SelectOption[] {
-  return [
-    { value: 'no-change', label: copy.bulkActions.noChange },
-    { value: 'yes', label: copy.bulkActions.yes },
-    { value: 'no', label: copy.bulkActions.no },
-  ];
+interface FieldProps {
+  readonly label: string;
+  readonly children: React.ReactNode;
 }
 
-interface TriStateFieldProps {
-  readonly label: string;
+function Field({ label, children }: FieldProps): React.JSX.Element {
+  return (
+    <label className="block space-y-1 text-sm">
+      <span className="text-muted-foreground">{label}</span>
+      {children}
+    </label>
+  );
+}
+
+function TriStateSelect({ value, onChange, copy }: {
   readonly value: TriState;
   readonly onChange: (value: TriState) => void;
   readonly copy: Dictionary['teams'];
-}
-
-function TriStateField({ label, value, onChange, copy }: TriStateFieldProps): React.JSX.Element {
+}): React.JSX.Element {
   return (
-    <Select
-      label={label}
-      value={value}
-      onChange={(event) => {
-        const next = event.target.value;
-        if (isTriState(next)) onChange(next);
-      }}
-      options={triStateOptions(copy)}
-    />
+    <select className={inputClassName} value={value} onChange={(event) => onChange(event.target.value as TriState)}>
+      <option value="no-change">{copy.bulkActions.noChange}</option>
+      <option value="yes">{copy.bulkActions.yes}</option>
+      <option value="no">{copy.bulkActions.no}</option>
+    </select>
   );
 }
 
@@ -167,42 +161,40 @@ export function TeamBulkActionsDialog({
         {message && <InlineAlert tone="success" density="regular">{message}</InlineAlert>}
 
         {canUpdateTeam && (
-          <TriStateField
-            label={copy.bulkActions.registerable}
-            value={registerable}
-            onChange={setRegisterable}
-            copy={copy}
-          />
+          <Field label={copy.bulkActions.registerable}>
+            <TriStateSelect value={registerable} onChange={setRegisterable} copy={copy} />
+          </Field>
         )}
 
-        <Select
-          label={copy.bulkActions.contest}
-          value={contestId}
-          onChange={(event) => setContestId(event.target.value)}
-          options={[
-            { value: '', label: copy.bulkActions.contestPlaceholder },
-            ...contests.map((contest) => ({ value: String(contest.id), label: contest.name })),
-          ]}
-        />
+        <Field label={copy.bulkActions.contest}>
+          <select className={inputClassName} value={contestId} onChange={(event) => setContestId(event.target.value)}>
+            <option value="">{copy.bulkActions.contestPlaceholder}</option>
+            {contests.map((contest) => (
+              <option key={contest.id} value={contest.id}>{contest.name}</option>
+            ))}
+          </select>
+        </Field>
 
-        <Textarea
-          label={copy.bulkActions.addUsers}
-          rows={2}
-          value={usernames}
-          onChange={(event) => setUsernames(event.target.value)}
-          placeholder={copy.bulkActions.addUsersHint}
-        />
+        <Field label={copy.bulkActions.addUsers}>
+          <textarea
+            className={inputClassName}
+            rows={2}
+            value={usernames}
+            onChange={(event) => setUsernames(event.target.value)}
+            placeholder={copy.bulkActions.addUsersHint}
+          />
+        </Field>
 
         {canUpdateParticipation && (
           <fieldset className="space-y-3">
             <legend className="text-sm font-medium">{copy.bulkActions.settings}</legend>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <TriStateField label={copy.bulkActions.hidden} value={hidden} onChange={setHidden} copy={copy} />
-              <TriStateField label={copy.bulkActions.unrestricted} value={unrestricted} onChange={setUnrestricted} copy={copy} />
-              <Input label={copy.bulkActions.extraTime} type="number" value={extraTime} onChange={(event) => setExtraTime(event.target.value)} />
-              <Input label={copy.bulkActions.delayTime} type="number" value={delayTime} onChange={(event) => setDelayTime(event.target.value)} />
+              <Field label={copy.bulkActions.hidden}><TriStateSelect value={hidden} onChange={setHidden} copy={copy} /></Field>
+              <Field label={copy.bulkActions.unrestricted}><TriStateSelect value={unrestricted} onChange={setUnrestricted} copy={copy} /></Field>
+              <Field label={copy.bulkActions.extraTime}><input className={inputClassName} type="number" value={extraTime} onChange={(event) => setExtraTime(event.target.value)} /></Field>
+              <Field label={copy.bulkActions.delayTime}><input className={inputClassName} type="number" value={delayTime} onChange={(event) => setDelayTime(event.target.value)} /></Field>
             </div>
-            <Input label={copy.bulkActions.ip} value={ip} onChange={(event) => setIp(event.target.value)} />
+            <Field label={copy.bulkActions.ip}><input className={inputClassName} value={ip} onChange={(event) => setIp(event.target.value)} /></Field>
           </fieldset>
         )}
 

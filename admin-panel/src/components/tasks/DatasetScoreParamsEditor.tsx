@@ -2,7 +2,6 @@
 
 import { useRef, useState } from 'react';
 import { Plus } from 'lucide-react';
-import { Tabs } from '@/components/core/Tabs';
 import { DatasetScoreSubtaskRow } from './DatasetScoreSubtaskRow';
 import { SubtaskBoard } from './SubtaskBoard';
 import {
@@ -146,26 +145,34 @@ export function DatasetScoreParamsEditor({ scoreType, params, testcases = [], on
   // so a stale board view must fall back to the rows view instead of
   // rendering one meaningless group.
   const effectiveView = view === 'board' && scoreType === 'Sum' ? 'visual' : view;
-  const viewItems = [
-    ...(testcases.length > 0 && scoreType !== 'Sum' ? [{ id: 'board', label: 'Board' }] : []),
-    { id: 'visual', label: 'Rows' },
-    { id: 'code', label: 'JSON' },
-  ];
-  const selectView = (id: string): void => {
-    if (id !== 'board' && id !== 'visual' && id !== 'code') return;
-    if (id === 'code') setCodeText(JSON.stringify(params, null, 2) ?? '');
-    setView(id);
-  };
 
   return (
     <div onPasteCapture={() => { pastedRef.current = true; }}>
-      <Tabs
-        items={viewItems}
-        activeId={effectiveView}
-        ariaLabel="Score parameter view"
-        className="mb-3"
-        onSelect={selectView}
-      />
+      <div className="flex items-center gap-1 mb-3">
+        {testcases.length > 0 && scoreType !== 'Sum' && (
+          <button
+            type="button"
+            onClick={() => setView('board')}
+            className={effectiveView === 'board' ? 'px-3 py-1 rounded-lg text-xs font-semibold bg-primary/15 text-primary' : 'px-3 py-1 rounded-lg text-xs text-muted-foreground hover:bg-muted'}
+          >
+            Board
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => setView('visual')}
+          className={effectiveView === 'visual' ? 'px-3 py-1 rounded-lg text-xs font-semibold bg-primary/15 text-primary' : 'px-3 py-1 rounded-lg text-xs text-muted-foreground hover:bg-muted'}
+        >
+          Rows
+        </button>
+        <button
+          type="button"
+          onClick={() => { setCodeText(JSON.stringify(params, null, 2) ?? ''); setView('code'); }}
+          className={effectiveView === 'code' ? 'px-3 py-1 rounded-lg text-xs font-semibold bg-primary/15 text-primary' : 'px-3 py-1 rounded-lg text-xs text-muted-foreground hover:bg-muted'}
+        >
+          JSON
+        </button>
+      </div>
       <p className="text-xs text-muted-foreground mb-3">{SCORE_PARAM_HELPERS[scoreType] ?? 'Configure the score parameters.'}</p>
       {effectiveView === 'code' ? (
         <textarea
@@ -186,7 +193,7 @@ export function DatasetScoreParamsEditor({ scoreType, params, testcases = [], on
       ) : (
       <>
       {pastedNotice && (
-        <p className="text-xs text-muted-foreground mb-3">Pasted content applied without lint. Edit manually to re-lint.</p>
+        <p className="text-xs text-info mb-3">Pasted content applied without lint. Edit manually to re-lint.</p>
       )}
       {scoreType === 'Sum' ? (
         <div>

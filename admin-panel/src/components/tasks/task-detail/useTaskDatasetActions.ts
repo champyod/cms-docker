@@ -25,6 +25,8 @@ export type TaskDatasetActions = {
 };
 
 export type TaskDatasetTabState = TaskDatasetActions & {
+  expanded: boolean;
+  toggleExpanded: () => void;
   uploadTargetDatasetId: number | null;
   closeTestcaseUpload: () => void;
 };
@@ -144,6 +146,7 @@ function buildTestcaseActions(deps: DatasetActionDeps): Pick<TaskDatasetActions,
 }
 
 export function useTaskDatasetActions(): TaskDatasetTabState {
+  const [expanded, setExpanded] = useState(true);
   const [uploadTargetDatasetId, setUploadTargetDatasetId] = useState<number | null>(null);
   const modal = useDatasetModalState();
   const confirm = useConfirm();
@@ -152,6 +155,7 @@ export function useTaskDatasetActions(): TaskDatasetTabState {
   const refresh = useTaskTabRefresh();
   const deps: DatasetActionDeps = { runAction, confirm, destructiveConfirm, refresh };
 
+  const toggleExpanded = (): void => setExpanded((previous) => !previous);
   const openTestcaseUpload = (datasetId: number): void => setUploadTargetDatasetId(datasetId);
   const closeTestcaseUpload = (): void => setUploadTargetDatasetId(null);
 
@@ -160,6 +164,8 @@ export function useTaskDatasetActions(): TaskDatasetTabState {
     ...buildDatasetLifecycleActions(deps),
     ...buildDatasetCopyActions(deps),
     ...buildTestcaseActions(deps),
+    expanded,
+    toggleExpanded,
     openTestcaseUpload,
     uploadTargetDatasetId,
     closeTestcaseUpload,

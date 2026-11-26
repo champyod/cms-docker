@@ -1,6 +1,6 @@
 'use client';
 
-import { useDictionary } from '@/hooks/useDictionary';
+import { useState } from 'react';
 import { SaveButton } from '@/components/core/SaveButton';
 import type { ContestData } from '@/lib/contests-repo';
 import { hasEffectivePermission } from '@/lib/permission-engine';
@@ -14,7 +14,8 @@ import {
 
 export type ContestSettingsTabProps = { data: ContestSettingsData };
 
-// The settings tab owns every field its reader loads, so the payload carries the whole form.
+// Why: the settings tab owns every field its reader loads, so unlike the
+// overview tab the payload carries the whole form.
 function buildSettingsPayload(form: ContestSettingsFormState): Partial<ContestData> {
   return {
     name: form.name,
@@ -35,10 +36,10 @@ function buildSettingsPayload(form: ContestSettingsFormState): Partial<ContestDa
   };
 }
 
-/** The save sits with the form state it writes; the layout cannot hold a control it does not own. */
 export function ContestSettingsTab({ data }: ContestSettingsTabProps): React.JSX.Element {
-  const settings = useDictionary().contests.settings;
-  // The reader carries only contest:read, so without contest:update the form locks and no save appears.
+  const [expanded, setExpanded] = useState(true);
+  // Why: the settings reader carries only contest:read — without
+  // contest:update the form locks and the save affordance never appears.
   const canEdit = hasEffectivePermission(new Set(data.permissionKeys), 'contest:update');
   const { formData, updateForm, saving, justSaved, handleSave } = useContestSettingsState(
     data.contestId,
@@ -46,16 +47,17 @@ export function ContestSettingsTab({ data }: ContestSettingsTabProps): React.JSX
     buildSettingsPayload,
   );
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <ContestSettingsSection
         formData={formData}
+        expanded={expanded}
         canEdit={canEdit}
+        onToggle={() => setExpanded((previous) => !previous)}
         onChange={(patch) => updateForm(patch)}
-        copy={settings}
       />
       {canEdit && (
         <div className="flex justify-end">
-          <SaveButton saving={saving} justSaved={justSaved} idleLabel={settings.saveChanges} disabled={saving} onClick={() => { void handleSave(); }} />
+          <SaveButton saving={saving} justSaved={justSaved} idleLabel="Save Changes" disabled={saving} onClick={() => { void handleSave(); }} />
         </div>
       )}
     </div>

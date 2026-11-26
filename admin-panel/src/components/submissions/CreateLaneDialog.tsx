@@ -9,7 +9,8 @@ import { useActionFeedback } from '@/hooks/useActionFeedback';
 
 const FIELD_CLASSES = 'w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring';
 
-// The dialog stacks three labelled controls; a per-field label block is all that differs.
+// Why one wrapper: the dialog stacks three labelled controls, and a per-field
+// label block is the only thing that differs between them.
 function DialogField({ id, label, children }: { id: string; label: string; children: React.ReactNode }): React.JSX.Element {
   return (
     <div className="space-y-1.5">
@@ -28,7 +29,8 @@ export function CreateLaneDialog({ items, laneNames, onClose, onDone }: { items:
   const handleCreate = async (): Promise<void> => {
     setBusy(true);
     try {
-      // Lanes persist only as audit rows, so a lane with no submission cannot be recorded.
+      // Why a seed submission is required: lanes persist only as audit rows, so a
+      // lane with no submission cannot be recorded — creation is a move to a new name.
       const outcome = await runAction(
         { pending: 'Creating lane…', success: 'Lane created', failure: 'Lane creation failed' },
         () => moveEvaluationLane(Number(submissionId), name.trim(), reason.trim()),
@@ -47,7 +49,7 @@ export function CreateLaneDialog({ items, laneNames, onClose, onDone }: { items:
         <datalist id="create-lane-existing">{laneNames.map((lane) => <option key={lane} value={lane} />)}</datalist>
         <DialogField id="create-lane-submission" label="Submission">
           <select id="create-lane-submission" value={submissionId} onChange={(e) => setSubmissionId(e.target.value)} disabled={busy} className={FIELD_CLASSES}>
-            {items.map((item) => <option key={item.submissionId} value={item.submissionId}>#{item.submissionId} {item.username}: {item.taskName}</option>)}
+            {items.map((item) => <option key={item.submissionId} value={item.submissionId}>#{item.submissionId} {item.username} — {item.taskName}</option>)}
           </select>
         </DialogField>
         <DialogField id="create-lane-reason" label="Reason *">

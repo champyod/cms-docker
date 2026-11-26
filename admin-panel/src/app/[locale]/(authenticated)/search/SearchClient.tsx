@@ -1,0 +1,100 @@
+'use client';
+
+import { useSearchParams, usePathname } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { searchAll } from '@/app/actions/search';
+import { buildRoute } from '@/lib/navigation/routes';
+import { Users, Trophy, ClipboardList, Shield, SearchX } from 'lucide-react';
+import Link from 'next/link';
+import { SearchResultCard, SectionHeader } from '@/components/search/SearchComponents';
+import { SkeletonText } from '@/components/core/Skeleton';
+import { EmptyState } from '@/components/core/EmptyState';
+
+type SearchResults = Awaited<ReturnType<typeof searchAll>>;
+
+export default function SearchClient() {
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
+  const locale = pathname.split('/')[1] || 'en';
+  const query = searchParams.get('q') || '';
+  const [resultForQuery, setResultForQuery] = useState<{ query: string; data: SearchResults } | null>(null);
+
+  const results = resultForQuery?.query === query ? resultForQuery.data : null;
+  const loading = query.length > 0 && resultForQuery?.query !== query;
+
+  useEffect(() => {
+    if (!query) return;
+    let cancelled = false;
+    searchAll(query).then((data) => {
+      if (!cancelled) setResultForQuery({ query, data });
+    });
+    return () => { cancelled = true; };
+  }, [query]);
+
+  if (!query) return <div className="text-muted-foreground">Please enter a search term.</div>;
+
+  return (
+    <div className="space-y-6">
+      <h1 className="text-2xl font-bold text-foreground">{`Search Results for "${query}"`}</h1>
+
+      {loading && <SkeletonText lines={2} />}
+      
+      {!loading && results && (
+        <div className="space-y-8">
+            {results.users.length > 0 && (
+                <section>
+                    <SectionHeader title="Users" count={results.users.length} icon={Users} iconColor="text-blue-400" />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {results.users.map((u: SearchResults['users'][number]) => (
+                            <Link href={buildRoute(locale, 'people.user-tabs.profile', { id: u.id })} key={u.id}>
+                                <SearchResultCard title={u.username} subtitle={`${u.first_name} ${u.last_name}`} />
+                            </Link>
+                        ))}
+                    </div>
+                </section>
+            )}
+            {results.tasks.length > 0 && (
+                <section>
+                    <SectionHeader title="Tasks" count={results.tasks.length} icon={ClipboardList} iconColor="text-emerald-400" />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {results.tasks.map((t: SearchResults['tasks'][number]) => (
+                            <Link href={buildRoute(locale, 'tasks.record', { id: t.id })} key={t.id}>
+                                <SearchResultCard title={t.name} subtitle={t.title} />
+                            </Link>
+                        ))}
+                    </div>
+                </section>
+            )}
+            {results.contests.length > 0 && (
+                <section>
+                     <SectionHeader title="Contests" count={results.contests.length} icon={Trophy} iconColor="text-amber-400" />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {results.contests.map((c: SearchResults['contests'][number]) => (
+                            <Link href={buildRoute(locale, 'contests.record', { id: c.id })} key={c.id}>
+                                <SearchResultCard title={c.name} subtitle={c.description} />
+                            </Link>
+                        ))}
+                    </div>
+                </section>
+            )}
+            {results.admins.length > 0 && (
+                <section>
+                    <SectionHeader title="Admins" count={results.admins.length} icon={Shield} iconColor="text-purple-400" />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {results.admins.map((a: SearchResults['admins'][number]) => (
+                            <div key={a.id} className="cursor-default">
+                                <SearchResultCard title={a.username} subtitle={a.name} className="cursor-default hover:bg-accent/50" />
+                            </div>
+                        ))}
+                    </div>
+                </section>
+            )}
+            
+            {results.users.length === 0 && results.tasks.length === 0 && results.contests.length === 0 && results.admins.length === 0 && (
+                <EmptyState icon={SearchX} title="No results found." />
+            )}
+        </div>
+      )}
+    </div>
+  );
+}

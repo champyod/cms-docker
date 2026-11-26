@@ -131,7 +131,8 @@ export function MonitorConfigSectionClient({
   );
 
   return (
-    <div className="space-y-6">
+    <div className="bg-card backdrop-blur-xl border border-border rounded-2xl p-6 space-y-6">
+      <h2 className="text-lg font-semibold text-foreground">Monitor Configuration</h2>
       {targets.length === 0 ? (
         <p className="text-muted-foreground text-sm">No monitor targets configured.</p>
       ) : (
@@ -146,7 +147,7 @@ export function MonitorConfigSectionClient({
               <div className="flex-1 min-w-0">
                 <p className="text-sm text-foreground truncate font-mono">{target.url}</p>
                 <p className="text-xs text-muted-foreground">
-                  {target.interval}s interval, {target.timeout}s timeout, HTTP{' '}
+                  {target.interval}s interval · {target.timeout}s timeout · HTTP{' '}
                   {target.expectedStatus}
                 </p>
               </div>

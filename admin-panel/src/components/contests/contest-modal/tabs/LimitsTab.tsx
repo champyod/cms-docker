@@ -1,11 +1,10 @@
 'use client';
 
 import { ApplyLimitsButton } from '@/components/limits/ApplyLimitsButton';
-import { Checkbox } from '@/components/core/Checkbox';
-import { Input } from '@/components/core/Input';
 import { LimitField } from '@/components/core/LimitField';
 import { useDictionary } from '@/hooks/useDictionary';
 import { normalizeNonNegativeInt } from '@/lib/limits';
+import { ErrorText, fieldClasses, LABEL_CLASSES } from './fieldStyles';
 import type { ContestFormData, ContestLimitField, SetContestForm } from '../types';
 
 interface LimitsTabProps {
@@ -43,21 +42,21 @@ function writeLimit(
   setFormData({ ...formData, ...patch });
 }
 
-function QueueFairnessField({ formData, setFormData, validationErrors }: LimitsTabProps): React.JSX.Element {
+function QueueFairnessField({ formData, setFormData, validationErrors }: LimitsTabProps) {
   return (
     <div className="space-y-2">
-      <Input
+      <label className={LABEL_CLASSES}>Queue Fairness Penalty (sec)</label>
+      <input
         type="number"
         min={0}
-        label="Queue Fairness Penalty (sec)"
+        title="Queue Fairness Penalty (seconds)"
         placeholder="0"
         value={formData.queue_fairness_penalty_seconds}
-        onChange={(event) =>
-          setFormData({ ...formData, queue_fairness_penalty_seconds: Math.max(0, parseInt(event.target.value) || 0) })
-        }
-        error={validationErrors.get('queue_fairness_penalty_seconds')}
+        onChange={(e) => setFormData({ ...formData, queue_fairness_penalty_seconds: Math.max(0, parseInt(e.target.value) || 0) })}
+        className={fieldClasses(validationErrors.has('queue_fairness_penalty_seconds'))}
       />
       <p className="text-xs text-muted-foreground">0 disables fairness delay. Formula: submission time + n × seconds.</p>
+      <ErrorText errors={validationErrors} field="queue_fairness_penalty_seconds" />
     </div>
   );
 }
@@ -71,27 +70,15 @@ function ReservedField({ name, label, value, toggle = false }: {
   readonly label: string;
   readonly value: string | number | boolean;
   readonly toggle?: boolean;
-}): React.JSX.Element {
+}) {
   const reserved = useDictionary().limits.throttle.reserved;
   return (
     <div className="space-y-2 opacity-60" data-field={name}>
+      <label htmlFor={name} className={LABEL_CLASSES}>{label}</label>
       {toggle ? (
-        <Checkbox
-          id={name}
-          label={label}
-          checked={value === true}
-          disabled
-          aria-describedby={`${name}-reserved`}
-        />
+        <input id={name} type="checkbox" checked={value === true} disabled aria-describedby={`${name}-reserved`} className="h-4 w-4" />
       ) : (
-        <Input
-          id={name}
-          label={label}
-          type="text"
-          value={String(value)}
-          disabled
-          aria-describedby={`${name}-reserved`}
-        />
+        <input id={name} type="text" value={String(value)} disabled aria-describedby={`${name}-reserved`} className={fieldClasses(false)} />
       )}
       <p id={`${name}-reserved`} className="text-xs text-muted-foreground">{reserved}</p>
     </div>
@@ -103,7 +90,7 @@ function ReservedField({ name, label, value, toggle = false }: {
  * meaning is defined by what it falls back to — the legacy Queue Fairness Penalty that already sits
  * here — so the resolution chain reads top to bottom on one screen instead of split across two.
  */
-function ThrottleSection({ formData, setFormData, validationErrors }: LimitsTabProps): React.JSX.Element {
+function ThrottleSection({ formData, setFormData, validationErrors }: LimitsTabProps) {
   const throttle = useDictionary().limits.throttle;
   return (
     <div className="space-y-4 rounded-lg border border-border p-4 md:col-span-2">
@@ -111,19 +98,18 @@ function ThrottleSection({ formData, setFormData, validationErrors }: LimitsTabP
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
         {/* The one consumed column: 0 means "no throttle delay of my own", so it is kept as a 0. */}
         <div className="space-y-2" data-field="evaluation_throttle_delay_s">
-          <Input
+          <label htmlFor="evaluation_throttle_delay_s" className={LABEL_CLASSES}>{throttle.delayLabel} (sec)</label>
+          <input
             id="evaluation_throttle_delay_s"
             type="number"
             min={0}
             step={1}
-            label={`${throttle.delayLabel} (sec)`}
             value={formData.evaluation_throttle_delay_s}
-            onChange={(event) =>
-              setFormData({ ...formData, evaluation_throttle_delay_s: normalizeNonNegativeInt(event.target.value) ?? 0 })
-            }
-            error={validationErrors.get('evaluation_throttle_delay_s')}
+            onChange={(e) => setFormData({ ...formData, evaluation_throttle_delay_s: normalizeNonNegativeInt(e.target.value) ?? 0 })}
+            className={fieldClasses(validationErrors.has('evaluation_throttle_delay_s'))}
           />
           <p className="text-xs text-muted-foreground">{throttle.delayHint}</p>
+          <ErrorText errors={validationErrors} field="evaluation_throttle_delay_s" />
         </div>
         <ReservedField name="evaluation_throttle_window_s" label={throttle.windowLabel} value={formData.evaluation_throttle_window_s} />
         <ReservedField name="evaluation_throttle_max" label={throttle.maxLabel} value={formData.evaluation_throttle_max} />
@@ -134,21 +120,25 @@ function ThrottleSection({ formData, setFormData, validationErrors }: LimitsTabP
   );
 }
 
-function ScorePrecisionField({ formData, setFormData, validationErrors }: LimitsTabProps): React.JSX.Element {
+function ScorePrecisionField({ formData, setFormData, validationErrors }: LimitsTabProps) {
   return (
-    <Input
-      type="number"
-      label="Score Precision (decimals)"
-      value={formData.score_precision}
-      onChange={(event) => setFormData({ ...formData, score_precision: parseInt(event.target.value) || 0 })}
-      error={validationErrors.get('score_precision')}
-    />
+    <div className="space-y-2">
+      <label className={LABEL_CLASSES}>Score Precision (decimals)</label>
+      <input
+        type="number"
+        value={formData.score_precision}
+        onChange={(e) => setFormData({ ...formData, score_precision: parseInt(e.target.value) || 0 })}
+        className={fieldClasses(validationErrors.has('score_precision'))}
+      />
+      <ErrorText errors={validationErrors} field="score_precision" />
+    </div>
   );
 }
 
-export function LimitsTab({ formData, setFormData, validationErrors }: LimitsTabProps): React.JSX.Element {
+export function LimitsTab({ formData, setFormData, validationErrors }: LimitsTabProps) {
   const limits = useDictionary().limits;
-  // Why a partial: the label map covers every name in the family, the hint map only the fields that need explaining.
+  // Why the cast to a partial: the label map covers every name in the family, the hint map only
+  // the fields that need explaining.
   const hints: Partial<Record<ContestLimitField, string>> = limits.hints;
 
   return (
@@ -172,7 +162,8 @@ export function LimitsTab({ formData, setFormData, validationErrors }: LimitsTab
         <QueueFairnessField formData={formData} setFormData={setFormData} validationErrors={validationErrors} />
         <ScorePrecisionField formData={formData} setFormData={setFormData} validationErrors={validationErrors} />
       </div>
-      {/* Why here: it pushes the four shared limits to tasks, a second way out of the same fields. */}
+      {/* Why at the tab's foot: it pushes the values the four shared limits hold right now to the
+          other kind (tasks), so the button reads as a second way out of the same fields. */}
       <div className="flex justify-end">
         <ApplyLimitsButton
           kinds={['task']}

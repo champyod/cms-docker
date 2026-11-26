@@ -1,10 +1,10 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 
 import en from '@/dictionaries/en.json';
 import { DictionaryProvider } from '@/components/providers/DictionaryProvider';
-import { RegistryKindSection } from '@/components/infrastructure/RegistryKindSection';
+import { ServiceRegistryView } from '@/components/infrastructure/ServiceRegistryView';
 import type { ExposureRecord, ServiceRecord } from '@/lib/service-wiring-contract';
 
 vi.mock('next/navigation', () => ({
@@ -51,17 +51,19 @@ const OWNED: ExposureRecord = { id: 12, service_id: 1, hostname: 'front.example.
 function renderExposures(exposures: ExposureRecord[]): HTMLElement {
   const { container } = render(
     <DictionaryProvider dict={en}>
-      <RegistryKindSection
-        kind="exposure"
+      <ServiceRegistryView
         services={[SERVICE]}
         wirings={[]}
         exposures={exposures}
         contests={[]}
+        title="Services"
+        description="The service registry"
         permissionKeys={['container:control']}
         frontVhosts={FRONT_VHOSTS}
       />
     </DictionaryProvider>,
   );
+  fireEvent.click(screen.getByRole('button', { name: copy.tabs.exposures }));
   return container;
 }
 
@@ -74,7 +76,7 @@ function row(container: HTMLElement, id: number): HTMLElement {
 describe('an exposure the deployment\'s own config owns', () => {
   it('names config.toml and the exact key that owns its path', () => {
     const container = renderExposures([CURATED]);
-    expect(row(container, 11).textContent).toContain(`config.toml: ADMIN_ROUTE_PATH`);
+    expect(row(container, 11).textContent).toContain(`config.toml · ADMIN_ROUTE_PATH`);
   });
 
   it('offers no edit control, because the panel cannot move a curated route', () => {

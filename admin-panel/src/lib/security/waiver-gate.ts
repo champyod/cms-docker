@@ -1,11 +1,37 @@
 import { isPatchingSource, MAX_FINDING_KEY_LENGTH, type PatchingSource } from '@/lib/security/patching';
 
-/** Pure and dependency-free: CI, the renderer and the suite must evaluate the same rules against the same clock. */
+/**
+ * The waiver gate: the one place that decides whether a stored waiver still licenses a
+ * security suppression.
+ *
+ * WHY this module is pure and dependency-free: it runs in three places that must not disagree —
+ * the CI gate that fails the build, the renderer that writes the scanner suppressions, and the
+ * suite. It takes the waiver rows as data, never by querying, so every caller evaluates the same
+ * rules against the same clock and a test can drive the clock.
+ *
+ * WHY the rows arrive as an export file and not as a query: CI holds no credential that can reach
+ * the panel or its database (see docs/SECURITY-FEED.md §"Suppressions in CI"). The export is
+ * written by the panel's own read path (`readWaiverExport`) and committed, so what CI reads is a
+ * rendering of the one waiver table and never a second list: this module refuses an export that
+ * was hand-edited (a row that is not a live waiver with an owner, a reason and a review date), and
+ * refuses one nobody has re-rendered in `MAX_EXPORT_AGE_DAYS`.
+ *
+ * WHY a stale export is safe to refuse rather than tolerate: a waiver missing from the export can
+ * only ever make CI *stricter* (the finding it used to cover fails the scan), while a stale one
+ * could keep suppressing after somebody ended it. Expiry is judged against the current clock, so
+ * an expired date fails even in an old file; the age bound closes the other direction.
+ */
 
 /** Bumped when the export's shape changes, so an old file is refused instead of misread. */
 export const WAIVER_EXPORT_VERSION = 1;
 
-/** A rendering with no expiry is exactly what .trivyignore was; the bound fails the build rather than warning. */
+/**
+ * How long an export may go unrendered before CI refuses it.
+ *
+ * WHY a bound at all: the export is a rendering, and a rendering with no expiry is exactly what
+ * `.trivyignore` was. A month is longer than any waiver's own review cadence in practice, so this
+ * only catches an export nobody is maintaining — and it fails the build rather than warning.
+ */
 export const MAX_EXPORT_AGE_DAYS = 30;
 
 /** One live waiver, as the panel's read path renders it. */
@@ -68,7 +94,8 @@ function oneWaiver(value: unknown, index: number): WaiverRecord | string {
   if (typeof reason !== 'string' || reason.trim() === '') {
     return `waivers[${index}].reason is empty: a waiver has to say why`;
   }
-  // The file is a committed document a human can edit, so the boundary re-checks the column's rule.
+  // WHY a review date is demanded here as well as in the column: this file is a committed
+  // document a human can edit, so the boundary re-checks what the table already guarantees.
   const reviewBy = isoInstant(row.reviewBy);
   if (reviewBy === null) {
     return `waivers[${index}].reviewBy is not a date: a waiver without one never expires`;
@@ -85,7 +112,8 @@ function oneWaiver(value: unknown, index: number): WaiverRecord | string {
   }
   const endedAt = row.endedAt;
   if (endedAt !== null) {
-    // The read path only exports live waivers, so an ended one is a hand-edit and is refused, not filtered.
+    // The read path only exports live waivers, so an ended one is either a hand-edit or an
+    // export written by something that is not this panel. Both are refused, not filtered.
     return `waivers[${index}] is ended: an export carries live decisions only`;
   }
   return {
@@ -101,19 +129,26 @@ function oneWaiver(value: unknown, index: number): WaiverRecord | string {
   };
 }
 
-/** Every failure is a refusal: the safe reading of a file this module cannot understand is that nothing is licensed. */
+/**
+ * Reads the committed export, or says precisely what is wrong with it.
+ *
+ * WHY every failure is a refusal rather than a default: "no waivers found" is indistinguishable
+ * from "every waiver was deleted" unless the shape is checked, and the safe reading of a file this
+ * module cannot understand is that no suppression is licensed — the scan then fails on the real
+ * finding instead of passing on a typo.
+ */
 export function parseWaiverExport(value: unknown): WaiverExportParse {
   const document = asRecord(value);
   if (document === null) return { ok: false, error: 'the export is not a JSON object' };
   if (document.version !== WAIVER_EXPORT_VERSION) {
     return {
       ok: false,
-      error: `the export is version ${String(document.version)}, this gate reads ${WAIVER_EXPORT_VERSION}: re-render it`,
+      error: `the export is version ${String(document.version)}, this gate reads ${WAIVER_EXPORT_VERSION} — re-render it`,
     };
   }
   const generatedAt = isoInstant(document.generatedAt);
   if (generatedAt === null) {
-    return { ok: false, error: 'generatedAt is missing or not a date: re-render the export' };
+    return { ok: false, error: 'generatedAt is missing or not a date — re-render the export' };
   }
   if (!Array.isArray(document.waivers)) {
     return { ok: false, error: 'waivers is not an array' };
@@ -143,7 +178,13 @@ export function isWaiverPastReview(
   return new Date(waiver.reviewBy).getTime() < now.getTime();
 }
 
-/** An ended waiver must stop suppressing immediately, not at its review date. */
+/**
+ * The waivers that still license a suppression: not ended, and not past their review date.
+ *
+ * WHY both conditions and not only the date: an ended waiver is a decision that no longer exists,
+ * so it must stop suppressing immediately rather than at its review date — otherwise ending one
+ * would change the page and nothing about the build.
+ */
 export function liveWaivers(
   waivers: readonly WaiverRecord[],
   now: Date,
@@ -179,7 +220,13 @@ export function expiredWaivers(
     .sort((left, right) => left.reviewBy.localeCompare(right.reviewBy));
 }
 
-/** The ignore file matches the vulnerability id alone, so the id is composed from the key. */
+/**
+ * The Trivy ignore entry a waiver renders to.
+ *
+ * WHY the part before `|`: a Trivy finding key is `CVE-…|package`, but the ignore file is matched
+ * against the vulnerability id alone, so writing the whole key would silence nothing while looking
+ * like a suppression. Composing the id from the key keeps an operator from having to know that.
+ */
 function suppressionId(waiver: WaiverRecord): string {
   const separator = waiver.match.indexOf('|');
   return (separator === -1 ? waiver.match : waiver.match.slice(0, separator)).trim();
@@ -190,10 +237,17 @@ const TRIVY_SOURCE: PatchingSource = 'rootfs';
 /** `bun audit` advisories are the dependency family the feed's `osv` producer reports. */
 const AUDIT_SOURCE: PatchingSource = 'osv';
 
-/** Expired waivers are omitted, so a bypassed second run still scans the finding. */
+/**
+ * The `.trivyignore` body for the live waivers.
+ *
+ * WHY expired waivers are omitted rather than listed: an expired waiver must stop suppressing the
+ * moment it lapses. The gate fails the build in that case anyway, but a second run with the gate
+ * bypassed still scans the finding, so the two defences agree instead of the file contradicting
+ * the gate.
+ */
 export function renderTrivyIgnore(waivers: readonly WaiverRecord[], now: Date): string {
   const lines = [
-    '# GENERATED from the panel\'s security_waivers table. Do not edit, do not commit.',
+    '# GENERATED from the panel\'s security_waivers table — do not edit, do not commit.',
     '# Rendered per CI run by admin-panel/scripts/security-waivers.ts from security/waivers.json.',
     '# Every id below is a live waiver a person signed with a review date; a finding with no',
     '# waiver is not suppressed, and an expired waiver is not written here at all.',
@@ -203,7 +257,7 @@ export function renderTrivyIgnore(waivers: readonly WaiverRecord[], now: Date): 
     // The id has to be on its own line, so the provenance rides in a comment above it.
     const owner = waiver.createdByName ?? `admin #${String(waiver.createdBy)}`;
     lines.push(
-      `# waiver #${String(waiver.id)}, review by ${waiver.reviewBy.slice(0, 10)}, ${owner}: ${waiver.reason}`,
+      `# waiver #${String(waiver.id)} · review by ${waiver.reviewBy.slice(0, 10)} · ${owner}: ${waiver.reason}`,
     );
     lines.push(suppressionId(waiver));
   }
@@ -222,7 +276,13 @@ function daysBetween(from: Date, to: Date): number {
   return Math.floor((to.getTime() - from.getTime()) / 86_400_000);
 }
 
-/** One message that names ids, dates and owners: the operator must be able to act without opening the panel. */
+/**
+ * Why the gate refuses this export, or null when it passes.
+ *
+ * WHY one message that names ids and dates: the operator reading a failed build has to be able to
+ * act without opening the panel — which waiver, which finding, which date it lapsed, and who
+ * signed it. A message that only counts them sends them looking.
+ */
 export function waiverGateFailure(exported: WaiverExport, now: Date): string | null {
   const failures: string[] = [];
 
@@ -230,12 +290,12 @@ export function waiverGateFailure(exported: WaiverExport, now: Date): string | n
   if (age > MAX_EXPORT_AGE_DAYS) {
     failures.push(
       `the waiver export was rendered ${String(age)} days ago (${exported.generatedAt.slice(0, 10)}), ` +
-        `older than the ${String(MAX_EXPORT_AGE_DAYS)}-day bound: re-render security/waivers.json`,
+        `older than the ${String(MAX_EXPORT_AGE_DAYS)}-day bound — re-render security/waivers.json`,
     );
   }
   if (age < 0) {
     failures.push(
-      `the waiver export is dated ${exported.generatedAt.slice(0, 10)}, in the future: its clock or its contents are wrong`,
+      `the waiver export is dated ${exported.generatedAt.slice(0, 10)}, in the future — its clock or its contents are wrong`,
     );
   }
 
@@ -243,7 +303,7 @@ export function waiverGateFailure(exported: WaiverExport, now: Date): string | n
   if (expired.length > 0) {
     const rows = expired.map(
       (waiver) =>
-        `  #${String(waiver.id)} ${waiver.source} ${waiver.match}, review by ${waiver.reviewBy.slice(0, 10)}, ` +
+        `  #${String(waiver.id)} ${waiver.source} ${waiver.match} — review by ${waiver.reviewBy.slice(0, 10)}, ` +
         `signed by ${waiver.owner}: ${waiver.reason}`,
     );
     failures.push(

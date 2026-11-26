@@ -5,12 +5,11 @@ import { ContestTasksTab } from '@/components/contests/contest-detail/ContestTas
 import { ContestParticipantsTab } from '@/components/contests/contest-detail/ContestParticipantsTab';
 import { ContestSettingsTab } from '@/components/contests/contest-detail/ContestSettingsTab';
 import en from '@/dictionaries/en.json';
-import th from '@/dictionaries/th.json';
-import type { Dictionary } from '@/lib/dictionary';
 
-// The roster section's copy comes from the authenticated layout's provider, so a bare render supplies it.
-function withDictionary(node: React.JSX.Element, dict: Dictionary = en): string {
-  return renderToStaticMarkup(<DictionaryProvider dict={dict}>{node}</DictionaryProvider>);
+// Why: the participants tab carries the roster section, whose copy the authenticated
+// layout supplies through the provider — a bare render must supply it here.
+function withDictionary(node: React.JSX.Element): string {
+  return renderToStaticMarkup(<DictionaryProvider dict={en}>{node}</DictionaryProvider>);
 }
 
 describe('contest tab parity', () => {
@@ -20,13 +19,6 @@ describe('contest tab parity', () => {
     expect(html).toContain('Add Task');
   });
 
-  it('prints the task empty state in the reader language', () => {
-    const data = { contestId: 7, tasks: [], availableTasks: [], permissionKeys: ['contest:read', 'task:read', 'task:update'] };
-    const html = withDictionary(<ContestTasksTab data={data} />, th);
-    expect(html).toContain('ยังไม่มีงานที่กำหนดให้การแข่งขันนี้');
-    expect(html).not.toContain('No tasks assigned to this contest');
-  });
-
   it('renders participant empty state and action labels', () => {
     const html = withDictionary(<ContestParticipantsTab data={{ contestId: 7, participations: [], availableUsers: [], teams: [], permissionKeys: ['contest:read', 'participation:read', 'participation:create'] }} />);
     expect(html).toContain('No participants yet');
@@ -34,7 +26,8 @@ describe('contest tab parity', () => {
   });
 
   it('keeps the current Contest settings form fields', () => {
-    const html = renderToStaticMarkup(<DictionaryProvider dict={en}><ContestSettingsTab data={{ contestId: 7, fields: { name: 'Contest', description: 'Description', timezone: 'Asia/Bangkok', allow_questions: true, allow_user_tests: false, submissions_download_allowed: true, allow_password_authentication: true, allow_registration: false, analysis_enabled: false, token_mode: 'disabled', score_precision: 0, start: null, stop: null, analysis_start: null, analysis_stop: null }, permissionKeys: ['contest:read', 'contest:update'] }} /></DictionaryProvider>);
+    const html = renderToStaticMarkup(<ContestSettingsTab data={{ contestId: 7, fields: { name: 'Contest', description: 'Description', timezone: 'Asia/Bangkok', allow_questions: true, allow_user_tests: false, submissions_download_allowed: true, allow_password_authentication: true, allow_registration: false, analysis_enabled: false, token_mode: 'disabled', score_precision: 0, start: null, stop: null, analysis_start: null, analysis_stop: null }, permissionKeys: ['contest:read', 'contest:update'] }} />);
+    expect(html).toContain('Contest Settings');
     expect(html).toContain('Timezone');
     expect(html).toContain('Save Changes');
   });

@@ -114,7 +114,7 @@ export async function updateGroup(
     if (existing.name === 'Superadmin' && trimmedName !== 'Superadmin') {
       return {
         success: false,
-        error: 'Cannot rename the Superadmin group: it is name-keyed and anchors superadmin detection',
+        error: 'Cannot rename the Superadmin group — it is name-keyed and anchors superadmin detection',
       };
     }
 
@@ -122,15 +122,17 @@ export async function updateGroup(
     if (existing.name === 'Superadmin' && !permissionKeys.includes('all:all')) {
       return {
         success: false,
-        error: 'Cannot remove "all:all" from the Superadmin group: it would strip every superadmin at once',
+        error: 'Cannot remove "all:all" from the Superadmin group — it would strip every superadmin at once',
       };
     }
 
-    // The root actor group is seed-maintained grant material; reshaping it would strip the identity script-side actions log under.
+    // Why: the root actor group is seed-maintained grant material — reshaping it
+    // would strip the attribution identity every script-side action logs under,
+    // the same way removing all:all from Superadmin would strip superadmins.
     if (existing.name === ROOT_ACTOR_GROUP_NAME) {
       return {
         success: false,
-        error: 'Cannot edit the root actor group: the seed maintains it, and script-action attribution resolves through it',
+        error: 'Cannot edit the root actor group — the seed maintains it, and script-action attribution resolves through it',
       };
     }
 
@@ -187,20 +189,23 @@ export async function deleteGroup(id: number, reason: string): Promise<ActionRes
     if (existing.name === 'Superadmin') {
       return {
         success: false,
-        error: 'Cannot delete the Superadmin group: it is name-keyed and anchors superadmin detection',
+        error: 'Cannot delete the Superadmin group — it is name-keyed and anchors superadmin detection',
       };
     }
 
-    // Deleting the root actor group would leave script-side actions attributed to an admin with no permissions, so it is insert-only.
+    // Why: the root actor group is the system actor's grant material. Deleting it
+    // (or its links, which the delete cascades) would leave every script-side
+    // action attributed to an admin with no permissions — insert-only by design.
     if (existing.name === ROOT_ACTOR_GROUP_NAME) {
       return {
         success: false,
-        error: 'Cannot delete the root actor group: the system actor attribution resolves through it',
+        error: 'Cannot delete the root actor group — the system actor attribution resolves through it',
       };
     }
 
     const adminIds = await affectedAdminIds(id);
-    // The delete cascades only the link rows; the permission rows are shared definitions and must survive.
+    // Why: deleting a group cascades only the admin_groups and group_permissions links — the permission
+    // rows are shared definitions and must survive, and seeded groups are ordinary rows with no guard (except the Superadmin anchor).
     await prisma.groups.delete({ where: { id } });
 
     await recordAudit({

@@ -13,13 +13,15 @@ function teamCodes(user: UsersPageRow): string {
   return Array.from(new Set(codes)).join(', ') || '-';
 }
 
-// One column definition drives the desktop rows and the mobile cards, so the two layouts cannot drift.
+// Why: one column definition drives desktop rows and mobile cards, so
+// the two layouts cannot drift apart.
 export function buildUserColumns(args: BuildUserColumnsArgs): ResponsiveColumn<UserRow>[] {
-  const { selectedIds, allSelected, partlySelected, selectAllLabel, onToggleAll, onToggleOne, missing } = args;
+  const { selectedIds, allSelected, partlySelected, selectAllLabel, onToggleAll, onToggleOne } = args;
   return [
     {
       key: 'select',
-      // The header cell selects every filtered row, so a partial selection must read as partial.
+      // Why the indeterminate state: the header cell selects every row the filter matches, so a
+      // partial selection has to read as partial rather than as "nothing selected".
       header: (
         <input
           type="checkbox"
@@ -105,7 +107,7 @@ export function buildUserColumns(args: BuildUserColumnsArgs): ResponsiveColumn<U
         user.status ? (
           <Badge variant={user.status === 'active' ? 'success' : 'warning'}>{user.status}</Badge>
         ) : (
-          missing
+          '—'
         ),
     },
     {
@@ -113,7 +115,7 @@ export function buildUserColumns(args: BuildUserColumnsArgs): ResponsiveColumn<U
       header: 'Organization',
       sortKey: 'organization',
       cellClassName: 'min-w-[120px]',
-      render: ({ user }) => <CellText width="md" muted>{user.organization ?? missing}</CellText>,
+      render: ({ user }) => <CellText width="md" muted>{user.organization ?? '—'}</CellText>,
       hideOnMobile: true,
     },
     {
@@ -121,7 +123,7 @@ export function buildUserColumns(args: BuildUserColumnsArgs): ResponsiveColumn<U
       header: 'Country',
       sortKey: 'country',
       cellClassName: 'min-w-[80px]',
-      render: ({ user }) => <CellText width="sm" muted>{user.country ?? missing}</CellText>,
+      render: ({ user }) => <CellText width="sm" muted>{user.country ?? '—'}</CellText>,
       hideOnMobile: true,
     },
     {
@@ -138,7 +140,14 @@ export function buildUserColumns(args: BuildUserColumnsArgs): ResponsiveColumn<U
   ];
 }
 
-// j and k navigation queries data-shortcut-row, and a cell click reports that cell, not the row.
+// Why: j/k navigation queries [data-shortcut-row]; without this prop
+// the migrated users list is invisible to the shortcut handler.
+// Row click opens the record for every readable row; the select checkbox and
+// the action buttons stop propagation themselves, because a click on a cell
+// always reports that cell as the target rather than the row. Keyboard focus
+// lands on the row itself, so the key handler still requires the row target.
+// A row stripped of `id` stays non-navigable instead of exposing an identifier
+// the caller may not read.
 export function getUserRowProps(
   row: UserRow,
   onOpen: (user: UserRow['user']) => void,

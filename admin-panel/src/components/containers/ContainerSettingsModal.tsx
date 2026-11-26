@@ -43,7 +43,10 @@ export function ContainerSettingsModal({
     getDiscordWebhookStatus().then((status) => setIsDiscordConfigured(status.configured)).catch(() => setIsDiscordConfigured(false));
   }, []);
 
-  // The stream snapshot can be a poll old, and a human read of the config belongs on the audit trail.
+  // Why the server read on open: the stream snapshot this modal also receives can be a poll old,
+  // and an operator about to change a restart policy edits the values the server holds. Opening the
+  // settings is a human read of that config, so it is the one that belongs on the audit trail —
+  // the stream that carries the same values on every tick is not.
   useEffect(() => {
     let active = true;
     getContainerConfig()
@@ -62,7 +65,10 @@ export function ContainerSettingsModal({
     return (): void => { active = false; };
   }, [containerId]);
 
-  // The stream snapshot can be a poll old, and a human read of the config belongs on the audit trail.
+  // Why the server read on open: the stream snapshot this modal also receives can be a poll old,
+  // and an operator about to change a restart policy edits the values the server holds. Opening the
+  // settings is a human read of that config, so it is the one that belongs on the audit trail —
+  // the stream that carries the same values on every tick is not.
   useEffect(() => {
     let active = true;
     getContainerConfig()
@@ -92,7 +98,7 @@ export function ContainerSettingsModal({
     if (res.success) {
       toast.success('Success', { description: 'Container settings updated' });
       if (isDiscordConfigured === false && discordNotifications) {
-        toast.warning('Discord not configured', { description: 'Webhook is empty: notifications will be skipped until configured.' });
+        toast.warning('Discord not configured', { description: 'Webhook is empty — notifications will be skipped until configured.' });
       }
       onUpdate();
       onClose();
@@ -144,7 +150,7 @@ export function ContainerSettingsModal({
         />
         <div className="space-y-3">
           <label className="text-sm font-bold text-foreground flex items-center gap-2">
-            <RotateCcw className="w-4 h-4 text-muted-foreground" />
+            <RotateCcw className="w-4 h-4 text-primary" />
             Maximum Restart Attempts
           </label>
           <p className="text-xs text-muted-foreground">
@@ -177,7 +183,7 @@ export function ContainerSettingsModal({
           </div>
           <div className="flex items-center justify-between">
             <span className="text-sm text-muted-foreground">Restart Count</span>
-            <span className={cn('text-sm font-bold', config.currentRestarts >= config.maxRestarts ? 'text-destructive' : 'text-foreground')}>
+            <span className={cn('text-sm font-bold', config.currentRestarts >= config.maxRestarts ? 'text-destructive' : 'text-primary')}>
               {config.currentRestarts} / {config.maxRestarts}
             </span>
           </div>

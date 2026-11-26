@@ -63,7 +63,12 @@ async function loadUserOptions(query: string): Promise<readonly PickerOption[]> 
   }));
 }
 
-/** The pickers read through the same permission-gated server actions the list pages use. */
+/**
+ * The option list for an open picker, re-read after a short pause so a keystroke
+ * does not become a query of its own. The readers are the same permission-gated
+ * server actions the list pages use, so an unauthorized reader gets the server's
+ * refusal here instead of an unguarded client-side query.
+ */
 function usePickerOptions(
   open: boolean,
   query: string,
@@ -118,9 +123,9 @@ function pickerTriggerText(
   selectedId: number | undefined,
   picked: PickerOption | null,
 ): string {
-  if (selectedId === undefined) return `${label}, ${anyLabel}`;
-  if (picked !== null && picked.id === selectedId) return `${label}, ${picked.name}`;
-  return `${label}, #${selectedId}`;
+  if (selectedId === undefined) return `${label} · ${anyLabel}`;
+  if (picked !== null && picked.id === selectedId) return `${label} · ${picked.name}`;
+  return `${label} · #${selectedId}`;
 }
 
 function pickerEmptyText(loading: boolean, error: string | null, searching: string, noMatches: string): string {
@@ -128,7 +133,12 @@ function pickerEmptyText(loading: boolean, error: string | null, searching: stri
   return loading ? searching : noMatches;
 }
 
-/** Selection edits only this field's value; the URL is pushed when the toolbar submits. */
+/**
+ * One narrowing field of the toolbar: a searchable Command picker over the
+ * entity's reader, plus the hidden input that keeps the field's name in the
+ * filter form. Selection only edits this field's value — the URL is pushed when
+ * the toolbar submits, so every field still applies together and page resets.
+ */
 function EntityPicker({ kind, value, onChange, loadOptions }: EntityPickerProps): React.JSX.Element {
   const dict = useDictionary();
   const filters = dict.submissions.filters;
@@ -194,7 +204,17 @@ function EntityPicker({ kind, value, onChange, loadOptions }: EntityPickerProps)
   );
 }
 
-/** A form, not local state: the filter belongs in the address bar, and every push resets the page. */
+/**
+ * The narrowing controls and the search, merged into the one toolbar the table
+ * template defines: uniform 44px controls, an even picker grid, and below 768px
+ * the pickers collapse behind a More toggle instead of wrapping into an orphan
+ * line of right-aligned leftovers.
+ *
+ * WHY a form and not local state: the filter is a property of the view, not of the
+ * component, so it belongs in the address bar — an operator can share or bookmark the
+ * exact list they are looking at, and a reload keeps it. Every push resets the page,
+ * because page 4 of the unfiltered list is not page 4 of a filtered one.
+ */
 export function SubmissionFiltersCard({
   filters,
   onApply,

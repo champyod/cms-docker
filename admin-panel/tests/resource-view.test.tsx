@@ -1,35 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import {
-  CoreServicesSection,
-  CountersSection,
-  MetricsCard,
-  MetricsSection,
-  ResourceWorkersSection,
-  ResourcesProvider,
-  TrafficSection,
-} from '@/components/resources/ResourceView';
+import { MetricsCard, ResourceView } from '@/components/resources/ResourceView';
 import { DictionaryProvider } from '@/components/providers/DictionaryProvider';
 import type { ServerStats } from '@/lib/live-frames';
 import en from '@/dictionaries/en.json';
 import th from '@/dictionaries/th.json';
-
-/**
- * The five sections the page's board renders, composed here without a layout: the surface under
- * test is what each section shows, and the board above it is not this suite's subject.
- */
-function ResourceView(): React.JSX.Element {
-  return (
-    <ResourcesProvider>
-      <CoreServicesSection />
-      <CountersSection />
-      <ResourceWorkersSection />
-      <MetricsSection />
-      <TrafficSection />
-    </ResourcesProvider>
-  );
-}
-
 
 function metrics(source: ServerStats['source'], networkSource: ServerStats['source']): ServerStats {
   return { cpu: 1, memory: 2, uptime: '3d', network: { rx: 1, tx: 2, source: networkSource }, loadAvg: ['0.10'], source };

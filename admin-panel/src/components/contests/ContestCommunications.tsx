@@ -1,8 +1,11 @@
 'use client';
 
+import { Card } from '@/components/core/Card';
 import { SurfaceLoadState } from '@/components/core/SurfaceLoadState';
+import { Megaphone, MessageSquare } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { useDictionary } from '@/hooks/useDictionary';
-import { useContestCommunications, type CommTab } from './contest-communications/useContestCommunications';
+import { useContestCommunications } from './contest-communications/useContestCommunications';
 import { AnnouncementsPanel, type AnnouncementRow } from './contest-communications/AnnouncementsPanel';
 import { QuestionsPanel, type QuestionRow } from './contest-communications/QuestionsPanel';
 
@@ -10,34 +13,41 @@ interface ContestCommunicationsProps {
   contestId: number;
   adminId: number;
   permissionKeys?: readonly string[];
-  panel: CommTab;
 }
 
-/**
- * One of the contest's two message lists: announcements, or questions and their replies.
- *
- * Why one panel per instance: the page renders a board with a section per record kind, and a
- * component that also switched between the two would paint a second tab rail inside a section that
- * already has a heading. The card frame and the heading belong to the board, so only the panel
- * itself is rendered here.
- */
-export function ContestCommunications({ contestId, adminId, permissionKeys = [], panel }: ContestCommunicationsProps): React.JSX.Element {
-  const dict = useDictionary();
-  const { reload, status, announcements, questions, showAnnouncementForm, announcementSubject, announcementText, replyingTo, replySubject, replyText, replySettled, setShowAnnouncementForm, setAnnouncementSubject, setAnnouncementText, setReplyingTo, setReplySubject, setReplyText, setReplySettled, handleCreateAnnouncement, handleDeleteAnnouncement, handleReply, handleIgnore } = useContestCommunications(contestId, adminId, panel);
+const TAB_BASE = 'flex flex-none items-center gap-2 whitespace-nowrap px-4 py-3 text-sm font-medium transition-colors';
+const TAB_ACTIVE = 'border-b-2 border-primary text-primary';
+const TAB_INACTIVE = 'border-b-2 border-transparent text-muted-foreground hover:text-foreground';
 
-  if (status.kind !== 'idle') {
-    return (
-      <SurfaceLoadState
-        status={status}
-        loadingTitle="Loading..."
-        onRetry={reload}
-        retryLabel={dict.states.retry.label}
-      />
-    );
-  }
-  return panel === 'announcements' ? (
-    <AnnouncementsPanel announcements={announcements as AnnouncementRow[]} showForm={showAnnouncementForm} subject={announcementSubject} text={announcementText} permissionKeys={permissionKeys} onShowForm={setShowAnnouncementForm} onSubject={setAnnouncementSubject} onText={setAnnouncementText} onCreate={handleCreateAnnouncement} onDelete={handleDeleteAnnouncement} />
-  ) : (
-    <QuestionsPanel questions={questions as QuestionRow[]} replyingTo={replyingTo} replySubject={replySubject} replyText={replyText} replySettled={replySettled} permissionKeys={permissionKeys} onReplyingTo={setReplyingTo} onReplySubject={setReplySubject} onReplyText={setReplyText} onReplySettled={setReplySettled} onReply={handleReply} onIgnore={handleIgnore} />
+export function ContestCommunications({ contestId, adminId, permissionKeys = [] }: ContestCommunicationsProps): React.JSX.Element {
+  const dict = useDictionary();
+  const { activeTab, selectTab, reload, status, announcements, questions, showAnnouncementForm, announcementSubject, announcementText, replyingTo, replySubject, replyText, replySettled, setShowAnnouncementForm, setAnnouncementSubject, setAnnouncementText, setReplyingTo, setReplySubject, setReplyText, setReplySettled, handleCreateAnnouncement, handleDeleteAnnouncement, handleReply, handleIgnore } = useContestCommunications(contestId, adminId);
+
+  return (
+    <Card className="overflow-hidden">
+      <div className="flex overflow-x-auto border-b border-border">
+        <button onClick={() => selectTab('announcements')} className={cn(TAB_BASE, activeTab === 'announcements' ? TAB_ACTIVE : TAB_INACTIVE)}>
+          <Megaphone className="h-4 w-4" />Announcements
+        </button>
+        <button onClick={() => selectTab('questions')} className={cn(TAB_BASE, activeTab === 'questions' ? TAB_ACTIVE : TAB_INACTIVE)}>
+          <MessageSquare className="h-4 w-4" />Questions
+        </button>
+      </div>
+      <div className="p-4">
+        {status.kind !== 'idle' ? (
+          <SurfaceLoadState
+            status={status}
+            loadingTitle="Loading..."
+            onRetry={reload}
+            retryLabel={dict.states.retry.label}
+          />
+        ) : (
+          <>
+            {activeTab === 'announcements' && <AnnouncementsPanel announcements={announcements as AnnouncementRow[]} showForm={showAnnouncementForm} subject={announcementSubject} text={announcementText} permissionKeys={permissionKeys} onShowForm={setShowAnnouncementForm} onSubject={setAnnouncementSubject} onText={setAnnouncementText} onCreate={handleCreateAnnouncement} onDelete={handleDeleteAnnouncement} />}
+            {activeTab === 'questions' && <QuestionsPanel questions={questions as QuestionRow[]} replyingTo={replyingTo} replySubject={replySubject} replyText={replyText} replySettled={replySettled} permissionKeys={permissionKeys} onReplyingTo={setReplyingTo} onReplySubject={setReplySubject} onReplyText={setReplyText} onReplySettled={setReplySettled} onReply={handleReply} onIgnore={handleIgnore} />}
+          </>
+        )}
+      </div>
+    </Card>
   );
 }

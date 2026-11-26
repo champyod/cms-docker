@@ -44,7 +44,12 @@ export interface CredentialSetter {
   setFailures: (value: BatchFailure[]) => void;
 }
 
-/** Only a row whose username or password actually moved is a change worth sending. */
+/**
+ * Why the baseline is required: every row carries a username, so "has a username"
+ * selected the whole selection and rewrote accounts nobody touched — and the endpoint
+ * answered with a credentials CSV whose password cells were empty. Only a row whose
+ * username or password actually moved is a change worth sending.
+ */
 export function collectCredentialUpdates(
   rows: readonly SelectedUser[],
   baseline: readonly SelectedUser[],
@@ -73,7 +78,11 @@ function usernameSuffix(config: GeneratorConfig): string {
   return generateRun({ ...config, length: USERNAME_SUFFIX_LENGTH }, USERNAME_CHARS);
 }
 
-/** A template with no star renders the same name every attempt, so the suffix keeps the batch unique. */
+/**
+ * Why the suffix: a template with no `*` renders the same name on every attempt, so extending
+ * the name is the only way left to keep the batch unique. Uniqueness in the database is
+ * enforced by the batch endpoint's unique constraint when the credentials are applied.
+ */
 function renderUniqueUsername(templates: CredentialTemplates, usedUsernames: Set<string>): string {
   const base = renderUsernameTemplate(templates);
   let candidate = base;
@@ -152,7 +161,9 @@ async function postCredentialUpdates(
 
     const count = typeof result.count === 'number' ? result.count : updates.length;
     const failed = Array.isArray(result.failed) ? result.failed : [];
-    // The endpoint returns a CSV for whatever it changed; fetching it with no password moved hands over empty cells.
+    // Why the password check: the endpoint returns a CSV for whatever it changed.
+    // Fetching it when no password moved hands the operator a sheet of empty password
+    // cells under a message claiming credentials were exported.
     const passwordChanged = updates.some((update) => Boolean(update.password));
     setFailures(failed);
     if (result.downloadUrl && passwordChanged) {
@@ -161,7 +172,7 @@ async function postCredentialUpdates(
 
     const summary = `Applied credentials for ${count} user(s)`;
     if (failed.length > 0) {
-      setStatusMessage(`${summary}: ${failed.length} failed`);
+      setStatusMessage(`${summary} — ${failed.length} failed`);
     } else {
       setStatusMessage(passwordChanged ? `${summary} and exported the new passwords` : summary);
     }
@@ -174,7 +185,8 @@ async function postCredentialUpdates(
   }
 }
 
-/** Excel and LibreOffice execute a cell that opens with one of these characters as a formula. */
+/** Why prefix: Excel and LibreOffice execute a cell that opens with one of these
+ * characters as a formula, so a stored value must arrive at the sheet as text. */
 const FORMULA_PREFIX = /^[=+\-@\t\r]/;
 
 function csvEscapeValue(value: unknown): string {

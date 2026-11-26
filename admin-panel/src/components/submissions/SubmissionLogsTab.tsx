@@ -2,12 +2,15 @@
 
 import { Terminal } from 'lucide-react';
 
+import { Card } from '@/components/core/Card';
 import { EmptyState } from '@/components/core/EmptyState';
 import { useDictionary } from '@/hooks/useDictionary';
 import type { SubmissionLogsModel } from '@/lib/evaluation-read-model-types';
+import { interpolate } from '@/lib/interpolate';
 
 export interface SubmissionLogsTabProps {
   readonly model: SubmissionLogsModel;
+  readonly submissionId: number;
 }
 
 // Why one joined block: the modal presented the compiler output as a single
@@ -22,28 +25,39 @@ function logStream(model: SubmissionLogsModel): string {
   return sections.filter((section) => section !== '').join('\n');
 }
 
-/**
- * The compiler's output, as one stream.
- *
- * Why no heading and no outcome card: the page's fact strip states the compilation outcome and the
- * tab rail names Logs, so the card above the stream said both again - and the heading also spelled
- * out which submission, which the record shell had already said in a larger type.
- */
-export function SubmissionLogsTab({ model }: SubmissionLogsTabProps): React.JSX.Element {
+export function SubmissionLogsTab({ model, submissionId }: SubmissionLogsTabProps): React.JSX.Element {
   const dictionary = useDictionary();
   const stream = logStream(model);
-  if (stream === '') {
-    return (
-      <EmptyState
-        icon={Terminal}
-        title={dictionary.submissions.record.logs.emptyTitle}
-        description={dictionary.submissions.record.logs.emptyDescription}
-      />
-    );
-  }
   return (
-    <div className="bg-background rounded-lg p-4 font-mono text-xs whitespace-pre-wrap border border-border">
-      {stream}
+    <div className="space-y-6">
+      <Card className="space-y-1">
+        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+          {dictionary.submissions.record.outcome.compilation}
+        </h3>
+        <span className="font-medium capitalize">
+          {model.compilationOutcome ?? dictionary.submissions.record.results.pending}
+        </span>
+      </Card>
+      {stream === '' ? (
+        <EmptyState
+          icon={Terminal}
+          title={dictionary.submissions.record.logs.emptyTitle}
+          description={dictionary.submissions.record.logs.emptyDescription}
+        />
+      ) : (
+        <div className="space-y-2">
+          <h3 className="text-sm font-semibold flex items-center gap-2">
+            <Terminal className="w-4 h-4 text-muted-foreground" />
+            {interpolate(dictionary.submissions.record.logs.title, {
+              record: dictionary.navigation.evaluation['submission-record'].label,
+              id: submissionId,
+            })}
+          </h3>
+          <div className="bg-background rounded-lg p-4 font-mono text-xs whitespace-pre-wrap border border-border">
+            {stream}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

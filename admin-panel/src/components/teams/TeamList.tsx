@@ -1,6 +1,5 @@
 'use client';
 
-import { useCallback } from 'react';
 import { usePathname } from 'next/navigation';
 
 import { useAppRouter } from '@/hooks/useAppRouter';
@@ -9,17 +8,17 @@ import type { ListSortInput } from '@/lib/list-sorting';
 import { buildRoute } from '@/lib/navigation/routes';
 import type { TeamSummary } from '@/lib/people-read-model-types';
 
+import { TeamListHeader } from './TeamListHeader';
 import { TeamListTable } from './TeamListTable';
 import { TeamModal } from './TeamModal';
 import type { TeamListProps } from './teamListTypes';
-import { useRegisterTeamListRefresh } from './useTeamListRefresh';
 import { useTeamCapabilities, useTeamDelete, useTeamDialogs } from './useTeamListActions';
 
 function recordHref(locale: string, team: TeamSummary): string {
   return buildRoute(locale, 'people.team-record', { id: team.id });
 }
 
-export function TeamList({ initialTeams, permissionKeys, navigation, copy, initialSort }: TeamListProps): React.JSX.Element {
+export function TeamList({ initialTeams, permissionKeys, navigation, copy, docsLinkLabel, initialSort }: TeamListProps): React.JSX.Element {
   const [teams] = useSyncedState(initialTeams);
   const dialogs = useTeamDialogs();
   const pathname = usePathname();
@@ -30,10 +29,6 @@ export function TeamList({ initialTeams, permissionKeys, navigation, copy, initi
   const startEdit = (team: TeamSummary): void => {
     if (capabilities.canManage) dialogs.openEdit(team);
   };
-  // Why the header reloads through this registration: its create dialog renders in the page
-  // header, outside this component, and only this component knows the current query.
-  const refreshList = useCallback((): void => { router.refresh(); }, [router]);
-  useRegisterTeamListRefresh(refreshList);
 
   const applySort = (next: ListSortInput): void => {
     const params = new URLSearchParams(window.location.search);
@@ -50,12 +45,15 @@ export function TeamList({ initialTeams, permissionKeys, navigation, copy, initi
 
   return (
     <div className="space-y-6">
+      <TeamListHeader locale={locale} canCreate={capabilities.canCreate} onCreate={dialogs.openCreate} copy={copy} docsLinkLabel={docsLinkLabel} />
       <TeamListTable
         teams={teams}
         recordHref={(team) => recordHref(locale, team)}
         permissionKeys={permissionKeys}
+        capabilities={capabilities}
         onEdit={startEdit}
         onDelete={(teamId) => { void removeTeam(teamId); }}
+        onCreate={dialogs.openCreate}
         copy={copy}
         sort={initialSort}
         onSortChange={applySort}

@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import { Badge } from '@/components/core/Badge';
 import { useSyncedState } from '@/hooks/useSyncedState';
 import { cn } from '@/lib/utils';
 import { STATEMENT_LANGUAGES, isKnownLanguageCode, normalizeLanguageCode } from '@/lib/constants/languages';
@@ -113,18 +112,18 @@ export function LanguagePicker({
         aria-invalid={showWarning ? true : undefined}
         className={cn(
           'flex h-11 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none',
-          'placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-2',
+          'placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]',
           'disabled:cursor-not-allowed disabled:opacity-50',
-          showWarning ? 'border-warning/50 ring-warning/20' : ''
+          showWarning ? 'border-amber-500/50 ring-amber-500/20' : ''
         )}
       />
       {showWarning ? (
-        <p className="text-xs text-muted-foreground ml-1"><Badge variant="warning">Warning</Badge> Unrecognised language code: will be saved as “{normalized}” but may not match any statement. Recognised codes come from the shared languages list (languages.json).</p>
+        <p className="text-xs text-amber-600 ml-1">Unrecognised language code — will be saved as “{normalized}” but may not match any statement. Recognised codes come from the shared languages list (languages.json).</p>
       ) : null}
       {open ? (
         <div className="absolute z-50 mt-1 max-h-56 w-full overflow-auto rounded-md border border-border bg-popover shadow-md">
           {filtered.length === 0 ? (
-            <div className="p-3 text-sm text-muted-foreground">No matches: press Enter to use “{normalized}”</div>
+            <div className="p-3 text-sm text-muted-foreground">No matches — press Enter to use “{normalized}”</div>
           ) : (
             filtered.map((opt) => (
               <button

@@ -89,6 +89,8 @@ function renderRows(rows: readonly SubmissionListItem[], canRecalculate = false)
     <DictionaryProvider dict={en}>
       <SubmissionList
         initialSubmissions={rows}
+        totalPages={1}
+        currentPage={1}
         navigation={en.navigation}
         canRecalculate={canRecalculate}
       />

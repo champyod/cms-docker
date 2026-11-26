@@ -71,6 +71,7 @@ function renderTeamList(): HTMLElement {
         permissionKeys={['team:list']}
         navigation={en.navigation}
         copy={en.teams}
+        docsLinkLabel={en.docs.viewDocumentation}
       />
     </DictionaryProvider>,
   );
@@ -98,6 +99,8 @@ describe('row Enter navigation on a canonical Evaluation list', () => {
       <DictionaryProvider dict={en}>
         <SubmissionList
           initialSubmissions={[SUBMISSION_ROW]}
+          totalPages={1}
+          currentPage={1}
           navigation={en.navigation}
         />
       </DictionaryProvider>,

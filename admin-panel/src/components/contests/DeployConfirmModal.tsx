@@ -53,7 +53,7 @@ export function DeployConfirmModal({ isOpen, phase, targetLabel, extraNote = DEF
           )}
           {busy && (
             <div className="flex flex-col items-center gap-4 py-6">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
               <p className="text-sm text-muted-foreground">
                 {phase === 'deploying' ? 'Starting deploy...' : 'Deploying contest stack...'}
               </p>

@@ -276,6 +276,7 @@ describe('the contest status card save', () => {
   it('shows the zone error under the input it belongs to', () => {
     const message = '02:30 does not exist in America/New_York on 2026-03-08 (DST begins, clocks jump 02:00 → 03:00)';
     render(createElement(ContestStatusCard, {
+      contest: { start: null, stop: null, analysis_start: null, analysis_stop: null },
       formData: { start: '2026-03-08T02:30', stop: '', analysis_start: '', analysis_stop: '' },
       onChange: () => undefined,
       timeErrors: { start: message },

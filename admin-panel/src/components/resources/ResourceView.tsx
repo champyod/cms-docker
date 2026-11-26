@@ -1,11 +1,11 @@
 'use client';
 
-import { createContext, useCallback, useContext, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { WorkerNodeList } from '@/components/workers/WorkerNodeList';
 import { CoreServicesStatus } from '@/components/resources/CoreServicesStatus';
 import { NetworkTrafficLogs } from '@/components/resources/NetworkTrafficLogs';
 import { GaugeCard } from '@/components/resources/GaugeCard';
-import { Cpu, Database } from 'lucide-react';
+import { Activity, Cpu, Database, Network } from 'lucide-react';
 import { Card } from '@/components/core/Card';
 import { InlineAlert } from '@/components/core/InlineAlert';
 import { RowFreshness } from '@/components/core/RowFreshness';
@@ -57,36 +57,7 @@ function networkSourceLabel(serverStats: ServerStats | null, dict: Dictionary): 
   return network.source === 'host' ? dict.resources.hostSource : dict.resources.containerSource;
 }
 
-interface ResourceSurface {
-  readonly serverStats: ServerStats | null;
-  readonly workers: WorkerNodeView[];
-  readonly workersError: string | null;
-  readonly services: CoreServiceStatus[] | null;
-  readonly traffic: TrafficLog[] | null;
-  readonly trafficLimit: number;
-  readonly setTrafficLimit: (limit: number) => void;
-  readonly freshness: (section: ResourceSection) => RowFreshnessInput;
-}
-
-const ResourcesContext = createContext<ResourceSurface | null>(null);
-
-function useResources(): ResourceSurface {
-  const value = useContext(ResourcesContext);
-  if (value === null) {
-    throw new Error('useResources must be used inside ResourcesProvider');
-  }
-  return value;
-}
-
-/**
- * One stream, one read record, five sections.
- *
- * WHY a provider: the five sections arrive on one connection and each carries its own read instant,
- * so the section that falls behind is marked where the reader is looking. The board renders each
- * section in a slot of its own, so the stream has to sit above the layout - five sections each
- * opening their own channel would be five connections and five ideas of what is current.
- */
-export function ResourcesProvider({ children }: { readonly children: React.ReactNode }): React.JSX.Element {
+export function ResourceView(): React.JSX.Element {
   const dict = useDictionary();
   const [serverStats, setServerStats] = useState<ServerStats | null>(null);
   const [workers, setWorkers] = useState<WorkerNodeView[]>([]);
@@ -157,6 +128,8 @@ export function ResourcesProvider({ children }: { readonly children: React.React
     onError: onStreamError,
   });
 
+  const source = sourceLabel(serverStats, dict);
+
   // The cue's input per section, ready-made from the read that produced its value and the newest read
   // that covered it. Nothing here guesses: a section no read has dated reports `unknown`, never fresh.
   const freshness = (section: ResourceSection): RowFreshnessInput => ({
@@ -177,98 +150,70 @@ export function ResourcesProvider({ children }: { readonly children: React.React
   }
 
   return (
-    <ResourcesContext.Provider
-      value={{ serverStats, workers, workersError, services, traffic, trafficLimit, setTrafficLimit, freshness }}
-    >
-      {children}
-    </ResourcesContext.Provider>
-  );
-}
+    <div className="space-y-4 density:space-y-4">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Why "not here yet" is not "nothing to read": the summary section arrives later. */}
+          <CoreServicesStatus services={services ?? []} loading={services === null} freshness={freshness('services')} />
 
-/** The services that answer for this deployment, and whether each is up. */
-export function CoreServicesSection(): React.JSX.Element {
-  const { services, freshness } = useResources();
-  // Why "not here yet" is not "nothing to read": the summary section arrives later.
-  return <CoreServicesStatus services={services ?? []} loading={services === null} freshness={freshness('services')} />;
-}
+          {/* Why the counters are cued as figures: the gauges are the `server` section's own values,
+              so the cue wraps each one, and the card fills that wrapper as the cell it was. */}
+          <RowFreshness {...freshness('server')}>
+            <GaugeCard
+              className="h-full"
+              icon={<Cpu className="w-4 h-4 text-primary" />}
+              label={dict.resources.cpuUsage}
+              source={source}
+              percent={serverStats?.cpu || 0}
+              tone="auto"
+            />
+          </RowFreshness>
 
-/**
- * CPU and memory, as the two figures they are.
- *
- * WHY each gauge is wrapped in its own cue: the two are the `server` section's values, so the cue
- * wraps each figure rather than the pair.
- */
-export function CountersSection(): React.JSX.Element {
-  const { serverStats, freshness } = useResources();
-  const dict = useDictionary();
-  const source = sourceLabel(serverStats, dict);
-  return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-      <RowFreshness {...freshness('server')}>
-        <GaugeCard
-          className="h-full"
-          icon={<Cpu className="h-4 w-4 text-muted-foreground" />}
-          label={dict.resources.cpuUsage}
-          source={source}
-          percent={serverStats?.cpu || 0}
-          tone="auto"
-        />
-      </RowFreshness>
-      <RowFreshness {...freshness('server')}>
-        <GaugeCard
-          className="h-full"
-          icon={<Database className="h-4 w-4 text-muted-foreground" />}
-          label={dict.resources.memoryUsage}
-          source={source}
-          percent={serverStats?.memory || 0}
-          tone="info"
-        />
-      </RowFreshness>
+          <RowFreshness {...freshness('server')}>
+            <GaugeCard
+              className="h-full"
+              icon={<Database className="w-4 h-4 text-info" />}
+              label={dict.resources.memoryUsage}
+              source={source}
+              percent={serverStats?.memory || 0}
+              tone="info"
+            />
+          </RowFreshness>
+        </div>
+
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 text-foreground">
+              <Activity className="w-5 h-5 text-primary" />
+              <h2 className="text-xl font-bold">{dict.resources.workerNodes}</h2>
+          </div>
+          {workersError !== null ? (
+            <InlineAlert tone="destructive" announce="polite" title="Worker configuration unreadable">
+              {workersError}
+            </InlineAlert>
+          ) : (
+            <WorkerNodeList
+              rows={rowsFromNodes(workers)}
+              freshness={freshness('workers')}
+              emptyTitle="No worker nodes found"
+              emptyDescription="Workers are globally shared and configured in Infrastructure → Deployments"
+            />
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 gap-6">
+          <div>
+            <div className="flex items-center gap-2 text-foreground mb-4">
+              <Network className="w-5 h-5 text-info" />
+              <h2 className="text-xl font-bold">{dict.resources.systemMetrics}</h2>
+            </div>
+            {/* Why the same section as the gauges: the metrics card draws the counters' own read, so
+                it falls behind and is confirmed with them rather than on a rule of its own. */}
+            <RowFreshness {...freshness('server')}>
+              <MetricsCard serverStats={serverStats} />
+            </RowFreshness>
+          </div>
+            <NetworkTrafficLogs logs={traffic ?? []} limit={trafficLimit} onLimitChange={setTrafficLimit} loading={traffic === null} freshness={freshness('traffic')} />
+        </div>
     </div>
-  );
-}
-
-/** The worker fleet as the monitor reports it, or the reason it could not be read. */
-export function ResourceWorkersSection(): React.JSX.Element {
-  const { workers, workersError, freshness } = useResources();
-  if (workersError !== null) {
-    return (
-      <InlineAlert tone="destructive" announce="polite" title="Worker configuration unreadable">
-        {workersError}
-      </InlineAlert>
-    );
-  }
-  return (
-    <WorkerNodeList
-      rows={rowsFromNodes(workers)}
-      freshness={freshness('workers')}
-      emptyTitle="No worker nodes found"
-      emptyDescription="Workers are globally shared and configured in Infrastructure → Deployments"
-    />
-  );
-}
-
-/** Uptime, load average and network totals: the `server` section's counters. */
-export function MetricsSection(): React.JSX.Element {
-  const { serverStats, freshness } = useResources();
-  return (
-    <RowFreshness {...freshness('server')}>
-      <MetricsCard serverStats={serverStats} />
-    </RowFreshness>
-  );
-}
-
-/** The newest traffic lines the proxy logged, and how many of them to keep on screen. */
-export function TrafficSection(): React.JSX.Element {
-  const { traffic, trafficLimit, setTrafficLimit, freshness } = useResources();
-  return (
-    <NetworkTrafficLogs
-      logs={traffic ?? []}
-      limit={trafficLimit}
-      onLimitChange={setTrafficLimit}
-      loading={traffic === null}
-      freshness={freshness('traffic')}
-    />
   );
 }
 
@@ -278,23 +223,23 @@ export function MetricsCard({ serverStats }: { serverStats: ServerStats | null }
   return (
     <div className="grid grid-cols-1 gap-6">
       <Card className="p-4 density:p-3">
-        <div className="grid grid-cols-1 gap-4 text-center sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 text-center">
           <div>
-            <div className="mb-1 text-xs uppercase tracking-wider text-muted-foreground">{dict.resources.uptime}</div>
-            <div className="font-mono text-lg text-foreground">{serverStats?.uptime || '-'}</div>
+            <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">{dict.resources.uptime}</div>
+            <div className="text-lg font-mono text-foreground">{serverStats?.uptime || '-'}</div>
           </div>
           <div>
-            <div className="mb-1 text-xs uppercase tracking-wider text-muted-foreground">{dict.resources.loadAvg}</div>
-            <div className="font-mono text-lg text-foreground">{serverStats?.loadAvg?.[0] || '-'}</div>
+            <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">{dict.resources.loadAvg}</div>
+            <div className="text-lg font-mono text-foreground">{serverStats?.loadAvg?.[0] || '-'}</div>
           </div>
           <div>
-            <div className="mb-1 text-xs uppercase tracking-wider text-muted-foreground">
+            <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">
               {dict.resources.networkTotal}{networkSource === null ? '' : ` ${networkSource}`}
             </div>
-            <div className="font-mono text-xs text-foreground">
+            <div className="text-xs font-mono text-success">
               {serverStats?.network ? `↓ ${formatBytes(serverStats.network.rx)}` : '-'}
             </div>
-            <div className="font-mono text-xs text-foreground">
+            <div className="text-xs font-mono text-primary">
               {serverStats?.network ? `↑ ${formatBytes(serverStats.network.tx)}` : '-'}
             </div>
           </div>
@@ -305,9 +250,9 @@ export function MetricsCard({ serverStats }: { serverStats: ServerStats | null }
 }
 
 function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B';
-  const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }

@@ -4,15 +4,14 @@ import { isRoutePermitted } from '@/lib/navigation/permissions';
 import { ROUTE_REGISTRY } from '@/lib/navigation/registry';
 import type { RouteId } from '@/lib/navigation/types';
 import { parseRecordId } from '@/lib/queries/record-access';
-import { getDictionary } from '@/i18n';
-import { BoardPage } from '@/components/patterns/BoardPage';
 import { ContestRankingTab } from '@/components/contests/contest-detail/ContestRankingTab';
 
 type ContestRouteProps = {
   params: Promise<{ locale: string; id: string }>;
 };
 
-// The page resolves the registry route itself so a disabled or narrowed descriptor 404s before the data is read.
+// Why: the reader enforces the same keys, but the page must resolve the exact
+// registry route first so a disabled or narrowed descriptor 404s before data.
 async function authorizeContestTab(routeId: RouteId): Promise<ReadonlySet<string>> {
   const route = ROUTE_REGISTRY.find((candidate) => candidate.id === routeId);
   if (!route || !route.enabled) notFound();
@@ -27,24 +26,10 @@ async function authorizeContestTab(routeId: RouteId): Promise<ReadonlySet<string
   }
 }
 
-export default async function ContestRankingPage({ params }: ContestRouteProps): Promise<React.JSX.Element> {
-  const { locale, id } = await params;
+export default async function ContestRankingPage({ params }: ContestRouteProps) {
+  const { id } = await params;
   const contestId = parseRecordId(id);
   if (contestId === null) notFound();
   await authorizeContestTab('contests.tabs.ranking');
-  const copy = (await getDictionary(locale)).contests.ranking;
-  return (
-    <BoardPage
-      // The record shell above renders the contest's name, its trail and its tabs.
-      ownsHeader={false}
-      sections={[
-        {
-          key: 'standings',
-          title: copy.title,
-          description: copy.description,
-          rows: <ContestRankingTab contestId={contestId} />,
-        },
-      ]}
-    />
-  );
+  return <ContestRankingTab contestId={contestId} />;
 }

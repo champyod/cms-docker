@@ -26,7 +26,29 @@ import {
   waiveUnreachableFindings,
 } from '@/lib/panel-actions';
 
-/** The verbs perform the writes in-process against the same module the panel's server actions wrap. */
+/**
+ * The `./cms panel` surface: every one of these verbs performs the write itself, in-process,
+ * against the same module the panel's server actions wrap.
+ *
+ * WHY a CLI and not a call to the panel's HTTP: the operator's requirement is that the verb works
+ * while no panel process is running, so there is nothing to call but the write itself. WHY the
+ * same module and not a second implementation: the panel editor and the verb have to mean the same
+ * thing by a binding, a shown contest and an override, and two implementations would drift exactly
+ * where a live contest cannot afford them to.
+ *
+ * WHY every shared write has a verb and not only the ones the operator asked for first: a write
+ * that exists only behind a form is a write a script cannot reach, so the panel becomes the only
+ * way to perform it — which is the situation `lib/panel-actions` was extracted to end. The list
+ * below is therefore the module's write surface, and `PANEL_WRITE_VERBS` beside it says which
+ * verb drives which write. `tests/panel-cli-coverage.test.ts` holds the two together: a write
+ * exported without a verb fails the suite instead of waiting for an operator to notice.
+ *
+ * WHY the actor is resolved here: the panel's actor is its session, and a script has no session —
+ * the seeded `root` admin is the account that owns script-side actions, and the audit trail reads
+ * a name rather than NULL (see `resolveRootActorId`). Only the writes that file an actor resolve
+ * it: the registry's row-level writes take no actor at all, so demanding one would refuse a write
+ * the panel performs from the same function.
+ */
 
 /** A command line the parser cannot read, as opposed to a write the database refuses. */
 export class PanelUsageError extends Error {
@@ -38,7 +60,7 @@ export class PanelUsageError extends Error {
 
 export const PANEL_USAGE = `usage: cms panel <command> [args]
 
-Every command performs the write itself, the panel does not have to be running, and files it
+Every command performs the write itself — the panel does not have to be running — and files it
 under the \`root\` actor wherever the write records an actor, exactly as the panel files the same
 action.
 
@@ -85,7 +107,7 @@ A contest's roster and its accounts:
         Take tasks off a contest. A task not on it refuses the whole selection.
   contest accounts rotate <contest-id> --user <id>[,<id>...] [--team <id>] --reason <text>
         Rotate the display usernames of the selected accounts and, when --team is given, set that
-        team on the same participations: one transaction, as the panel's day-two action runs it.
+        team on the same participations — one transaction, as the panel's day-two action runs it.
 
 The patching surface's decisions:
   waiver create --source <diun|rootfs|osv> --match <finding-key|cve> --review-by <date> --reason <text>
@@ -140,7 +162,17 @@ export type PanelCommand =
   | { readonly area: 'waiver'; readonly verb: 'end'; readonly waiverId: number; readonly reason: string }
   | { readonly area: 'waiver'; readonly verb: 'bulk'; readonly reviewBy: string; readonly dryRun: boolean };
 
-/** The CLI's own statement of its coverage; the guard reads the same list the parser dispatches from. */
+/**
+ * Which verb drives which write of the shared module.
+ *
+ * WHY this table exists in the source and not only in the suite: it is the CLI's own statement of
+ * its coverage, so the guard reads the same list the parser dispatches from and there is no third
+ * place for the two to disagree. Every write `lib/panel-actions` publishes appears here once.
+ *
+ * WHY a write can carry one verb that files several rows: `addOverrides` is the panel's bulk
+ * surface, and `override add` with several `--key`s is that same write — one selection, one
+ * transaction, one audit row. The verb states the shape, not the row count.
+ */
 export interface PanelVerbWrite {
   /** The exported write in `lib/panel-actions`, by name. */
   readonly write: string;
@@ -169,20 +201,26 @@ export const PANEL_WRITE_VERBS: readonly PanelVerbWrite[] = [
   { write: 'waiveUnreachableFindings', verb: ['waiver', 'bulk'] },
 ];
 
-/** Exports deliberately not verbs; the reason is required so a new write cannot land here by convenience. */
+/**
+ * The module's exports that are deliberately not verbs, and why.
+ *
+ * WHY the reason is required and not a bare list: an export added to `lib/panel-actions` tomorrow
+ * is either a write that needs a verb or one of these, and the only way to tell is for the author
+ * to say which and why. A bare allowlist would let the next write land here by convenience.
+ */
 export const PANEL_NON_VERB_EXPORTS: Readonly<Record<string, string>> = {
   validateService:
     'a validator: it refuses a service row and writes nothing, so the write it guards is the verb',
   validateExposure:
     'a validator: it refuses an exposure row and writes nothing, so the write it guards is the verb',
   writeContestUsername:
-    'one row inside a caller-run transaction: `accounts rotate` is the verb that opens it',
+    'one row inside a caller-run transaction — `accounts rotate` is the verb that opens it',
   assignTeamToParticipants:
-    'one statement inside a caller-run transaction: `accounts rotate` is the verb that opens it',
+    'one statement inside a caller-run transaction — `accounts rotate` is the verb that opens it',
   attachContestTask:
-    'one row inside a caller-run transaction: `task attach` is the verb that opens it',
+    'one row inside a caller-run transaction — `task attach` is the verb that opens it',
   detachContestTask:
-    'one row inside a caller-run transaction: `task detach` is the verb that opens it',
+    'one row inside a caller-run transaction — `task detach` is the verb that opens it',
   resolveRootActorId:
     'the actor the verbs file under, not a write: it changes no row',
 };
@@ -228,7 +266,17 @@ interface Flags {
   readonly switches: ReadonlySet<string>;
 }
 
-/** An unknown flag is refused and a repeated one is kept: the write files the whole selection or none. */
+/**
+ * Reads the flags a verb accepts, refusing one it does not.
+ *
+ * WHY an unknown flag is refused rather than ignored: a misspelt `--reson` would otherwise be
+ * dropped and the write would fail later for a reason that names the missing value instead of the
+ * typo, which is the kind of message an operator cannot act on.
+ *
+ * WHY a repeated flag is kept rather than overwritten: `--key` and `--task` name a selection, and
+ * the write they drive files the whole selection or none of it, so silently keeping the last one
+ * would perform a different write than the caller typed.
+ */
 function readFlags(args: readonly string[], spec: FlagSpec): Flags {
   const values = new Map<string, string[]>();
   const switches = new Set<string>();
@@ -267,7 +315,11 @@ function required(flags: Flags, name: string): string {
   return value;
 }
 
-/** Values split on commas, so --task 4,5 and --task 4 --task 5 are the same selection. */
+/**
+ * Every value given for a flag, split on commas, so `--task 4,5` and `--task 4 --task 5` are the
+ * same selection. Blank entries are dropped here and an empty result is left for the write to
+ * refuse, which is where the "select at least one" wording lives.
+ */
 function many(flags: Flags, name: string): string[] {
   const raw = flags.values.get(name) ?? [];
   return raw.flatMap((value) => value.split(',').map((part) => part.trim())).filter((part) => part !== '');
@@ -308,14 +360,26 @@ function positional(args: readonly string[], index: number, label: string): stri
   return value;
 }
 
-/** Positionals run to the first flag: the count is the caller's, so the flags are read from where they stop. */
+/**
+ * The leading positionals a verb takes, up to its first flag.
+ *
+ * WHY the split rather than "positionals at fixed indexes": `config end` and `override end` take a
+ * selection of ids, so the count is the caller's, and the flags that follow are read from where the
+ * positionals stop.
+ */
 function splitPositionals(args: readonly string[]): { positionals: string[]; flags: string[] } {
   const index = args.findIndex((token) => token.startsWith('--'));
   if (index === -1) return { positionals: [...args], flags: [] };
   return { positionals: args.slice(0, index), flags: args.slice(index) };
 }
 
-/** The defaults are the form's, so the verb and the form create the same starting row. */
+/**
+ * One row of the registry, as the panel's own editor collects it.
+ *
+ * WHY the defaults are the form's: `registry service set` with only the four required fields has to
+ * write the row a `+ add service` would write, or the verb and the form would create two different
+ * starting rows for the same registry.
+ */
 function parseServiceSet(args: readonly string[]): ServiceInput {
   const flags = readFlags(args, {
     values: ['id', 'name', 'role', 'shard', 'host', 'http-port', 'rpc-port', 'db-profile', 'image', 'pull-policy', 'contest'],
@@ -325,7 +389,9 @@ function parseServiceSet(args: readonly string[]): ServiceInput {
   return {
     id: readOptionalInt(flags, 'id', 'the row id') ?? undefined,
     name: required(flags, 'name'),
-    // SERVICE_ROLES is the vocabulary and validateService refuses the rest, so a second check here would be a second copy of one rule.
+    // WHY the role is a cast into a typed field: SERVICE_ROLES is the vocabulary and
+    // `validateService` refuses a role outside it with the message the panel's form shows, so a
+    // second check here would be a second copy of one rule.
     role: required(flags, 'role') as ServiceRole,
     shard: readOptionalInt(flags, 'shard', 'the shard') ?? 0,
     host: required(flags, 'host'),
@@ -362,14 +428,22 @@ function parseExposureSet(args: readonly string[]): ExposureInput {
     id: readOptionalInt(flags, 'id', 'the row id') ?? undefined,
     service_id: readRequiredInt(flags, 'service', 'the service the exposure fronts'),
     hostname: one(flags, 'hostname') ?? '',
-    // A blank path is the root exposure, stated so the omission means that and not nothing.
+    // WHY the root location when no path is given: the panel's blank draft starts at '/', and an
+    // exposure with no path is the root one — stated here so the omission means that, not nothing.
     path: one(flags, 'path') ?? '/',
     tls: !flags.switches.has('no-tls'),
     tailnet: one(flags, 'tailnet') ?? null,
   };
 }
 
-/** Domain values ride through as text; the shared module owns what each may be. */
+/**
+ * Turns argv into one command, or refuses the shape.
+ *
+ * WHY the domain values (a target kind, a verb, a contest id, a config id) are carried through as
+ * text: the shared module owns what each of them may be, so the parser that read them does not
+ * grow a second copy of the rule — a kind this build cannot draw is refused by the same code the
+ * panel's form reaches.
+ */
 export function parsePanelCommand(argv: readonly string[]): PanelCommand {
   const [area, verb, third] = argv;
   if (area === 'registry') {
@@ -392,7 +466,8 @@ export function parsePanelCommand(argv: readonly string[]): PanelCommand {
         if (verb === 'wiring') return { area: 'registry', verb: 'wiring-remove', id: rowId };
         return { area: 'registry', verb: 'exposure-remove', id: rowId };
       }
-      // A set's words are area, kind and set, so the flags start at the fourth token.
+      // WHY slice(3) for a `set`: the words are `<area> <kind> set`, so the flags start at the
+      // fourth token — a removal has already consumed its id by then and starts at the fifth.
       if (verb === 'service') return { area: 'registry', verb: 'service-set', service: parseServiceSet(argv.slice(3)) };
       if (verb === 'wiring') return { area: 'registry', verb: 'wiring-set', wiring: parseWiringSet(argv.slice(3)) };
       return { area: 'registry', verb: 'exposure-set', exposure: parseExposureSet(argv.slice(3)) };
@@ -437,7 +512,9 @@ export function parsePanelCommand(argv: readonly string[]): PanelCommand {
       verb,
       contestId: required(flags, 'contest'),
       kind: required(flags, 'kind'),
-      // The whole-board kind carries no target text; the shared write states the wildcard itself.
+      // WHY one empty key rather than none: the whole-board kind carries no target text, and the
+      // shared write states that wildcard itself — so an omitted --key is the single row it always
+      // was, not an empty selection the write would then have to special-case.
       keys: keys.length === 0 ? [''] : keys,
       action: required(flags, 'action'),
       value: one(flags, 'value') ?? '',
@@ -474,7 +551,8 @@ export function parsePanelCommand(argv: readonly string[]): PanelCommand {
       return { area: 'waiver', verb, waiverId, reason: required(flags, 'reason') };
     }
     if (verb === 'bulk') {
-      // The subject is every row the feed holds, so the verb takes no positional.
+      // WHY no positional argument: the subject is every row the feed already holds, so the verb
+      // names a decision about the whole set rather than one finding the caller types.
       const flags = readFlags(argv.slice(2), { values: ['review-by'], switches: ['dry-run'] });
       return { area: 'waiver', verb, reviewBy: required(flags, 'review-by'), dryRun: flags.switches.has('dry-run') };
     }
@@ -488,7 +566,8 @@ export function parsePanelCommand(argv: readonly string[]): PanelCommand {
       waiver: {
         source: required(flags, 'source'),
         match: required(flags, 'match'),
-        // createWaiver owns what a review date may be and parses it once for both boundaries.
+        // WHY the date rides through as text: `createWaiver` owns what a review date may be — a
+        // future-only decision — and parses it once for both boundaries.
         reviewBy: required(flags, 'review-by'),
         reason: required(flags, 'reason'),
       },
@@ -497,7 +576,13 @@ export function parsePanelCommand(argv: readonly string[]): PanelCommand {
   throw new PanelUsageError(`unknown area ${JSON.stringify(area)}`);
 }
 
-/** The registry's writes answer success false and error rather than throwing, so a success line here would report a write the database refused. */
+/**
+ * Turns the shared module's tri-state result into a refusal.
+ *
+ * WHY: the registry's row-level writes answer `{ success: false, error }` rather than throwing —
+ * the panel renders that on the form — so a CLI that printed its success line regardless would
+ * report a write the database refused, and exit zero over it.
+ */
 function requireWritten(result: WriteResult, subject: string): void {
   if (result.success === true) return;
   throw new Error(result.error ?? `${subject} was refused`);
@@ -508,7 +593,14 @@ function counted(count: number, noun: string): string {
   return `${count} ${noun}${count === 1 ? '' : 's'}`;
 }
 
-/** The actor is resolved before the write so a write that cannot name an actor never lands. */
+/**
+ * Performs one parsed command as the `root` actor and answers the line to print.
+ *
+ * WHY the actor is resolved before the write: a write that cannot name an actor must not land, and
+ * resolving first keeps that true even when the write itself would have succeeded. It is resolved
+ * per command rather than once up front because the registry's row-level writes take no actor —
+ * refusing them for a missing `root` admin would refuse a write the panel performs.
+ */
 export async function runPanelCommand(command: PanelCommand): Promise<string> {
   if (command.area === 'registry') {
     if (command.verb === 'bind') {
@@ -552,7 +644,9 @@ export async function runPanelCommand(command: PanelCommand): Promise<string> {
       await showConfigTarget(actorId, { kind: 'contest', targetKey: command.contestId, reason: command.reason });
       return `contest ${command.contestId} is now on the board.`;
     }
-    // A single id is the whole selection, so a zero-row end is a refusal rather than a silent skip.
+    // WHY a zero-row end is a refusal: a single id is the whole selection here, so reporting
+    // success for a write that matched nothing would be exactly the silent skip this verb exists
+    // to avoid — the operator would read "done" and the board would still show the target.
     const ended = await endConfigTargets(actorId, command.configIds, command.reason);
     if (ended === 0) {
       throw new Error(`no active shown target ${command.configIds.join(', ')} to end`);

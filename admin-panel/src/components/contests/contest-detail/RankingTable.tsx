@@ -3,9 +3,6 @@
 import { useMemo } from 'react';
 import { CellText } from '@/components/core/CellText';
 import { ResponsiveTable, type ResponsiveColumn } from '@/components/core/ResponsiveTable';
-import { useDictionary } from '@/hooks/useDictionary';
-import { formatCount, formatScore } from '@/lib/format-number';
-import type { Dictionary } from '@/lib/dictionary';
 
 export interface TaskCol { id: number; name: string; title: string; score_precision: number; }
 export interface RankingEntry { participationId: number; rank: number; user: { username: string }; taskScores: Record<string, number>; totalScore: number; }
@@ -14,26 +11,23 @@ interface Props {
   ranking: { ranking: RankingEntry[]; tasks: TaskCol[] } | null;
 }
 
-function formatTaskScore(value: number | undefined, precision: number, missing: string): string {
-  return value !== undefined ? formatScore(value, precision) : missing;
+function formatTaskScore(value: number | undefined, precision: number): string {
+  return value !== undefined ? value.toFixed(precision) : '-';
 }
 
-// One column definition drives the desktop rows and the mobile cards, so the two layouts cannot drift.
-function buildRankingColumns(
-  tasks: TaskCol[],
-  missing: string,
-  columns: Dictionary['contests']['ranking']['columns'],
-): ResponsiveColumn<RankingEntry>[] {
+// Why: one column definition drives desktop rows and mobile cards, so
+// the two layouts cannot drift apart.
+function buildRankingColumns(tasks: TaskCol[]): ResponsiveColumn<RankingEntry>[] {
   return [
     {
       key: 'rank',
-      header: columns.rank,
+      header: '#',
       cellClassName: 'w-16',
-      render: (entry) => <CellText width="id" mono muted>#{formatCount(entry.rank)}</CellText>,
+      render: (entry) => <CellText width="id" mono muted>#{entry.rank}</CellText>,
     },
     {
       key: 'user',
-      header: columns.user,
+      header: 'User',
       cellClassName: 'min-w-[120px]',
       render: (entry) => <CellText width="md" bold>{entry.user.username}</CellText>,
     },
@@ -44,17 +38,17 @@ function buildRankingColumns(
       cellClassName: 'min-w-[80px]',
       render: (entry) => (
         <CellText width="sm" mono muted>
-          {formatTaskScore(entry.taskScores[task.id], task.score_precision, missing)}
+          {formatTaskScore(entry.taskScores[task.id], task.score_precision)}
         </CellText>
       ),
     })),
     {
       key: 'total',
-      header: columns.total,
+      header: 'Total',
       cellClassName: 'w-24 text-right',
       render: (entry) => (
         <CellText width="sm" mono bold className="text-primary text-right">
-          {formatScore(entry.totalScore, 0)}
+          {entry.totalScore.toFixed(0)}
         </CellText>
       ),
     },
@@ -62,9 +56,7 @@ function buildRankingColumns(
 }
 
 export function RankingTable({ ranking }: Props): React.JSX.Element | null {
-  const dict = useDictionary();
-  const missing = dict.common.notSet;
-  const columns = useMemo(() => buildRankingColumns(ranking?.tasks ?? [], missing, dict.contests.ranking.columns), [ranking?.tasks, missing, dict.contests.ranking.columns]);
+  const columns = useMemo(() => buildRankingColumns(ranking?.tasks ?? []), [ranking?.tasks]);
   if (!ranking) return null;
   return (
     <ResponsiveTable
@@ -73,7 +65,7 @@ export function RankingTable({ ranking }: Props): React.JSX.Element | null {
       getRowKey={(entry) => entry.participationId}
       outerClassName="w-full overflow-x-auto"
       className="w-full"
-      emptyState={<p className="py-4 text-center text-sm text-muted-foreground">{dict.contests.ranking.empty}</p>}
+      emptyState={<p className="py-4 text-center text-sm text-muted-foreground">No submissions yet.</p>}
     />
   );
 }

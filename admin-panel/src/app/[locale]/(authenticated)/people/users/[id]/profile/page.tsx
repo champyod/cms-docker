@@ -6,10 +6,7 @@ import type { RouteId } from '@/lib/navigation/types';
 import { getDictionary } from '@/i18n';
 import { getUserProfile, getUserSummary } from '@/lib/people-read-models';
 import { readRecordOrNotFound, parseRecordId } from '@/lib/queries/record-access';
-import { DetailPage } from '@/components/patterns/DetailPage';
 import { UserProfileTab } from '@/components/users/UserProfileTab';
-
-// A value the record does not carry reads as the panel's missing word, so it cannot be mistaken for a field that failed to load.
 
 async function authorizeUserTab(routeId: RouteId): Promise<ReadonlySet<string>> {
   const route = ROUTE_REGISTRY.find((candidate) => candidate.id === routeId);
@@ -25,14 +22,6 @@ async function authorizeUserTab(routeId: RouteId): Promise<ReadonlySet<string>> 
   }
 }
 
-function orMissing(value: string | null, missing: string): string {
-  return value === null || value.trim() === '' ? missing : value;
-}
-
-function joined(values: readonly string[], missing: string): string {
-  return values.length > 0 ? values.join(', ') : missing;
-}
-
 export default async function UserProfilePage({ params }: { params: Promise<{ locale: string; id: string }> }): Promise<React.JSX.Element> {
   const { locale, id: rawId } = await params;
   const id = parseRecordId(rawId);
@@ -43,20 +32,5 @@ export default async function UserProfilePage({ params }: { params: Promise<{ lo
     readRecordOrNotFound(() => getUserProfile(id)),
     readRecordOrNotFound(() => getUserSummary(id)),
   ]);
-  const copy = dictionary.users.profile;
-  return (
-    <DetailPage
-      ownsHeader={false}
-      // The shell's header already prints these facts, so the profile lists only what it adds.
-      facts={[
-        { term: copy.name, value: orMissing(`${profile.firstName} ${profile.lastName}`.trim(), dictionary.common.notSet) },
-        { term: copy.email, value: orMissing(profile.email, dictionary.common.notSet) },
-        { term: copy.timezone, value: orMissing(profile.timezone, dictionary.common.notSet) },
-        { term: copy.languages, value: joined(profile.preferredLanguages, dictionary.common.notSet) },
-        { term: copy.teams, value: joined(summary.teamCodes, dictionary.common.notSet) },
-      ]}
-    >
-      <UserProfileTab userId={summary.id} copy={dictionary.users} permissionKeys={[...effective]} />
-    </DetailPage>
-  );
+  return <UserProfileTab profile={profile} summary={summary} navigation={dictionary.navigation} copy={dictionary.users} permissionKeys={[...effective]} />;
 }

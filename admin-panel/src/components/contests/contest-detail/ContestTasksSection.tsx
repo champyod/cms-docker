@@ -9,6 +9,7 @@ import { BulkActionBar } from '@/components/core/BulkActionBar';
 import { Button } from '@/components/core/Button';
 import { EmptyState } from '@/components/core/EmptyState';
 import { Input } from '@/components/core/Input';
+import { SectionCard } from '@/components/core/SectionCard';
 import { SELECTION_CHECKBOX_CLASS } from '@/components/core/SelectionColumn';
 import { useListSelection } from '@/hooks/useListSelection';
 import type { Dictionary } from '@/lib/dictionary';
@@ -21,16 +22,19 @@ interface Task { id: number; name: string; title: string; }
 interface Props {
   contestId: number;
   tasks: Task[];
+  expanded: boolean;
   locale: string;
   permissionKeys: readonly string[];
   copy: Dictionary;
+  onToggle: () => void;
   onAddTask: () => void;
   onAttachTasks: () => void;
   onRemoveTask: (id: number) => void;
   onRefresh: () => void;
 }
 
-// Assignment is a write action, so readers without task:update never see a dead Add or Remove.
+// Why: task assignment is a write action — readers without task:update see
+// the roster but never a dead Add/Remove affordance.
 function useCanManageTasks(permissionKeys: readonly string[]): boolean {
   return hasEffectivePermission(new Set(permissionKeys), 'task:update');
 }
@@ -67,7 +71,7 @@ function TaskRow({
             onChange={(event) => onToggle(task.id, event.target.checked)}
           />
         )}
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted text-sm font-bold text-muted-foreground">{task.name.substring(0, 2).toUpperCase()}</div>
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-warning/10 text-sm font-bold text-warning">{task.name.substring(0, 2).toUpperCase()}</div>
         <div>
           <div className="font-medium text-foreground">{task.name}</div>
           <div className="text-xs text-muted-foreground">{task.title}</div>
@@ -90,13 +94,26 @@ function TaskRow({
   );
 }
 
-/** The select-all walks the filtered set, and the detach reports which named task stopped the whole write. */
+/**
+ * The contest's task roster, with the bulk attach/detach the day-2 setup needs.
+ *
+ * WHY the filter drives the list and the header cell selects what the filter matches: a contest's
+ * roster is read one task at a time today, and attaching or detaching a term's worth of tasks one
+ * row at a time is the manual work this surface exists to end. The select-all box walks the
+ * filtered set, so it never reaches a row the operator's filter hid.
+ *
+ * WHY the detach reports a named refusal instead of a count: the write refuses the whole selection
+ * when any named task is not on the contest, so the operator reads which row stopped it rather than
+ * a batch that quietly covered fewer rows than they selected.
+ */
 export function ContestTasksSection({
   contestId,
   tasks,
+  expanded,
   locale,
   permissionKeys,
   copy,
+  onToggle,
   onAddTask,
   onAttachTasks,
   onRemoveTask,
@@ -136,7 +153,13 @@ export function ContestTasksSection({
   };
 
   return (
-    <div>
+    <SectionCard
+      title="Tasks"
+      icon={<ClipboardList className="h-5 w-5 text-warning" />}
+      count={tasks.length}
+      expanded={expanded}
+      onToggle={onToggle}
+    >
       <div className="flex flex-wrap items-end gap-3 border-b border-border bg-muted/20 p-4">
         {canManage && (
           <label className="flex items-center gap-2 pb-2 text-sm text-foreground">
@@ -202,8 +225,8 @@ export function ContestTasksSection({
             onRemoveTask={onRemoveTask}
           />
         ))}
-        {filtered.length === 0 && <EmptyState icon={ClipboardList} title={strings.empty} />}
+        {filtered.length === 0 && <EmptyState icon={ClipboardList} title="No tasks assigned to this contest" />}
       </div>
-    </div>
+    </SectionCard>
   );
 }

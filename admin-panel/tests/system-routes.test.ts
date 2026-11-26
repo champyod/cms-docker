@@ -71,12 +71,12 @@ describe('System physical pages authorize and delegate', () => {
     [
       'src/app/[locale]/(authenticated)/system/appearance/page.tsx',
       'system.appearance',
-      ['<SettingsPage', '<BrandingTab', '<DisplayTab'],
+      ['<AppearanceClient'],
     ],
     [
       'src/app/[locale]/(authenticated)/system/maintenance/page.tsx',
       'system.maintenance',
-      ['<SettingsPage', '<MaintenanceProvider', '<MaintenanceSaveBar'],
+      ['<MaintenanceClient'],
     ],
     [
       'src/app/[locale]/(authenticated)/system/settings/page.tsx',
@@ -86,7 +86,7 @@ describe('System physical pages authorize and delegate', () => {
     [
       'src/app/[locale]/(authenticated)/system/docs/page.tsx',
       null,
-      ['<BoardPage', '<ContestsSection', '<ServicesSection'],
+      ['<DocsContent'],
     ],
   ])('%s delegates to its feature owner', (
     relativePath: string,
@@ -110,16 +110,12 @@ describe('System physical pages authorize and delegate', () => {
 
   it('keeps Branding, Services, Display local and URL-stable', () => {
     const page = readSource('src/app/[locale]/(authenticated)/system/appearance/page.tsx');
-    const panels = readSource('src/components/appearance/AppearanceClient.tsx');
-    const display = readSource('src/components/appearance/DisplayTab.tsx');
+    const client = readSource('src/components/appearance/AppearanceClient.tsx');
     expect(page).not.toContain('searchParams');
-    // The three areas are still the three areas; the settings layout now carries them as groups,
-    // so their names are the group keys rather than tab ids.
-    expect(page).toContain("key: 'branding'");
-    expect(page).toContain("key: 'services'");
-    expect(page).toContain("key: 'display'");
-    expect(page).not.toContain('useSearchParams');
-    expect(panels).not.toContain('useSearchParams');
-    expect(display).not.toContain('useSearchParams');
+    expect(client).toContain("useState<TabKey>('branding')");
+    expect(client).toContain("{ key: 'branding', label: 'Branding' }");
+    expect(client).toContain("{ key: 'services', label: 'Services' }");
+    expect(client).toContain("{ key: 'display', label: 'Display' }");
+    expect(client).not.toContain('useSearchParams');
   });
 });

@@ -9,8 +9,6 @@ import { Input } from '@/components/core/Input';
 
 interface WafPanelProps {
   readonly state: WafState;
-  /** common.notSet: a value the record does not hold. */
-  readonly missing: string;
 }
 
 type WafFormField =
@@ -24,7 +22,7 @@ type WafFormField =
 const ENGINE_OPTIONS = ['DetectionOnly', 'On'];
 const RESPONSE_BODY_OPTIONS = ['Off', 'On', 'Force', 'Rejected'];
 
-export function WafPanel({ state, missing }: WafPanelProps): React.JSX.Element {
+export function WafPanel({ state }: WafPanelProps): React.JSX.Element {
   const [reason, setReason] = useState('');
   const [feedback, setFeedback] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -49,6 +47,23 @@ export function WafPanel({ state, missing }: WafPanelProps): React.JSX.Element {
   return (
     <div className="space-y-4">
       <Card>
+        <dl className="grid gap-3 sm:grid-cols-3">
+          <div>
+            <dt className="text-sm text-muted-foreground">Container</dt>
+            <dd className="font-mono text-sm">{state.containerStatus ?? 'not running'}</dd>
+          </div>
+          <div>
+            <dt className="text-sm text-muted-foreground">Alerts parsed</dt>
+            <dd className="font-mono text-sm">{state.alerts.length}</dd>
+          </div>
+          <div>
+            <dt className="text-sm text-muted-foreground">Unparsed log lines</dt>
+            <dd className="font-mono text-sm">{state.skippedAlertLines}</dd>
+          </div>
+        </dl>
+      </Card>
+
+      <Card>
         <h2 className="mb-3 text-lg font-semibold">Settings</h2>
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="text-sm">
@@ -58,8 +73,8 @@ export function WafPanel({ state, missing }: WafPanelProps): React.JSX.Element {
               value={form.enabled}
               onChange={(event) => setForm({ ...form, enabled: event.target.value })}
             >
-              <option value="0">0: off</option>
-              <option value="1">1: on</option>
+              <option value="0">0 — off</option>
+              <option value="1">1 — on</option>
             </select>
           </label>
           <label className="text-sm">
@@ -137,7 +152,7 @@ export function WafPanel({ state, missing }: WafPanelProps): React.JSX.Element {
                   {alert.clientIp ?? 'unknown ip'} → {alert.uri ?? 'unknown uri'}
                 </p>
                 <p className="mt-1">
-                  rules {alert.ruleIds.join(', ') || 'none'}, score {alert.anomalyScore ?? missing},{' '}
+                  rules {alert.ruleIds.join(', ') || 'none'} · score {alert.anomalyScore ?? '—'} ·{' '}
                   {alert.blocked ? 'blocked' : 'detected'}
                 </p>
               </li>

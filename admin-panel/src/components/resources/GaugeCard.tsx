@@ -9,7 +9,13 @@ export interface GaugeCardProps {
   source: string | null;
   percent: number;
   tone: 'auto' | 'info';
-  /** The freshness wrapper becomes the grid cell, so the card must fill it rather than stretch. */
+  /**
+   * What the cell around the gauge needs the card to carry.
+   *
+   * Why the gauge takes a class from its caller at all: the freshness cue wraps the figure in an
+   * element of its own, and that wrapper — not the card — becomes the grid cell, so the card has to
+   * fill it (`h-full`) instead of stretching as the cell itself. The gauge's own sizing stays here.
+   */
   className?: string;
 }
 
@@ -29,7 +35,7 @@ export function GaugeCard({ icon, label, source, percent, tone, className }: Gau
           {label} {source === null ? '' : source}
         </span>
       </div>
-      <div className="text-xl font-bold text-foreground font-mono">{percent}%</div>
+      <div className="text-4xl density:text-3xl font-bold text-foreground font-mono">{percent}%</div>
       <div className="w-full h-1.5 bg-muted/50 rounded-full overflow-hidden">
         <div className={`h-full transition-all duration-1000 ${bar}`} style={{ width: `${percent}%` }} />
       </div>

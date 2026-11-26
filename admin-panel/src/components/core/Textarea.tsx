@@ -12,8 +12,8 @@ interface TextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement
 }
 
 /**
- * Resizes vertically only: growing sideways breaks the grid it sits in, and growing without
- * limit turns a dialog into a scrolling page. `rows` is the contract.
+ * Resizes vertically only: a textarea that can grow sideways breaks every grid it sits in, and
+ * one that grows without limit turns a dialog into a scrolling page. `rows` is the contract.
  */
 export const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
   ({ className, label, error, hint, id, required, rows = 3, ...props }, ref) => {

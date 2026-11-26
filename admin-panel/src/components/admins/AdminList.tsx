@@ -6,7 +6,6 @@ import { useSyncedState } from '@/hooks/useSyncedState';
 import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { ResponsiveTable, type ResponsiveColumn } from '@/components/core/ResponsiveTable';
 import { Button } from '@/components/core/Button';
-import { Badge } from '@/components/core/Badge';
 import { EmptyState } from '@/components/core/EmptyState';
 import { ShieldAlert, Plus, ShieldCheck } from 'lucide-react';
 import { updateAdmin, deleteAdmin } from '@/app/actions/admins';
@@ -18,7 +17,6 @@ import { usePublishModuleActions } from '@/components/navigation/ModuleActionSlo
 import { useFormatTimestamp } from '@/components/layout/TimezoneProvider';
 import { ACTION_PERMISSIONS, hasEffectivePermission } from '@/lib/permission-engine';
 import { type ListSortInput } from '@/lib/list-sorting';
-import { countLabel } from '@/lib/format-number';
 import { cn } from '@/lib/utils';
 import { AdminModal } from './AdminModal';
 import { AdminRowActions } from './AdminRowActions';
@@ -49,11 +47,13 @@ export function AdminList({
   // Why the hook and not window.location.pathname: it hands back the path with the base path stripped.
   const pathname = usePathname();
   const confirm = useConfirm();
-  // An admin account outlives every contest, so its sign-in time reads in the operator's zone.
+  // Why: an admin account outlives every contest, so its sign-in time has no owner contest and
+  // reads in the operator's own zone.
   const formatTimestamp = useFormatTimestamp();
   const { destructiveConfirm } = useConfirmationCopy();
   const canUpdate = hasEffectivePermission(new Set(callerPermissions), ACTION_PERMISSIONS.updateAdmin);
-  // Both the Actions column and the row click admit either entry permission.
+  // Why the pair: the Actions column and the row's own click both admit `updateAdmin`'s either
+  // entry permission, so a caller holding only `admin:password:update` still reaches the form.
   const canEditRow = canUpdate || hasEffectivePermission(new Set(callerPermissions), ACTION_PERMISSIONS.setAdminPassword);
 
   useEffect(() => {
@@ -108,7 +108,8 @@ export function AdminList({
     setEditingAdmin(null);
   };
 
-  // The create button opens this panel's one AdminModal; a header copy would hold a second open state.
+  // Why published from here: the create button opens this panel's one AdminModal, so a copy of
+  // it in the header would be a second modal holding its own open state over the same list.
   usePublishModuleActions(
     'administration.admins',
     capabilities.canCreate ? (
@@ -143,7 +144,7 @@ export function AdminList({
       key: 'username',
       header: 'Username',
       sortKey: 'username',
-      render: (admin) => <span className="font-mono text-foreground text-sm">{admin.username}</span>,
+      render: (admin) => <span className="font-mono text-indigo-400 text-sm">{admin.username}</span>,
     },
     {
       key: 'name',
@@ -158,35 +159,34 @@ export function AdminList({
       hideOnMobile: true,
       render: (admin) => (
         <span className="text-xs text-muted-foreground">
-          {admin.last_login_at ? formatTimestamp(admin.last_login_at) : dict.common.notSet}
+          {admin.last_login_at ? formatTimestamp(admin.last_login_at) : '—'}
         </span>
       ),
     },
     {
       key: 'groups',
-      header: dict.admins.columns.groups,
+      header: 'Groups',
       render: (admin) => {
         const groupNames = accessSummary[admin.id]?.groupNames ?? [];
         const overrideCount = accessSummary[admin.id]?.overrideCount ?? 0;
         return (
           <div className="flex items-center gap-1.5 flex-wrap">
             {groupNames.map((groupName) => (
-              <Badge key={groupName} variant="indigo">
+              <span key={groupName} className="px-2 py-0.5 text-xs rounded-full bg-purple-500/20 text-purple-400">
                 {groupName}
-              </Badge>
+              </span>
             ))}
             {accessSummary[admin.id] && groupNames.length === 0 && (
-              <span className="text-xs text-muted-foreground italic">{dict.admins.noGroups}</span>
+              <span className="text-xs text-muted-foreground italic">No groups</span>
             )}
             {overrideCount > 0 && (
-              <Badge
-                variant="warning"
-                className="gap-1"
-                title={countLabel(overrideCount, dict.admins.overrides)}
+              <span
+                className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-warning/20 text-warning high-contrast:bg-warning high-contrast:text-warning-foreground"
+                title={`${overrideCount} per-person override${overrideCount === 1 ? '' : 's'}`}
               >
                 <ShieldAlert className="w-3 h-3" />
                 {overrideCount}
-              </Badge>
+              </span>
             )}
           </div>
         );
@@ -194,14 +194,10 @@ export function AdminList({
     },
     {
       key: 'status',
-      header: dict.admins.columns.status,
+      header: 'Status',
       sortKey: 'enabled',
       render: (admin) => {
-        const badge = (
-          <Badge variant={admin.enabled ? 'success' : 'destructive'}>
-            {admin.enabled ? dict.admins.enabled : dict.admins.disabled}
-          </Badge>
-        );
+        const badge = <span className={cn('px-2 py-0.5 text-xs rounded-full', admin.enabled ? 'bg-success/20 text-success high-contrast:bg-success high-contrast:text-success-foreground' : 'bg-destructive/20 text-destructive high-contrast:bg-destructive high-contrast:text-destructive-foreground')}>{admin.enabled ? 'Enabled' : 'Disabled'}</span>;
         if (!canUpdate) return badge;
         return (
           <Button variant="ghost" size="sm" onClick={() => handleToggleEnabled(admin)} className="h-auto p-1">
@@ -210,7 +206,7 @@ export function AdminList({
         );
       },
     },
-  ], [accessSummary, canUpdate, dict.admins, formatTimestamp, handleToggleEnabled]);
+  ], [accessSummary, canUpdate, formatTimestamp, handleToggleEnabled]);
 
   const table = (
     <ResponsiveTable

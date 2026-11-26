@@ -39,7 +39,7 @@ export function LogoWordmark({ className }: { className?: string }): React.JSX.E
       <span className="truncate font-display text-sm font-semibold tracking-wide">
         <span className="text-primary">CC</span>Yod
       </span>
-      <span className="mt-1 truncate text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+      <span className="mt-1 truncate text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
         CMS Docker
       </span>
     </span>

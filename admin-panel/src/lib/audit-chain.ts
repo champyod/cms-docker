@@ -1,13 +1,36 @@
 import { createHash } from 'node:crypto';
 
-/** The writer hashes the row payload over a fixed field set; this module is the only implementation of the canonical form and the digest. */
+/**
+ * The audit log's hash chain, in one place.
+ *
+ * WHY this module exists: `audit.ts` computed a row's hash from the *caller's entry object*, so a
+ * row could not be re-derived from the database — the entry omitted whatever the writer resolved
+ * from context (`ip`, `session_id`, `actor_id`), and nothing in the log said which fields the hash
+ * had actually covered. A verifier written against the rows could therefore disagree with the
+ * writer for reasons that were not tampering, which is the same as having no verifier.
+ *
+ * WHAT changed: the writer now hashes the *row payload* it is about to insert, over a fixed field
+ * set, and this module is the only implementation of both the canonical form and the digest. The
+ * verifier imports it, so there is no second recipe to drift.
+ *
+ * WHY legacy rows are still verifiable: rows written before the change committed to the entry
+ * object. {@link verifyRowHash} recognises that recipe too and reports it separately — it is
+ * weaker (it never covered `ip`/`session_id` when they were resolved from the request), and saying
+ * so per row is more honest than either failing the whole log or pretending the coverage is equal.
+ */
 
 /** SHA-256 over `previousHash|canonicalPayload`. One recipe, used by the writer and the verifier. */
 export function computeEntryHash(previousHash: string | null, canonicalPayload: string): string {
   return createHash('sha256').update(`${previousHash ?? ''}|${canonicalPayload}`).digest('hex');
 }
 
-/** Keys sorted, undefined dropped: byte-compatible with the rows already in the log. */
+/**
+ * Deterministic JSON: object keys sorted, `undefined` members dropped.
+ *
+ * WHY hand-rolled: two writers hashing the same data must produce the same bytes, and
+ * `JSON.stringify` preserves insertion order. This is also what the legacy entry hashes used, so it
+ * stays byte-compatible with rows already in the log.
+ */
 export function stableStringify(value: unknown): string {
   if (value === null || typeof value !== 'object') {
     return JSON.stringify(value) ?? 'null';
@@ -27,7 +50,9 @@ export function stableStringify(value: unknown): string {
   return `{${parts.join(',')}}`;
 }
 
-/** The columns a row's hash commits to; id and timestamp are database-assigned. */
+/** The columns a row's hash commits to. Both recipes cover exactly these; `id`/`timestamp` are
+ * database-assigned and never rewritten by a legitimate writer, and the id sequence is checked
+ * separately by {@link verifyAuditChain}. */
 export interface AuditRowPayload {
   readonly actor_id: number | null;
   readonly after_values: unknown;
@@ -49,7 +74,8 @@ export interface AuditLogRow extends AuditRowPayload {
   readonly prev_hash: string | null;
 }
 
-/** cutoff_text is the SQL to_char rendering so the digest matches what cms_audit_prune() wrote. */
+/** A prune anchor as the verifier reads it; `cutoff_text` is the SQL `to_char` rendering so the
+ * digest matches the one `cms_audit_prune()` wrote, microseconds included. */
 export interface AuditAnchorRow {
   readonly id: bigint;
   readonly performed_at: Date;
@@ -81,7 +107,12 @@ export function canonicaliseAuditRow(row: AuditRowPayload): string {
   });
 }
 
-/** The legacy recipe hashed the caller's entry; reconstruction is a bounded, exact search over the optional members. */
+/**
+ * The pre-2026-10-26 recipe: the hash covered the caller's `AuditEntry`, whose optional members
+ * were present only when the caller supplied them. Reconstructing "which ones" is a search over the
+ * seven optional members, which is bounded (128) and exact — every candidate is built from the
+ * row's own values, so a candidate can only match if the row is what was hashed.
+ */
 const LEGACY_OPTIONAL_FIELDS = [
   'entityId',
   'beforeValues',
@@ -150,7 +181,11 @@ export function verifyRowHash(row: AuditLogRow): RowHashVerdict {
   return { recipe: 'none', computed: current };
 }
 
-/** Must stay byte-identical to the concatenation in public.cms_audit_prune(): a difference reads as tampering. */
+/**
+ * Canonical line for a prune anchor. MUST stay byte-identical to the concatenation in
+ * `public.cms_audit_prune()` (20261026120100_audit_log_durable): the database writes the digest,
+ * this recomputes it, and a difference in either direction would read as tampering.
+ */
 export function canonicaliseAnchor(anchor: AuditAnchorRow): string {
   return [
     String(anchor.window_days),
@@ -186,7 +221,13 @@ const EMPTY_VERDICT: AuditChainVerdict = {
   unexplainedGaps: [],
 };
 
-/** An empty result set is nothing-was-checked, not valid; rowsChecked says so. */
+/**
+ * Verify anchors, then the log: `prev_hash` links, the recomputed digest of every row, and the id
+ * sequence (a hole is a failure unless an anchor says retention made it).
+ *
+ * Never returns ok for an input it could not fully judge: an empty result set is not "valid", it is
+ * "nothing was checked", and the caller is told so by `rowsChecked`.
+ */
 export function verifyAuditChain(
   rows: readonly AuditLogRow[],
   anchors: readonly AuditAnchorRow[],
@@ -256,7 +297,7 @@ export function verifyAuditChain(
     const verdict = verifyRowHash(row);
     if (verdict.recipe === 'none') {
       failures.push(
-        `row ${row.id}: entry_hash ${row.entry_hash ?? 'null'} matches neither the current recipe (${verdict.computed}) nor the pre-2026-10-26 entry recipe: the row was altered or written by something else`,
+        `row ${row.id}: entry_hash ${row.entry_hash ?? 'null'} matches neither the current recipe (${verdict.computed}) nor the pre-2026-10-26 entry recipe — the row was altered or written by something else`,
       );
     } else if (verdict.recipe === 'legacy-entry') {
       legacyRows += 1;

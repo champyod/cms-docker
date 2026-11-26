@@ -30,15 +30,17 @@ export function GroupList({
   const router = useAppRouter();
   // Why the hook and not window.location.pathname: it hands back the path with the base path stripped.
   const pathname = usePathname();
-  // The group label lives outside the groups copy block; only the full dictionary carries it.
+  // Why the hook, not the prop: the group label lives outside the groups copy
+  // block, and only the full dictionary carries it.
   const actionGroupLabel = rowActionGroupLabel(useDictionary(), 'groups');
   const {
     handleOpenEdit,
     handleOpenDelete,
   } = list;
 
-  // One column definition drives the desktop rows and the mobile cards, so the two layouts cannot drift.
-  const columns = useMemo(() => buildColumns(dict, useDictionary().common.notSet), [dict]);
+  // Why: one column definition drives desktop rows and mobile cards, so
+  // the two layouts cannot drift apart.
+  const columns = useMemo(() => buildColumns(dict), [dict]);
 
   const renderRowActions = useCallback(
     (group: GroupWithPermissions) => (
@@ -67,7 +69,8 @@ export function GroupList({
       : undefined
   ), [permissionKeys, handleOpenEdit]);
 
-  // The create button opens the one form this hook owns; a copy above would drive a second list.
+  // Why published from here: the create button opens the one group form this hook owns, and a
+  // copy of it above would be a second form driven by a second group list.
   usePublishModuleActions(
     'administration.groups',
     list.canCreate ? (

@@ -1,6 +1,5 @@
 'use client';
 
-import { useDictionary } from '@/hooks/useDictionary';
 import { panicDigitClassNames, panicDigitStyle } from '@/lib/contest-panic';
 
 // ── Time decomposition ────────────────────────────────────────────────────────
@@ -38,7 +37,10 @@ interface DigitProps {
   panicTurn: number;
 }
 
-/** The key encodes position and character, so only a changed digit re-mounts and plays its entry. */
+/**
+ * One character.  Re-mounts (and plays the entry animation) whenever its value
+ * changes.  Key encodes both position and character so only changed digits fire.
+ */
 function Digit({ char, index, isPanicking, panicTurn }: DigitProps): React.JSX.Element {
   return (
     <span
@@ -105,7 +107,20 @@ const IDX_HOURS   = 2;
 const IDX_MINUTES = 4;
 const IDX_SECONDS = 6;
 
-/** Left-prune zero units; minutes and seconds are the floor, so the display never shrinks below MM:SS. */
+/**
+ * Left-prune zero leading units.
+ *
+ * Rules (applied in order from most significant to least):
+ *  - Days are shown only when days > 0.
+ *  - Hours are shown only when days > 0 OR hours > 0.
+ *  - Minutes and seconds are always shown (the minimum display is MM:SS).
+ *
+ * This means:
+ *   3d 04h 05m 06s → 03:04:05:06
+ *      04h 05m 06s →    04:05:06
+ *          05m 06s →       05:06
+ *              06s →       00:06  ← seconds always shown with MM floor
+ */
 function visibleUnits(units: TimeUnits): {
   showDays: boolean;
   showHours: boolean;
@@ -115,19 +130,27 @@ function visibleUnits(units: TimeUnits): {
   return { showDays, showHours };
 }
 
+/**
+ * YouTube Premiere-style countdown: DAYS · HOURS · MINUTES · SECONDS.
+ *
+ * Leading zero units are pruned from the left so the display is always
+ * as compact as the current time requires.  Minutes and seconds are the
+ * minimum — the display never shrinks below MM:SS.
+ *
+ * All three original props are preserved unchanged.
+ */
 export function ContestCountdownClock({
   remainingMs,
   isPanicking = false,
   panicTurn = 0,
 }: Props): React.JSX.Element {
-  // The unit words are content; the CSS uppercases them, so the dictionary holds natural case.
-  const words = useDictionary().contests.countdown.units;
   const units = remainingMs !== null ? decompose(remainingMs) : null;
   const { showDays, showHours } = units !== null
     ? visibleUnits(units)
     : { showDays: false, showHours: false };
 
-  // The unit count drives a data attribute CSS scales the font from.
+  // Count how many unit cards are visible (always 2–4).
+  // Used as a data attribute so CSS can scale font size per card count.
   const unitCount =
     2 + (showHours ? 1 : 0) + (showDays ? 1 : 0);
 
@@ -140,22 +163,22 @@ export function ContestCountdownClock({
         <div className="yt-units-row" data-units={unitCount}>
           {showDays && (
             <>
-              <UnitBlock value={pad2(units.days)} label={words.days}
+              <UnitBlock value={pad2(units.days)} label="DAYS"
                 startIndex={IDX_DAYS} isPanicking={isPanicking} panicTurn={panicTurn} />
               <Separator />
             </>
           )}
           {showHours && (
             <>
-              <UnitBlock value={pad2(units.hours)} label={words.hours}
+              <UnitBlock value={pad2(units.hours)} label="HOURS"
                 startIndex={IDX_HOURS} isPanicking={isPanicking} panicTurn={panicTurn} />
               <Separator />
             </>
           )}
-          <UnitBlock value={pad2(units.minutes)} label={words.minutes}
+          <UnitBlock value={pad2(units.minutes)} label="MINUTES"
             startIndex={IDX_MINUTES} isPanicking={isPanicking} panicTurn={panicTurn} />
           <Separator />
-          <UnitBlock value={pad2(units.seconds)} label={words.seconds}
+          <UnitBlock value={pad2(units.seconds)} label="SECONDS"
             startIndex={IDX_SECONDS} isPanicking={isPanicking} panicTurn={panicTurn} />
         </div>
       )}

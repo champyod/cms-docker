@@ -1,4 +1,11 @@
-/** Problems are collected, not thrown, so the screen can list every one before a sync runs. */
+/**
+ * The faults a registry would hit on the next sync, collected rather than thrown so the
+ * screen can list every one before an operator runs a sync.
+ *
+ * WHY its own module: it mirrors the resolver's rules rather than being part of them —
+ * the sync renders routes, the screen lists problems — and holding both in one file grew
+ * it past the size one module is allowed.
+ */
 import {
   contestVhosts,
   indexServices,
@@ -49,21 +56,33 @@ export function collectWiringProblems(
   return problems;
 }
 
-/** The proxy relays exactly one contest's submissions, so a row naming none leaves a container with nothing to relay. */
+/**
+ * A service the registry authors but the running stack cannot honour.
+ *
+ * WHY the proxy alone: it relays exactly one contest's submissions to the rankings, so a row of
+ * it that names no contest leaves a running container with nothing to relay. The write side
+ * refuses that, and this lists it for a row that predates the rule.
+ */
 function misboundServiceProblems(services: ServiceRow[]): WiringProblem[] {
   const problems: WiringProblem[] = [];
   for (const service of services) {
     if (service.role === PROXY_SERVICE_ROLE && service.contest_id === null) {
       problems.push({
         area: 'service',
-        message: `service ${service.name} is a ${PROXY_SERVICE_ROLE} that names no contest: it relays exactly one, so it needs a row per contest`,
+        message: `service ${service.name} is a ${PROXY_SERVICE_ROLE} that names no contest — it relays exactly one, so it needs a row per contest`,
       });
     }
   }
   return problems;
 }
 
-/** A hostname the route table owns is a working route; only what the sync would refuse is listed. */
+/**
+ * An exposure under a hostname the deployment's own front declares.
+ *
+ * WHY only the refused ones: a hostname the route table owns takes the exposure into that vhost's
+ * fragment file, which is a working route, so the screen reports only what the sync would refuse —
+ * a name no route row owns, or a path the vhost's own locations already serve.
+ */
 function frontVhostProblems(
   services: ServiceRow[],
   exposures: ExposureRow[],

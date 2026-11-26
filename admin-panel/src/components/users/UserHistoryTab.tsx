@@ -1,24 +1,15 @@
 import { History } from 'lucide-react';
+import { Card } from '@/components/core/Card';
 import { EmptyState } from '@/components/core/EmptyState';
 import type { Dictionary } from '@/lib/dictionary';
 import { interpolate } from '@/lib/interpolate';
 import type { UserHistory } from '@/lib/people-read-model-types';
 
-export interface UserHistorySectionProps {
-  readonly section: UserHistorySectionKey;
+export interface UserHistoryTabProps {
   readonly history: UserHistory;
+  readonly navigation: Dictionary['navigation'];
   readonly copy: Dictionary['users'];
-  /** common.notSet: a row whose value the record does not hold. */
-  readonly missing: string;
 }
-
-/** The five histories one user record carries; each is a different record kind with its own empty. */
-export type UserHistorySectionKey =
-  | 'contests'
-  | 'participations'
-  | 'teams'
-  | 'submissions'
-  | 'recentActivity';
 
 type HistoryCopy = Dictionary['users']['history'];
 type UserCopy = Dictionary['users'];
@@ -28,94 +19,120 @@ interface HistoryRow {
   readonly label: string;
 }
 
+interface SectionCopy {
+  readonly title: string;
+  readonly empty: string;
+}
+
 const DEFAULT_ROW_CLASS = 'py-2 text-sm';
 const MONO_ROW_CLASS = 'py-2 text-sm font-mono';
+const EMPTY_VALUE = '—';
 
-// History rows are an immutable snapshot whose ids may be null, so the key pairs the label with the position.
-function toRows<T>(items: readonly T[], read: (item: T) => string): readonly HistoryRow[] {
+// Why: the five sections differ only in how a record is read, so the row shape
+// is mapped once here. History rows are an immutable read snapshot whose ids
+// may be null, so the label is paired with the position for a stable key.
+function toRows<T>(
+  items: readonly T[],
+  read: (item: T) => string,
+): readonly HistoryRow[] {
   return items.map((item, index) => ({ key: `${index}-${read(item)}`, label: read(item) }));
 }
 
-// A field-filtered row can carry no id, so an unnamed row falls back to the shared missing word.
-function referenceRow(label: string, id: number | null, missing: string): string {
-  return id === null ? missing : interpolate(label, { id });
+// Why: a field-filtered history row can carry no id, and an unnamed row falls
+// back to the same em-dash placeholder the other People tabs use.
+function referenceRow(label: string, id: number | null): string {
+  return id === null ? EMPTY_VALUE : interpolate(label, { id });
 }
 
-function participationLabel(row: UserHistory['participations'][number], copy: UserCopy, missing: string): string {
+function participationLabel(row: UserHistory['participations'][number], copy: UserCopy): string {
   const { history } = copy;
   return [
-    row.contestName ?? referenceRow(history.contestLabel, row.contestId, missing),
+    row.contestName ?? referenceRow(history.contestLabel, row.contestId),
     row.teamCode ?? copy.teamsTab.noTeam,
-  ].join(', ');
+  ].join(' · ');
 }
 
-function submissionLabel(row: UserHistory['submissions'][number], copy: HistoryCopy, missing: string): string {
+function submissionLabel(row: UserHistory['submissions'][number], copy: HistoryCopy): string {
   return [
     `#${row.id}`,
-    row.taskName ?? referenceRow(copy.taskLabel, row.taskId, missing),
-    row.score ?? missing,
-  ].join(', ');
+    row.taskName ?? referenceRow(copy.taskLabel, row.taskId),
+    row.score ?? EMPTY_VALUE,
+  ].join(' · ');
 }
 
-function activityLabel(row: UserHistory['recentContestActivity'][number], copy: HistoryCopy, missing: string): string {
+function activityLabel(row: UserHistory['recentContestActivity'][number], copy: HistoryCopy): string {
   return [
     `#${row.id}`,
-    row.contestName ?? referenceRow(copy.contestLabel, row.contestId, missing),
+    row.contestName ?? referenceRow(copy.contestLabel, row.contestId),
     row.timestamp,
-  ].join(', ');
+  ].join(' · ');
 }
 
-function rowsFor(
-  section: UserHistorySectionKey,
-  history: UserHistory,
-  copy: UserCopy,
-  missing: string,
-): { readonly rows: readonly HistoryRow[]; readonly mono: boolean } {
-  const { history: historyCopy } = copy;
-  switch (section) {
-    case 'contests':
-      return {
-        rows: toRows(history.contests, (contest) => contest.name ?? referenceRow(historyCopy.contestLabel, contest.id, missing)),
-        mono: false,
-      };
-    case 'participations':
-      return { rows: toRows(history.participations, (row) => participationLabel(row, copy, missing)), mono: false };
-    case 'teams':
-      return {
-        rows: toRows(history.teams, (team) => team.code ?? team.name ?? referenceRow(historyCopy.teamLabel, team.id, missing)),
-        mono: true,
-      };
-    case 'submissions':
-      return { rows: toRows(history.submissions, (row) => submissionLabel(row, historyCopy, missing)), mono: false };
-    case 'recentActivity':
-      return { rows: toRows(history.recentContestActivity, (row) => activityLabel(row, historyCopy, missing)), mono: false };
-  }
-}
-
-export function UserHistorySection({ section, history, copy, missing }: UserHistorySectionProps): React.JSX.Element {
-  const { rows, mono } = rowsFor(section, history, copy, missing);
-  return (
-    <div className="divide-y divide-border">
-      {rows.map((row) => <div key={row.key} className={mono ? MONO_ROW_CLASS : DEFAULT_ROW_CLASS}>{row.label}</div>)}
-    </div>
-  );
-}
-
-/** When this account last signed in — one value, and the only one the five sections cannot state. */
-export function UserHistoryAccountAccess({ history, copy, missing }: {
-  readonly history: UserHistory;
-  readonly copy: Dictionary['users'];
-  /** common.notSet: a row whose value the record does not hold. */
-  readonly missing: string;
+function Section({
+  copy,
+  rows,
+  rowClassName = DEFAULT_ROW_CLASS,
+}: {
+  copy: SectionCopy;
+  rows: readonly HistoryRow[];
+  rowClassName?: string;
 }): React.JSX.Element {
   return (
-    <p className="text-sm text-foreground">
-      {interpolate(copy.history.lastLogin, { value: history.accountAccess.lastLoginAt ?? missing })}
-    </p>
+    <Card className="p-4 space-y-3">
+      <h2 className="font-bold">{copy.title}</h2>
+      {rows.length > 0 ? (
+        <div className="divide-y divide-border">
+          {rows.map((row) => <div key={row.key} className={rowClassName}>{row.label}</div>)}
+        </div>
+      ) : (
+        <EmptyState icon={History} title={copy.empty} />
+      )}
+    </Card>
   );
 }
 
-/** What empty means for one section: "no teams" differs from "no submissions". */
-export function UserHistoryEmpty({ title }: { readonly title: string }): React.JSX.Element {
-  return <EmptyState icon={History} title={title} />;
+function AccountAccess({ history, copy }: {
+  readonly history: UserHistory;
+  readonly copy: HistoryCopy;
+}): React.JSX.Element {
+  return (
+    <Card className="p-4 space-y-3">
+      <h2 className="font-bold">{copy.accountAccess}</h2>
+      <div className="text-sm text-foreground">
+        {interpolate(copy.lastLogin, { value: history.accountAccess.lastLoginAt ?? EMPTY_VALUE })}
+      </div>
+    </Card>
+  );
+}
+
+export function UserHistoryTab({ history, navigation, copy }: UserHistoryTabProps): React.JSX.Element {
+  const historyCopy = copy.history;
+  const { sections } = historyCopy;
+  return (
+    <div className="space-y-6">
+      <h2 className="sr-only">{navigation.people['user-tabs'].history.label}</h2>
+      <AccountAccess history={history} copy={historyCopy} />
+      <Section
+        copy={sections.contests}
+        rows={toRows(history.contests, (contest) => contest.name ?? referenceRow(historyCopy.contestLabel, contest.id))}
+      />
+      <Section
+        copy={sections.participations}
+        rows={toRows(history.participations, (row) => participationLabel(row, copy))}
+      />
+      <Section
+        copy={sections.teams}
+        rowClassName={MONO_ROW_CLASS}
+        rows={toRows(history.teams, (team) => team.code ?? team.name ?? referenceRow(historyCopy.teamLabel, team.id))}
+      />
+      <Section
+        copy={sections.submissions}
+        rows={toRows(history.submissions, (row) => submissionLabel(row, historyCopy))}
+      />
+      <Section
+        copy={sections.recentActivity}
+        rows={toRows(history.recentContestActivity, (row) => activityLabel(row, historyCopy))}
+      />
+    </div>
+  );
 }

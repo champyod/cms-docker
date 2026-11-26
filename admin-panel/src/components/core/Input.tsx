@@ -16,8 +16,8 @@ const ICON_INDENT = 'pl-10';
 
 /**
  * The label is bound with `htmlFor`/`id` and the error with `aria-describedby`, not merely
- * coloured: a label that cannot focus its field and an error nobody announces exist on screen
- * and not for the reader using a screen reader.
+ * coloured: a label that cannot focus its field and an error a screen reader never announces are
+ * defects of the same kind - the association exists on screen and not in the accessibility tree.
  */
 export const Input = React.forwardRef<HTMLInputElement, InputProps>(
   ({ className, label, error, icon, required, id, ...props }, ref) => {

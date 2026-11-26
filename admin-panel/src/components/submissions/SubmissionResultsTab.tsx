@@ -6,7 +6,6 @@ import { Card } from '@/components/core/Card';
 import { EmptyState } from '@/components/core/EmptyState';
 import { useFormatTimestamp } from '@/components/layout/TimezoneProvider';
 import type { Dictionary } from '@/lib/dictionary';
-import { formatScore } from '@/lib/format-number';
 import type { SubmissionJudgingPhase, SubmissionResultsModel } from '@/lib/evaluation-read-model-types';
 import { judgingPhaseLabelKey, judgingPhaseOf } from '@/lib/evaluation-read-model-judging';
 import { useDictionary } from '@/hooks/useDictionary';
@@ -29,7 +28,9 @@ function outcomeGlyph(outcome: string | null): React.JSX.Element {
   return <AlertCircle className="text-muted-foreground w-5 h-5 shrink-0" />;
 }
 
-// The status line is derived from the same outcome columns, so there is one interpretation per dataset.
+// Why the same wording as the row: the status line is derived from the outcome
+// columns, so a reader sees one interpretation per dataset rather than a second
+// interpretation in a summary card.
 function phaseLabel(phase: SubmissionJudgingPhase, labels: StatusLabels): string {
   return labels[judgingPhaseLabelKey(phase)];
 }
@@ -41,7 +42,8 @@ function scoreTone(result: ResultRow): string {
 }
 
 function ResultCard({ result }: { readonly result: ResultRow }): React.JSX.Element {
-  // A scoring run belongs to the evaluation service, not a contest, so it reads in the reviewer's zone.
+  // Why: a scoring run is an event of the evaluation service rather than of a contest, so it reads
+  // in the reviewer's own zone.
   const formatTimestamp = useFormatTimestamp();
   const record = useDictionary().submissions.record;
   const compilationFailed = result.compilationOutcome === 'fail';
@@ -53,7 +55,7 @@ function ResultCard({ result }: { readonly result: ResultRow }): React.JSX.Eleme
         </h3>
         {result.score !== null && (
           <span className={cn('text-sm px-2 py-0.5 rounded-full border shrink-0', scoreTone(result))}>
-            {interpolate(record.status.points, { score: formatScore(result.score, 1) })}
+            {interpolate(record.status.points, { score: result.score.toFixed(1) })}
           </span>
         )}
       </div>
@@ -75,7 +77,7 @@ function ResultCard({ result }: { readonly result: ResultRow }): React.JSX.Eleme
           <span>{record.results.stats.memory + ': ' + (result.compilationMemoryBytes / 1024 / 1024).toFixed(2) + ' MB'}</span>
         )}
         {result.publicScore !== null && (
-          <span>{record.results.stats.public + ': ' + formatScore(result.publicScore, 1)}</span>
+          <span>{record.results.stats.public + ': ' + result.publicScore.toFixed(1)}</span>
         )}
         {result.scoredAt !== null && (
           <span>{record.results.stats.scored + ': ' + formatTimestamp(result.scoredAt)}</span>

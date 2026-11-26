@@ -68,10 +68,10 @@ const MAINTENANCE_CONFIG_KEYS: readonly ConfigTomlKey[] = [
 // Names what config.toml holds, since that is the only file the panel reads the webhook from.
 function describeDiscordState(settings: DiscordSettings): string {
   if (!settings.configTomlPresent) {
-    return "config.toml not found: run './cms config sync' so saved values survive the next sync.";
+    return "config.toml not found — run './cms config sync' so saved values survive the next sync.";
   }
   if (settings.configWebhookUrl === '') {
-    return 'No webhook configured: monitor alerts are dropped.';
+    return 'No webhook configured — monitor alerts are dropped.';
   }
   return 'Webhook configured in config.toml.';
 }

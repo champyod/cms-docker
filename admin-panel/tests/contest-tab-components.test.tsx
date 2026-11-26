@@ -7,7 +7,8 @@ import { ContestParticipantsTab } from '@/components/contests/contest-detail/Con
 import { ContestSettingsTab } from '@/components/contests/contest-detail/ContestSettingsTab';
 import en from '@/dictionaries/en.json';
 
-// The roster section's copy comes from the dictionary the layout provides, so a render with none mounts it.
+// Why: the participants tab now carries the roster section, whose copy comes from the
+// dictionary the authenticated layout provides — a render with none must mount it.
 function withDictionary(node: React.JSX.Element): string {
   return renderToStaticMarkup(<DictionaryProvider dict={en}>{node}</DictionaryProvider>);
 }
@@ -26,8 +27,8 @@ const settings = {
 
 describe('Contest tab components', () => {
   it('renders overview timing without Participant or Task relations', () => {
-    const html = renderToStaticMarkup(<DictionaryProvider dict={en}><ContestOverviewTab data={{ contest: { id: 7, name: 'Contest Seven', description: 'Description', is_active: true, start: null, stop: null, analysis_start: null, analysis_stop: null, timezone: 'Asia/Bangkok', permissionKeys: ['contest:read'] }, permissionKeys: ['contest:read'] }} /></DictionaryProvider>);
-    expect(html).toContain('Contest Start');
+    const html = renderToStaticMarkup(<ContestOverviewTab data={{ contest: { id: 7, name: 'Contest Seven', description: 'Description', is_active: true, start: null, stop: null, analysis_start: null, analysis_stop: null, timezone: 'Asia/Bangkok', permissionKeys: ['contest:read'] }, permissionKeys: ['contest:read'] }} />);
+    expect(html).toContain('Contest Status');
     expect(html).not.toContain('participations');
   });
 
@@ -43,15 +44,15 @@ describe('Contest tab components', () => {
     expect(html).toContain('Add Participant');
   });
 
-  it('keeps the roster out of the participants section, because the page gives it a section of its own', () => {
+  it('renders the registration roster beside the participants', () => {
     const html = withDictionary(<ContestParticipantsTab data={{ contestId: 7, participations: [], availableUsers: [], teams: [], permissionKeys: ['contest:read', 'participation:read', 'team:update'] }} />);
-    expect(html).toContain('No participants yet');
-    expect(html).not.toContain('Registration Roster');
+    expect(html).toContain('Registration Roster');
+    expect(html).toContain('A row here decides for this contest');
   });
 
   it('renders settings fields and save action', () => {
-    const html = renderToStaticMarkup(<DictionaryProvider dict={en}><ContestSettingsTab data={settings} /></DictionaryProvider>);
-    expect(html).toContain('Timezone');
+    const html = renderToStaticMarkup(<ContestSettingsTab data={settings} />);
+    expect(html).toContain('Contest Settings');
     expect(html).toContain('Save Changes');
   });
 });

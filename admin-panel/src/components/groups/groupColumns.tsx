@@ -3,10 +3,10 @@ import type { ResponsiveColumn } from '@/components/core/ResponsiveTable';
 import type { GroupWithPermissions } from '@/app/actions/adminPermissions';
 import type { GroupsDict } from './groupListTypes';
 
-// One column definition drives the desktop rows and the mobile cards, so the two layouts cannot drift.
+// Why: one column definition drives desktop rows and mobile cards, so
+// the two layouts cannot drift apart.
 export function buildColumns(
   dict: GroupsDict,
-  missing: string,
 ): ResponsiveColumn<GroupWithPermissions>[] {
   return [
     {
@@ -21,7 +21,7 @@ export function buildColumns(
       sortKey: 'description',
       render: (group) => (
         <span className="block max-w-xs truncate">
-          {group.description ?? missing}
+          {group.description ?? '—'}
         </span>
       ),
     },
@@ -39,7 +39,9 @@ export function buildColumns(
       header: dict.permissions,
       sortKey: 'permissions',
       render: (group) => (
-        <Badge variant="indigo">{group.permissionKeys.length}</Badge>
+        <span className="px-2 py-0.5 text-xs rounded-full bg-indigo-500/20 text-indigo-400">
+          {group.permissionKeys.length}
+        </span>
       ),
     },
   ];

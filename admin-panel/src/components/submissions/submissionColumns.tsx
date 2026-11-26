@@ -13,7 +13,8 @@ export function formatSubmissionDate(date: Date): string {
   return SUBMISSION_TIME_FORMAT.format(new Date(date));
 }
 
-// A submission is scored per dataset; the list summarises the first and the record shows all.
+// Why the first result only: a submission is scored per dataset, and the list
+// has always summarised the first one; the record tabs show every dataset.
 function firstResult(submission: SubmissionListItem): SubmissionResult | undefined {
   return submission.submission_results[0];
 }
@@ -54,14 +55,16 @@ function submissionUser(submission: SubmissionListItem): React.JSX.Element {
   );
 }
 
-function submissionScore(submission: SubmissionListItem, missing: string): React.JSX.Element {
+function submissionScore(submission: SubmissionListItem): React.JSX.Element {
   const score = firstResult(submission)?.score;
-  if (score === null || score === undefined) return <span className="text-muted-foreground">{missing}</span>;
+  if (score === null || score === undefined) return <span className="text-muted-foreground">—</span>;
   return <span className={score > 0 ? 'text-success' : 'text-destructive'}>{score.toFixed(0)}</span>;
 }
 
-// One definition drives the desktop table and the mobile cards, so a cell cannot be edited in one layout and forgotten in the other.
-export function buildSubmissionColumns(missing: string): ResponsiveColumn<SubmissionListItem>[] {
+// Why one definition: the same columns drive the desktop table and the mobile
+// cards, so a cell can no longer be edited in one layout and forgotten in the
+// other.
+export function buildSubmissionColumns(): ResponsiveColumn<SubmissionListItem>[] {
   return [
     { key: 'id', header: 'ID', sortKey: 'id', headerClassName: 'w-24', cellClassName: 'font-mono text-muted-foreground text-xs', render: (row) => <span>#{row.id}</span> },
     { key: 'time', header: 'Time', sortKey: 'timestamp', render: (row) => (
@@ -77,8 +80,8 @@ export function buildSubmissionColumns(missing: string): ResponsiveColumn<Submis
         {row.tasks.name}
       </span>
     ) },
-    { key: 'language', header: 'Language', cellClassName: 'font-mono text-sm', render: (row) => <span>{row.language ?? missing}</span> },
+    { key: 'language', header: 'Language', cellClassName: 'font-mono text-sm', render: (row) => <span>{row.language ?? '—'}</span> },
     { key: 'status', header: 'Status', render: (row) => submissionStatus(row) },
-    { key: 'score', header: 'Score', headerClassName: 'text-right', sortKey: 'score', cellClassName: 'text-right font-mono text-sm', render: (row) => submissionScore(row, missing) },
+    { key: 'score', header: 'Score', headerClassName: 'text-right', sortKey: 'score', cellClassName: 'text-right font-mono text-sm', render: (row) => submissionScore(row) },
   ];
 }

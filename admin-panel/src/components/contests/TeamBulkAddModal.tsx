@@ -65,7 +65,7 @@ export function TeamBulkAddModal({ isOpen, onClose, contestId, teams: availableT
           <select
             value={selectedTeamId ?? ''}
             onChange={(e) => setSelectedTeamId(e.target.value ? parseInt(e.target.value) : null)}
-            className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50"
+            className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
             required
           >
             <option value="">Choose a team...</option>

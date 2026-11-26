@@ -25,7 +25,7 @@ interface TeamRotateAccountsDialogProps {
 }
 
 const INPUT_CLASS =
-  'w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-2';
+  'w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]';
 
 /**
  * The day-2 action: rotate the selected accounts' display usernames in a contest and set this team

@@ -33,6 +33,8 @@ function renderTestcases(isPublic: boolean, onTogglePublic: (id: number) => void
         },
       ]}
       activeDatasetId={3}
+      expanded
+      onToggle={noop}
       onCreate={noop}
       onEdit={noop}
       onActivate={noop}
@@ -43,6 +45,8 @@ function renderTestcases(isPublic: boolean, onTogglePublic: (id: number) => void
       onOpenTestcaseUpload={noop}
       onDeleteTestcase={noop}
       onTogglePublic={onTogglePublic}
+      locale="en"
+      docsLinkLabel="View Documentation"
     />,
   );
   return screen.getByRole('button', { name: isPublic ? 'Make testcase private' : 'Make testcase public' });

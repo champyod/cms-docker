@@ -34,7 +34,7 @@ export function ContainerDiscordSection({
           type="button"
           role="switch"
           aria-checked={discordNotifications}
-          aria-label={`Discord notifications ${discordNotifications ? 'enabled' : 'disabled'}: click to ${discordNotifications ? 'disable' : 'enable'}`}
+          aria-label={`Discord notifications ${discordNotifications ? 'enabled' : 'disabled'} — click to ${discordNotifications ? 'disable' : 'enable'}`}
           onClick={onToggle}
           className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
         >

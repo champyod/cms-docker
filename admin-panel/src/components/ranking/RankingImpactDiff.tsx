@@ -24,7 +24,7 @@ interface ImpactListProps {
 function ImpactList({ term, entries }: ImpactListProps): React.JSX.Element {
   return (
     <div className="min-w-0">
-      <Text as="dt" variant="label">{`${term}, ${entries.length}`}</Text>
+      <Text as="dt" variant="label">{`${term} · ${entries.length}`}</Text>
       <dd className="text-sm text-foreground/80">
         {entries.map((entry) => (
           <span key={entry} className="block truncate" title={entry}>
@@ -62,11 +62,17 @@ function ImpactWarnings({ impact, copy }: { readonly impact: RankingImpact; read
   return null;
 }
 
-/** The board's own columns, users and teams the projection would drop, not a field diff of the override row. */
+/**
+ * The live column beside the toolbar: what the pending override does to the board.
+ *
+ * WHY it reads as a column and not a diff of the row: the operator is deciding what the scoreboard
+ * will lose, and these are the board's own columns, users and teams the projection would drop — a
+ * field-by-field comparison of the override row would answer a question nobody is asking.
+ */
 export function RankingImpactDiff({ copy, impact, loading, failed = false }: RankingImpactDiffProps): React.JSX.Element {
   return (
     <Card className="space-y-4">
-      <Text as="h3" variant="h4">{copy.impactTitle}</Text>
+      <Text as="h2" variant="h4">{copy.impactTitle}</Text>
       {failed ? (
         <InlineAlert tone="warning" density="compact" announce="polite">{copy.impactFailed}</InlineAlert>
       ) : loading ? (

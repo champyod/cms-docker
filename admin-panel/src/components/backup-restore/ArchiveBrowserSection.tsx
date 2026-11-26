@@ -40,7 +40,7 @@ type BackupWatchState = 'idle' | 'waiting' | 'timedOut';
 
 const BACKUP_WATCH_MESSAGE: Readonly<Record<Exclude<BackupWatchState, 'idle'>, string>> = {
     waiting: 'Backup is running in the background. Checking for the new archive...',
-    timedOut: 'Backup is still running in the background. It can take several minutes: use Refresh to check again.',
+    timedOut: 'Backup is still running in the background. It can take several minutes — use Refresh to check again.',
 };
 
 export function ArchiveBrowserSection({ refreshToken, locationId }: ArchiveBrowserSectionProps) {
@@ -112,7 +112,9 @@ export function ArchiveBrowserSection({ refreshToken, locationId }: ArchiveBrows
         [locationId, waitForPollDelay],
     );
 
-    // The mount load already ran; this effect only reacts to a refresh token and the dossier still being produced.
+    // Why the mount load is not here: useSurfaceLoad starts the first load itself, so this effect
+    // only reacts to a refresh token the parent bumps after a backup, and then watches for the
+    // dossier the detached dump is still producing.
     useEffect(() => {
         if (isFirstLoadRef.current) {
             isFirstLoadRef.current = false;
@@ -125,7 +127,10 @@ export function ArchiveBrowserSection({ refreshToken, locationId }: ArchiveBrows
     }, [refreshToken, reload, pollForNewArchive, stopPolling]);
 
     const handleDelete = async (name: string) => {
-        // confirm cannot be translated or styled and blocks the tab; this provider is the panel's one shared dialog.
+        // WHY the shared dialog and not the browser's: `confirm()` cannot be translated (the panel
+        // ships TH and EN), cannot be styled, and blocks the whole tab. It was the only call site
+        // left in the panel still using it — every other destructive action already asks through
+        // this provider.
         if (!(await confirm(deleteArchiveConfirm(name)))) return;
         setDeletingName(name);
         setNotice(null);

@@ -6,7 +6,9 @@ import { AuditTable } from '@/components/audit/AuditTable';
 import { getAuditEntry } from '@/app/actions/audit';
 import type { AuditLogRow } from '@/app/actions/audit';
 
-// globals are disabled in vitest.config.ts, so testing-library's automatic cleanup does not run.
+// Why: globals are disabled in vitest.config.ts, so @testing-library/react's
+// automatic afterEach cleanup does not run; without it, queries bind to the
+// accumulated document.body and later tests can grab stale buttons.
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
@@ -107,9 +109,14 @@ beforeEach(() => {
 
 async function openDetail() {
   const view = render(
-    <AuditTable missing="Not set"
+    <AuditTable
       entries={[makeEntry()]}
+      total={1}
+      totalPages={1}
+      currentPage={1}
+      filters={{}}
       dict={DICT}
+      permissionKeys={[]}
     />
   );
   vi.mocked(getAuditEntry).mockResolvedValue({ success: true, data: DETAIL });
@@ -131,7 +138,9 @@ describe('AuditTable copy feedback', () => {
         'Copy failed. Select the text to copy it manually.',
       );
     });
-    // The detail portals to the body, so the assertion queries baseElement.
+    // Why baseElement, not container: the detail now renders in a side panel that
+    // portals to the document body, and the assertion is about the copied state,
+    // not about which subtree the copy control is mounted in.
     expect(view.baseElement.querySelector('.lucide-check')).toBeNull();
   });
 

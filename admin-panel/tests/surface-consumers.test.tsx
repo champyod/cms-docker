@@ -27,68 +27,82 @@ const SETTINGS_FORM = {
   analysis_enabled: false,
 };
 
-// Each assertion pins a consumer reaching a shared primitive, so re-inlining the duplicate fails here.
+// Why these assertions and not snapshots: each one pins that a consumer reached
+// a shared primitive instead of re-declaring the same markup, so re-inlining the
+// duplicate fails here rather than shipping a second look.
 describe('detail sections render through SectionCard', () => {
-  it('renders the task rows with their actions and no section header of its own', () => {
+  it('marks the task section collapsed with its count and reveals the body when expanded', () => {
     const props = {
       contestId: 7,
       tasks: [{ id: 3, name: 'sum', title: 'Sum' }],
       locale: 'en',
       permissionKeys: ['task:update'] as readonly string[],
       copy: en,
+      onToggle: () => undefined,
       onAddTask: () => undefined,
       onAttachTasks: () => undefined,
       onRemoveTask: () => undefined,
       onRefresh: () => undefined,
     };
-    const html = renderToStaticMarkup(<ContestTasksSection {...props} />);
-    expect(html).toContain('Add Task');
-    expect(html).toContain('Remove sum');
-    expect(html).not.toContain('aria-expanded');
+    const collapsed = renderToStaticMarkup(<ContestTasksSection {...props} expanded={false} />);
+    expect(collapsed).toContain('aria-expanded="false"');
+    expect(collapsed).toContain('(1)');
+    expect(collapsed).not.toContain('Remove sum');
+
+    const expanded = renderToStaticMarkup(<ContestTasksSection {...props} expanded />);
+    expect(expanded).toContain('aria-expanded="true"');
+    expect(expanded).toContain('Remove sum');
   });
 
-  it('renders the participation rows and the gated invite actions without a section header', () => {
+  it('marks the participant section collapsed and shows the gated invite actions when expanded', () => {
     const html = renderToStaticMarkup(
       <ContestParticipantsSection
         participations={[]}
+        expanded
         permissionKeys={['participation:create']}
+        onToggle={() => undefined}
         onAddParticipant={() => undefined}
         onAddTeam={() => undefined}
         onMarkAsTest={() => undefined}
         onOpenSettings={() => undefined}
         onRemove={() => undefined}
-        copy={en.contests.participants}
       />,
     );
+    expect(html).toContain('aria-expanded="true"');
     expect(html).toContain('Add Participant');
     expect(html).toContain('No participants yet');
-    expect(html).not.toContain('aria-expanded');
   });
 
-  it('renders the settings group body without a second section header', () => {
-    const html = renderToStaticMarkup(<ContestSettingsSection formData={SETTINGS_FORM} onChange={() => undefined} copy={en.contests.settings} />);
-    expect(html).toContain('Timezone');
-    expect(html).toContain('Asia/Bangkok');
-    expect(html).not.toContain('Contest Settings');
+  it('marks the settings section collapsed and reveals the form only when expanded', () => {
+    const onToggle = vi.fn();
+    const settings = { formData: SETTINGS_FORM, onToggle, onChange: vi.fn() };
+    const collapsed = renderToStaticMarkup(<ContestSettingsSection {...settings} expanded={false} />);
+    expect(collapsed).toContain('aria-expanded="false"');
+    expect(collapsed).toContain('Contest Settings');
+    expect(collapsed).not.toContain('Asia/Bangkok');
 
-    render(<ContestSettingsSection formData={SETTINGS_FORM} canEdit={false} onChange={() => undefined} copy={en.contests.settings} />);
-    expect(screen.getByPlaceholderText('Asia/Bangkok').hasAttribute('disabled')).toBe(true);
+    render(<ContestSettingsSection {...settings} expanded />);
+    const toggle = screen.getByRole('button', { name: /Contest Settings/ });
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByPlaceholderText('Asia/Bangkok')).not.toBeNull();
   });
 });
 
 describe('row action clusters render through RowActions', () => {
-  // Every check here is a per-action permission, so the contract is which control a key set reaches.
+  // Why a reader, not the markup: every gate here is a per-action permission, so the
+  // contract is which control a given key set reaches.
   function participantRow(permissionKeys: readonly string[]): void {
     render(
       <ContestParticipantsSection
         participations={[{ id: 4, user_id: 2, unrestricted: false, hidden: false, users: { username: 'ada', first_name: 'Ada', last_name: 'L' } }]}
+        expanded
         permissionKeys={permissionKeys}
+        onToggle={() => undefined}
         onAddParticipant={() => undefined}
         onAddTeam={() => undefined}
         onMarkAsTest={() => undefined}
         onOpenSettings={() => undefined}
         onRemove={() => undefined}
-        copy={en.contests.participants}
       />,
     );
   }
@@ -100,7 +114,8 @@ describe('row action clusters render through RowActions', () => {
     expect(screen.queryByRole('button', { name: 'Remove ada' })).toBeNull();
   });
 
-  // A reader holding only one key must reach exactly that control, and Settings follows its own action.
+  // Why each key alone: a reader holding only one of the two must reach exactly that
+  // control, and Settings must follow its own action rather than a sibling's gate.
   it('gives a delete-only reader remove alone, and a reader with neither key no cluster', () => {
     participantRow(['participation:delete']);
     expect(screen.queryByRole('button', { name: 'Remove ada' })).not.toBeNull();

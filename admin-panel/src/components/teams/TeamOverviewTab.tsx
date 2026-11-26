@@ -22,6 +22,7 @@ import type { TeamSummary } from '@/lib/people-read-model-types';
 export interface TeamOverviewTabProps {
   readonly team: TeamSummary;
   readonly permissionKeys: readonly string[];
+  readonly navigation: Dictionary['navigation'];
   readonly copy: Dictionary['teams'];
   readonly locale: 'en' | 'th';
 }
@@ -49,7 +50,7 @@ function TeamFormField({ id, label, access, value, onChange, lockHint }: TeamFor
         type="text"
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="w-full px-3 py-2 bg-background/60 border border-border rounded-lg text-foreground text-sm focus:outline-none focus:border-ring focus:ring-2 focus:ring-ring/30 transition-colors"
+        className="w-full px-3 py-2 bg-background/60 border border-border rounded-lg text-foreground text-sm focus:outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/30 transition-colors"
       />
     </RestrictedField>
   );
@@ -113,7 +114,7 @@ function useTeamDeletion(team: TeamSummary, locale: 'en' | 'th', push: (href: st
   };
 }
 
-export function TeamOverviewTab({ team, permissionKeys, copy, locale }: TeamOverviewTabProps): React.JSX.Element {
+export function TeamOverviewTab({ team, permissionKeys, navigation, copy, locale }: TeamOverviewTabProps): React.JSX.Element {
   const router = useAppRouter();
   const effective = new Set(permissionKeys);
   const fieldAccess = getFieldAccess('teams', effective);
@@ -124,6 +125,7 @@ export function TeamOverviewTab({ team, permissionKeys, copy, locale }: TeamOver
   const fields = copy.overview;
   return (
     <Card className="p-4 space-y-4">
+      <h2 className="font-bold">{navigation.people['team-tabs'].overview.label}</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <TeamFormField id="code" label={fields.code} access={fieldAccess.code} value={formData.code} onChange={(value) => changeField('code', value)} lockHint={fields.readOnlyHint} />
         <TeamFormField id="name" label={fields.name} access={fieldAccess.name} value={formData.name} onChange={(value) => changeField('name', value)} lockHint={fields.readOnlyHint} />

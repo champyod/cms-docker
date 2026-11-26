@@ -1,15 +1,18 @@
 'use client';
 
+import Link from 'next/link';
 import { useActionFeedback } from '@/hooks/useActionFeedback';
-import { Database, CheckCircle, Copy, Edit, ToggleLeft, ToggleRight, TestTube, Plus, Trash2, Upload, Paperclip, Settings2, Globe, Lock } from 'lucide-react';
+import { HelpCircle, Database, CheckCircle, Copy, Edit, ToggleLeft, ToggleRight, TestTube, Plus, Trash2, Upload, Paperclip, Settings2, Globe, Lock } from 'lucide-react';
 import { Card } from '@/components/core/Card';
 import { Button } from '@/components/core/Button';
-import { Badge } from '@/components/core/Badge';
 import { RowActions, type RowAction } from '@/components/core/RowActions';
+import { SectionCard } from '@/components/core/SectionCard';
 import { cn } from '@/lib/utils';
 import { apiClient } from '@/lib/apiClient';
 import { useConfirm } from '@/hooks/useConfirm';
 import { useTaskConfirmationCopy, useTaskTabRefresh } from './task-detail/useTaskTabRefresh';
+import { buildRoute } from '@/lib/navigation/routes';
+import type { Dictionary } from '@/lib/dictionary';
 
 interface Dataset {
   id: number;
@@ -27,6 +30,8 @@ interface Dataset {
 interface DatasetsSectionProps {
   datasets: Dataset[];
   activeDatasetId: number | null;
+  expanded: boolean;
+  onToggle: () => void;
   onCreate: () => void;
   onEdit: (ds: Dataset) => void;
   onActivate: (id: number) => void;
@@ -37,6 +42,9 @@ interface DatasetsSectionProps {
   onOpenTestcaseUpload: (id: number) => void;
   onDeleteTestcase: (id: number) => void;
   onTogglePublic: (id: number) => void;
+  locale: string;
+  /** The affordance label for the docs link, not the documentation's own name. */
+  docsLinkLabel: Dictionary['docs']['viewDocumentation'];
 }
 
 // Why one builder per dataset: the cluster is a permission-shaped list, and
@@ -68,6 +76,8 @@ interface DatasetHandlers {
 export function DatasetsSection({
   datasets,
   activeDatasetId,
+  expanded,
+  onToggle,
   onCreate,
   onEdit,
   onActivate,
@@ -78,18 +88,30 @@ export function DatasetsSection({
   onOpenTestcaseUpload,
   onDeleteTestcase,
   onTogglePublic,
+  locale,
+  docsLinkLabel,
 }: DatasetsSectionProps): React.JSX.Element {
   const handlers: DatasetHandlers = { onEdit, onActivate, onClone, onRename, onToggleAutojudge, onDelete };
   return (
-    // Why no section header: the detail layout's fact strip already says which task this is and how
-    // many datasets it holds, so a collapsible "Datasets" card repeated both the page title and the
-    // count - and collapsed away the only content the tab has.
-    <Card className="p-4">
-      <div>
+    <SectionCard
+      className="border-border"
+      title="Datasets"
+      icon={<Database className="w-5 h-5 text-warning" />}
+      count={datasets.length}
+      expanded={expanded}
+      onToggle={onToggle}
+      actions={
+        <Link href={`${buildRoute(locale, 'system.docs')}#datasets`} className="p-1 hover:bg-accent rounded-full transition-colors text-muted-foreground hover:text-foreground" title={docsLinkLabel}>
+          <HelpCircle className="w-4 h-4" />
+        </Link>
+      }
+    >
+      <div className="p-4 pt-0">
         <div className="mb-4">
-          <Button variant="positive" icon={Plus} onClick={onCreate}>
+          <button onClick={onCreate} className="flex items-center gap-2 px-3 py-1.5 bg-warning/10 text-warning rounded-lg text-sm hover:bg-warning/20 transition-colors">
+            <Plus className="w-4 h-4" />
             {datasets.length === 0 ? 'Create Dataset' : 'New Dataset'}
-          </Button>
+          </button>
           {datasets.length === 0 && <p className="text-muted-foreground text-sm mt-2">No datasets created yet. Create one to add testcases.</p>}
         </div>
         <div className="space-y-4">
@@ -97,10 +119,10 @@ export function DatasetsSection({
             <div key={dataset.id} className="p-4 bg-muted/30 rounded-lg space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  <Database className="w-4 h-4 text-muted-foreground" />
+                  <Database className="w-4 h-4 text-warning" />
                   <span className="font-medium text-foreground">{dataset.description}</span>
-                  {dataset.id === activeDatasetId && <Badge variant="success">Active</Badge>}
-                  {dataset.autojudge && <Badge variant="neutral">Autojudge</Badge>}
+                  {dataset.id === activeDatasetId && <span className="px-2 py-0.5 text-xs bg-success/10 text-success rounded-full">Active</span>}
+                  {dataset.autojudge && <span className="px-2 py-0.5 text-xs bg-info/10 text-info rounded-full">Autojudge</span>}
                 </div>
                 <RowActions
                   ariaLabel="Datasets"
@@ -115,8 +137,8 @@ export function DatasetsSection({
                 </div>
                 <div className="mt-3 pt-3 border-t border-border">
                   <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2"><TestTube className="w-4 h-4 text-muted-foreground" /><span className="text-xs font-bold text-muted-foreground uppercase">Testcases ({dataset.testcases.length})</span></div>
-                    <Button variant="link" size="sm" icon={Plus} onClick={() => onOpenTestcaseUpload(dataset.id)}>
+                    <div className="flex items-center gap-2"><TestTube className="w-4 h-4 text-info" /><span className="text-xs font-bold text-muted-foreground uppercase">Testcases ({dataset.testcases.length})</span></div>
+                    <Button variant="link" size="sm" icon={Plus} onClick={() => onOpenTestcaseUpload(dataset.id)} className="text-info">
                       Add Testcases (Bulk)
                     </Button>
                   </div>
@@ -136,15 +158,7 @@ export function DatasetsSection({
                               onClick={() => onTogglePublic(tc.id)}
                               className={cn('rounded-md', tc.public ? 'text-success' : 'text-muted-foreground')}
                             />
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              iconOnly
-                              icon={Trash2}
-                              tooltip="Delete testcase"
-                              aria-label="Delete testcase"
-                              onClick={() => onDeleteTestcase(tc.id)}
-                            />
+                            <button onClick={() => onDeleteTestcase(tc.id)} title="Delete testcase" aria-label="Delete testcase" className="flex size-11 items-center justify-center rounded-md text-destructive transition-colors hover:bg-destructive/10">×</button>
                           </div>
                         </div>
                       ))}
@@ -156,7 +170,7 @@ export function DatasetsSection({
             ))}
           </div>
         </div>
-    </Card>
+    </SectionCard>
   );
 }
 
@@ -180,18 +194,17 @@ export function AttachmentsSection({ attachments, onUpload, onDeleteAttachment }
   const deleteAttachment = onDeleteAttachment ?? handleDeleteAttachment;
 
   return (
-    // Why no "Attachments" header: the detail layout's fact strip states the count and the tab rail
-    // names the tab, so the header was the same two facts again - the upload row is all that is left.
     <Card className="border-border p-4">
-      <div className="mb-4 flex items-center justify-end">
-        <Button variant="secondary" icon={Upload} onClick={onUpload}>Upload</Button>
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-3"><Paperclip className="w-5 h-5 text-info" /><span className="font-bold text-foreground">Attachments</span><span className="text-xs bg-accent px-2 py-0.5 rounded-full text-muted-foreground">{attachments.length}</span></div>
+        <button onClick={onUpload} className="flex items-center gap-2 px-3 py-1.5 bg-info/10 text-info rounded-lg text-sm hover:bg-info/20 transition-colors"><Upload className="w-4 h-4" />Upload</button>
       </div>
       {attachments.length === 0 ? <p className="text-muted-foreground text-sm">No attachments.</p> : (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
           {attachments.map((att) => (
             <div key={att.id} className="flex items-center gap-2 p-2 bg-muted/30 rounded-lg text-sm text-muted-foreground group">
-              <Paperclip className="w-3 h-3 text-muted-foreground" /><span className="truncate flex-1">{att.filename}</span>
-              <Button variant="ghost" size="sm" icon={Trash2} iconOnly tooltip="Delete attachment" onClick={() => { void deleteAttachment(att.id); }} />
+              <Paperclip className="w-3 h-3 text-info" /><span className="truncate flex-1">{att.filename}</span>
+              <Button variant="ghost" size="sm" icon={Trash2} iconOnly tooltip="Delete attachment" onClick={() => { void deleteAttachment(att.id); }} className="text-destructive" />
             </div>
           ))}
         </div>

@@ -1,6 +1,9 @@
-// Shared by the notification settings and the test-alert action: validation, payload shape, delivery.
+// Discord webhook helpers shared by the admin panel's notification settings and its
+// test-alert action: URL validation, the payload shape the monitor sends, and a
+// delivery call that reports the HTTP result instead of swallowing it.
 
-// Discord issues webhooks as https://discord.com/api/webhooks/id/token; canary and versioned hosts exist, but nothing else is accepted.
+// Discord issues webhooks as https://discord.com/api/webhooks/<id>/<token>; canary/ptb
+// hosts and versioned API paths exist, so accept those but nothing else.
 const DISCORD_WEBHOOK_PATTERN =
   /^https:\/\/(?:canary\.|ptb\.)?discord(?:app)?\.com\/api\/(?:v\d+\/)?webhooks\/\d{16,32}\/[A-Za-z0-9_.-]{20,}$/;
 
@@ -30,7 +33,11 @@ export interface DiscordDeliveryResult {
   error?: string;
 }
 
-/** Empty clears the webhook; anything non-empty must be a real endpoint, or alerts disappear without a trace. */
+/**
+ * Validates a Discord webhook URL. Empty is allowed (it clears the webhook and therefore
+ * disables alerting), but anything non-empty must be a real Discord webhook endpoint —
+ * silently storing a wrong URL is what makes alerts disappear without a trace.
+ */
 export function validateDiscordWebhookUrl(raw: string): FieldValidation {
   const value = raw.trim();
   if (value === '') {
@@ -42,7 +49,7 @@ export function validateDiscordWebhookUrl(raw: string): FieldValidation {
   if (!DISCORD_WEBHOOK_PATTERN.test(value)) {
     return {
       ok: false,
-      error: 'Not a Discord webhook URL: expected https://discord.com/api/webhooks/<id>/<token>',
+      error: 'Not a Discord webhook URL — expected https://discord.com/api/webhooks/<id>/<token>',
     };
   }
   return { ok: true, value };
@@ -60,7 +67,10 @@ export function validateDiscordRoleId(raw: string): FieldValidation {
   return { ok: true, value };
 }
 
-/** The same embed shape __monitor.sh sends, so a test exercises the real payload contract. */
+/**
+ * Builds the same embed shape __monitor.sh sends (title/description/color/footer/timestamp
+ * plus an optional role mention), so a test exercises the real payload contract.
+ */
 export function buildDiscordAlertPayload(input: {
   title: string;
   description: string;
@@ -100,7 +110,10 @@ async function readErrorDetail(response: Response): Promise<string> {
   }
 }
 
-/** Never throws: the caller needs the HTTP status, or 0 for an unreachable endpoint. */
+/**
+ * Posts a payload and reports the outcome. Never throws: the caller needs the HTTP status
+ * (or 0 for an unreachable endpoint) to show the operator what actually happened.
+ */
 export async function postDiscordPayload(
   webhookUrl: string,
   payload: DiscordWebhookPayload,
@@ -143,7 +156,12 @@ function isSectionHeader(trimmed: string): boolean {
   return trimmed.startsWith('[') && trimmed.endsWith(']');
 }
 
-/** Cuts at the first hash where TOML starts a comment; an inline comment rode into the value otherwise. */
+/**
+ * Reads one single-line TOML scalar, dropping a trailing `#` comment. A quoted value
+ * is taken up to its closing quote; anything else is cut at the first `#`, where TOML
+ * starts a comment. Without this an inline comment rode into the value and downstream
+ * numeric parses (COOKIE_DURATION) came back blank.
+ */
 function readTomlScalar(rawValue: string): string {
   const quoted = rawValue.match(/^"([^"]*)"/) ?? rawValue.match(/^'([^']*)'/);
   if (quoted) return quoted[1];
@@ -173,7 +191,11 @@ export function readTomlValue(content: string, section: string, key: string): st
   return '';
 }
 
-/** config.toml is the single source of truth, so this must not touch unrelated keys. */
+/**
+ * Sets key = "value" inside one TOML section, preserving the rest of the file. The panels
+ * that write config.toml must not touch unrelated keys: config.toml is the declared single
+ * source of truth that `./cms config sync` regenerates .env from.
+ */
 export function upsertTomlValue(content: string, section: string, key: string, value: string): string {
   const lines = content.split('\n');
   const header = `[${section}]`;

@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from 'react';
 
 import { Activity, CheckCircle2, Clock3, OctagonAlert, XCircle, type LucideIcon } from 'lucide-react';
 import { Button } from '@/components/core/Button';
-import { Badge } from '@/components/core/Badge';
 import { InlineAlert } from '@/components/core/InlineAlert';
 import { LogFollowButton } from '@/components/core/LogFollowButton';
 import { Card } from '@/components/core/Card';
@@ -20,23 +19,21 @@ interface DeployStatusPanelProps {
   onReset: () => void;
 }
 
-type PhaseBadgeVariant = 'neutral' | 'indigo' | 'success' | 'destructive' | 'warning';
-
 interface PhaseMeta {
   label: string;
   icon: LucideIcon;
-  badgeVariant: PhaseBadgeVariant;
+  badgeClass: string;
   barClass: string;
 }
 
 const PHASE_META: Record<DeployPhase, PhaseMeta> = {
-  idle: { label: 'Idle', icon: Activity, badgeVariant: 'neutral', barClass: 'bg-primary' },
-  deploying: { label: 'Starting', icon: Activity, badgeVariant: 'indigo', barClass: 'bg-primary' },
-  polling: { label: 'Running', icon: Activity, badgeVariant: 'indigo', barClass: 'bg-primary' },
-  completed: { label: 'Completed', icon: CheckCircle2, badgeVariant: 'success', barClass: 'bg-success' },
-  failed: { label: 'Failed', icon: XCircle, badgeVariant: 'destructive', barClass: 'bg-destructive' },
-  timeout: { label: 'Timed Out', icon: Clock3, badgeVariant: 'destructive', barClass: 'bg-destructive' },
-  already_running: { label: 'Already Running', icon: OctagonAlert, badgeVariant: 'warning', barClass: 'bg-warning' },
+  idle: { label: 'Idle', icon: Activity, badgeClass: 'bg-muted text-muted-foreground border-border', barClass: 'bg-primary' },
+  deploying: { label: 'Starting', icon: Activity, badgeClass: 'bg-primary/15 text-primary border-primary/25', barClass: 'bg-primary' },
+  polling: { label: 'Running', icon: Activity, badgeClass: 'bg-primary/15 text-primary border-primary/25', barClass: 'bg-primary' },
+  completed: { label: 'Completed', icon: CheckCircle2, badgeClass: 'bg-success/15 text-success border-success/25', barClass: 'bg-success' },
+  failed: { label: 'Failed', icon: XCircle, badgeClass: 'bg-destructive/15 text-destructive border-destructive/25', barClass: 'bg-destructive' },
+  timeout: { label: 'Timed Out', icon: Clock3, badgeClass: 'bg-destructive/15 text-destructive border-destructive/25', barClass: 'bg-destructive' },
+  already_running: { label: 'Already Running', icon: OctagonAlert, badgeClass: 'bg-warning/15 text-warning border-warning/25', barClass: 'bg-warning' },
 };
 
 function isActivePhase(phase: DeployPhase): boolean {
@@ -189,9 +186,11 @@ export function DeployStatusPanel({ state, onCancel, onReset }: DeployStatusPane
       <Stack gap={4}>
         <Stack direction="row" align="center" justify="between">
           <Stack direction="row" align="center" gap={3}>
-            <meta.icon className="h-5 w-5 text-foreground" aria-hidden />
+            <meta.icon className="h-5 w-5 text-primary" aria-hidden />
             <Text variant="h3">Deployment Status</Text>
-            <Badge variant={meta.badgeVariant}>{meta.label}</Badge>
+            <span className={cn('rounded-full border px-2.5 py-0.5 text-xs font-semibold', meta.badgeClass)}>
+              {meta.label}
+            </span>
           </Stack>
           <Text variant="small" color="text-muted-foreground">{formatStartTime(state.startedAt, formatTimeOfDay)}</Text>
         </Stack>

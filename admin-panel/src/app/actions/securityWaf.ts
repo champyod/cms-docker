@@ -148,7 +148,7 @@ export async function saveWafSettings(input: WafSettingsInput, reason: string): 
   if (reason.trim().length === 0) return { success: false, error: 'A reason is required to change WAF settings' };
   try {
     const [tomlContent, crsContent] = await Promise.all([readTextOrNull(settingsFile()), readTextOrNull(crsFile())]);
-    if (tomlContent === null) return { success: false, error: `${CONFIG_TOML_FILE} not found: run config sync once` };
+    if (tomlContent === null) return { success: false, error: `${CONFIG_TOML_FILE} not found — run config sync once` };
     const settings = await persistWafSettings(input, tomlContent, crsContent);
     await recordAudit({
       verb: 'waf:config:update',

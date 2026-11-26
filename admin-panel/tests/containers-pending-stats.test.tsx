@@ -24,7 +24,7 @@ vi.mock('@/lib/discord-notifier', () => ({
   getDiscordWebhookStatus: vi.fn().mockResolvedValue({ configured: true }),
 }));
 
-import { ContainerRows, ContainerStacks, ContainerStats, ContainersProvider } from '@/components/containers/ContainersSurface';
+import { ContainersClient } from '@/components/containers/ContainersClient';
 import { DictionaryProvider } from '@/components/providers/DictionaryProvider';
 import type { ContainerInfo, ContainersFrame } from '@/lib/live-frames';
 import en from '@/dictionaries/en.json';
@@ -59,11 +59,7 @@ const FRAME: ContainersFrame = {
 function surface(): React.JSX.Element {
   return (
     <DictionaryProvider dict={en}>
-      <ContainersProvider>
-        <ContainerStats />
-        <ContainerRows />
-        <ContainerStacks />
-      </ContainersProvider>
+      <ContainersClient />
     </DictionaryProvider>
   );
 }

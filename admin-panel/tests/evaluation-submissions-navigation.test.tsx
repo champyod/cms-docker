@@ -49,11 +49,13 @@ const SUBMISSION_ROW = {
 
 const RECORD_HREF = buildRoute('en', 'evaluation.submission-record', { id: SUBMISSION_ROW.id });
 
-function renderList(): HTMLElement {
+function renderList(totalPages = 1): HTMLElement {
   const { container } = render(
     <DictionaryProvider dict={en}>
       <SubmissionList
         initialSubmissions={[SUBMISSION_ROW]}
+        totalPages={totalPages}
+        currentPage={1}
         navigation={en.navigation}
       />
     </DictionaryProvider>,
@@ -130,17 +132,18 @@ describe('submission list canonical navigation', () => {
     expect(container.querySelector('button[aria-label="Clear submission 19 official"]')).toBeNull();
   });
 
-  it('opens no submission dialog, and leaves paging to the list layout', () => {
+  it('opens no submission dialog and keeps list pagination on the canonical route', () => {
     mockPush.mockClear();
-    const container = renderList();
+    const container = renderList(2);
 
     expect(document.body.textContent).not.toContain('Recompute');
     expect(container.querySelector('tbody tr')).toBeTruthy();
 
-    // Why: the pager is the list layout's footer now, so the rows must not carry a second one
-    // that would page the same list from a different place.
     const next = [...container.querySelectorAll('button')]
       .find((button) => button.textContent?.trim() === 'Next');
-    expect(next).toBeUndefined();
+    if (!next) throw new Error('Missing pagination control');
+    fireEvent.click(next);
+
+    expect(mockPush.mock.calls[0][0]).toContain('page=2');
   });
 });

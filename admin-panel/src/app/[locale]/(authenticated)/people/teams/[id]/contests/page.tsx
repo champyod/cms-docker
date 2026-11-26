@@ -6,10 +6,10 @@ import { ROUTE_REGISTRY } from '@/lib/navigation/registry';
 import type { RouteId } from '@/lib/navigation/types';
 import { getTeamContests } from '@/lib/people-read-models';
 import { parseRecordId, readRecordOrNotFound } from '@/lib/queries/record-access';
-import { ListPage } from '@/components/patterns/ListPage';
-import { TeamContestsEmpty, TeamContestsTab } from '@/components/teams/TeamContestsTab';
+import { TeamContestsTab } from '@/components/teams/TeamContestsTab';
 
-// The page resolves the registry route itself so a disabled or narrowed descriptor 404s before the data is read.
+// Why: the reader enforces the same keys, but the page must resolve the exact
+// registry route first so a disabled or narrowed descriptor 404s before data.
 async function authorizeTeamTab(routeId: RouteId): Promise<ReadonlySet<string>> {
   const route = ROUTE_REGISTRY.find((candidate) => candidate.id === routeId);
   if (!route || !route.enabled) notFound();
@@ -31,13 +31,5 @@ export default async function TeamContestsPage({ params }: { params: Promise<{ l
   await authorizeTeamTab('people.team-tabs.contests');
   const dictionary = await getDictionary(locale);
   const contests = await readRecordOrNotFound(async () => ((await getTeamContests(id)) ?? null));
-  return (
-    <ListPage
-      // The team's record shell renders this tab's name, the team, the trail and the tab rail.
-      ownsHeader={false}
-      empty={contests.length === 0 ? <TeamContestsEmpty copy={dictionary.teams} /> : undefined}
-    >
-      <TeamContestsTab contests={contests} locale={locale as 'en' | 'th'} missing={dictionary.common.notSet} />
-    </ListPage>
-  );
+  return <TeamContestsTab contests={contests} navigation={dictionary.navigation} copy={dictionary.teams} locale={locale as 'en' | 'th'} />;
 }

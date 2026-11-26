@@ -1,5 +1,4 @@
-import { SectionCard } from '@/components/core/SectionCard';
-import { DetailPage, type DetailFact } from '@/components/patterns/DetailPage';
+import { Stack } from '@/components/core/Layout';
 import {
   Table,
   TableBody,
@@ -16,14 +15,22 @@ import type { CreditsAsset } from '@/lib/credits';
 
 type AboutCopy = Dictionary['about'];
 
-// A token, not a palette step: the page must stay readable in light, dark and high contrast.
-const EXTERNAL_LINK = 'text-foreground underline decoration-border underline-offset-2 hover:decoration-foreground';
+const EXTERNAL_LINK = 'text-indigo-400 hover:text-indigo-300';
 
 function ExternalLink({ href, children }: { readonly href: string; readonly children: string }) {
   return (
     <a href={href} target="_blank" rel="noopener noreferrer" className={EXTERNAL_LINK}>
       {children}
     </a>
+  );
+}
+
+function LabeledValue({ label, children }: { readonly label: string; readonly children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <Text variant="label">{label}</Text>
+      <div className="text-sm text-foreground">{children}</div>
+    </div>
   );
 }
 
@@ -50,7 +57,7 @@ function PathsCell({ asset }: { readonly asset: CreditsAsset }) {
   );
 }
 
-function AssetsTable({ assets, copy, missing }: { readonly assets: readonly CreditsAsset[]; readonly copy: AboutCopy; readonly missing: string }) {
+function AssetsTable({ assets, copy }: { readonly assets: readonly CreditsAsset[]; readonly copy: AboutCopy }) {
   return (
     <Table>
       <TableHeader>
@@ -66,7 +73,7 @@ function AssetsTable({ assets, copy, missing }: { readonly assets: readonly Cred
         {assets.map((asset) => (
           <TableRow key={asset.name}>
             <TableCell className="font-medium text-foreground">{asset.name}</TableCell>
-            <TableCell className="font-mono text-xs">{asset.version ?? missing}</TableCell>
+            <TableCell className="font-mono text-xs">{asset.version ?? '—'}</TableCell>
             <TableCell>{asset.holder}</TableCell>
             <TableCell><LicenceCell asset={asset} /></TableCell>
             <TableCell><PathsCell asset={asset} /></TableCell>
@@ -86,28 +93,33 @@ export default async function SystemAboutPage({
   const dict = await getDictionary(locale);
   const copy = dict.about;
   const { projectName, projectAuthor, sourceUrl, upstream, license, panel } = panelCredits();
-  const facts: readonly DetailFact[] = [
-    { term: copy.project, value: projectName },
-    { term: copy.upstream, value: upstream.name },
-    { term: copy.license, value: license.name },
-  ];
   return (
-    <DetailPage
-      // The system module shell renders this page's name, description and trail.
-      ownsHeader={false}
-      facts={facts}
-    >
-      {/* The byline the scoreboard sidebar carries, and the two addresses a licence has to offer:
-          the values above say what this is, this line says where to get it. */}
-      <Text>
-        {projectAuthor === null ? projectName : `${projectName} by ${projectAuthor}`}
-        {panel.attribution.length > 0 ? `, ${panel.attribution[0].text}` : ''}
-        {', '}
-        <ExternalLink href={sourceUrl}>{sourceUrl}</ExternalLink>
-        {', '}
-        <ExternalLink href={license.url}>{license.spdxId}</ExternalLink>
-      </Text>
-      <SectionCard title={copy.contributors.title}>
+    <Stack gap={12} className="mx-auto max-w-5xl">
+      {/* The byline the scoreboard sidebar carries: project, author and lineage in
+          one line at body size, so the page opens on who built it. */}
+      <p className="text-base text-foreground">
+        {projectName}
+        {projectAuthor === null ? '' : ` by ${projectAuthor}`}
+        {panel.attribution.length > 0 ? ` · ${panel.attribution[0].text}` : ''}
+      </p>
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+        <LabeledValue label={copy.project}>
+          <span className="font-medium">{projectName}</span>
+        </LabeledValue>
+        <LabeledValue label={copy.source}>
+          <ExternalLink href={sourceUrl}>{sourceUrl}</ExternalLink>
+        </LabeledValue>
+        <LabeledValue label={copy.upstream}>
+          <ExternalLink href={upstream.url}>{upstream.name}</ExternalLink>
+        </LabeledValue>
+        <LabeledValue label={copy.license}>
+          <span>{license.name}</span>
+          <span className="font-mono text-xs text-muted-foreground"> ({license.spdxId})</span>{' '}
+          <ExternalLink href={license.url}>{license.url}</ExternalLink>
+        </LabeledValue>
+      </div>
+      <section className="space-y-4">
+        <Text as="h2" variant="h2">{copy.contributors.title}</Text>
         <Table>
           <TableHeader>
             <TableRow>
@@ -134,8 +146,9 @@ export default async function SystemAboutPage({
             ))}
           </TableBody>
         </Table>
-      </SectionCard>
-      <SectionCard title={panel.title}>
+      </section>
+      <section className="space-y-4">
+        <Text as="h2" variant="h2">{panel.title}</Text>
         <div className="space-y-2">
           <Text variant="label">{copy.firstParty}</Text>
           <ul className="list-inside list-disc space-y-1 font-mono text-xs text-muted-foreground">
@@ -145,16 +158,16 @@ export default async function SystemAboutPage({
         {panel.transitiveDependencies !== null && (
           <div className="space-y-2">
             <Text variant="label">{copy.transitiveDependencies}</Text>
-            <Text variant="muted">{panel.transitiveDependencies}</Text>
+            <p className="text-sm text-muted-foreground">{panel.transitiveDependencies}</p>
           </div>
         )}
-      </SectionCard>
-      <SectionCard
-        title={copy.software}
-        count={panel.assets.length}
-      >
-        <AssetsTable assets={panel.assets} copy={copy} missing={dict.common.notSet} />
-      </SectionCard>
-    </DetailPage>
+      </section>
+      <section className="space-y-4">
+        <Text as="h2" variant="h2">
+          {copy.softwareCount.replace('{count}', String(panel.assets.length))}
+        </Text>
+        <AssetsTable assets={panel.assets} copy={copy} />
+      </section>
+    </Stack>
   );
 }

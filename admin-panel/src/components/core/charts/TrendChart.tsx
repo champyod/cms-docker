@@ -4,8 +4,6 @@ export interface TrendChartProps {
   /** Accessible name for the series, e.g. "Evaluation queue, last 24 hours". */
   readonly label: string;
   readonly points: readonly number[];
-  /** common.notSet: a point that is not a finite number has no value to name. */
-  readonly missing: string;
   readonly formatValue?: (value: number) => string;
   readonly height?: number;
 }
@@ -15,7 +13,6 @@ const VIEW_W = 1000;
 export function TrendChart({
   label,
   points,
-  missing,
   formatValue = String,
   height = 120,
 }: TrendChartProps): React.JSX.Element {
@@ -64,7 +61,7 @@ export function TrendChart({
           height={height}
           fill="transparent"
         >
-          <title>{Number.isFinite(value) ? formatValue(value) : missing}</title>
+          <title>{Number.isFinite(value) ? formatValue(value) : '—'}</title>
         </rect>
       ))}
     </svg>

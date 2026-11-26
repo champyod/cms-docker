@@ -9,7 +9,8 @@ import {
   isEffectiveSuperset,
   ACTION_PERMISSIONS,
 } from '@/lib/permission-engine';
-// Resolving grants needs Prisma, and permission-engine.ts is imported by client components.
+// WHY from the server module: resolving another admin's grants needs Prisma, and
+// permission-engine.ts is imported by client components (action buttons read their key from it).
 import { getTargetEffectivePermissions } from '@/lib/server/target-permissions';
 import { ensurePermission, getPermissions, invalidateAccessCache } from '@/lib/permissions';
 import { type ListSortInput } from '@/lib/list-sorting';
@@ -116,7 +117,8 @@ export async function createAdmin(data: CreateAdminInput): Promise<ActionResult>
 }
 
 export async function updateAdmin(adminId: number, data: UpdateAdminInput): Promise<ActionResult> {
-  // The write is gated per field, so a caller with only admin:password:update can still reset a credential.
+  // Why: the write is gated per field rather than by one blanket key, so a caller holding only
+  // admin:password:update can still reset a credential while every other field is stripped below.
   const effectivePermissions = await getPermissions();
   const allowed = stripDisallowedFields('admins', data as Record<string, unknown>, effectivePermissions);
 
@@ -142,7 +144,9 @@ export async function updateAdmin(adminId: number, data: UpdateAdminInput): Prom
     return { success: false, error: 'Cannot demote your own superadmin account' };
   }
 
-  // Re-enabling the system actor would hand a root login attempt to the verifier, so the row stays disabled.
+  // Why: the system actor's enabled flag is what keeps the passwordless row
+  // unloginnable. Re-enabling it would hand a root login attempt to the
+  // verifier, and the attribution identity has no operator-controlled state.
   if (target?.username === ROOT_ACTOR_USERNAME && allowed.enabled !== undefined) {
     return { success: false, error: 'Cannot change the enabled flag of the system actor' };
   }
@@ -184,9 +188,10 @@ export async function deleteAdmin(adminId: number): Promise<ActionResult> {
     return { success: false, error: 'Cannot remove the last superadmin' };
   }
 
-  // Every script-side action logs under the system actor's id, so the row is insert-only.
+  // Why: the system actor is attribution infrastructure — every script-side
+  // action logs under its id, so the row is insert-only and no delete path exists.
   if (target?.username === ROOT_ACTOR_USERNAME) {
-    return { success: false, error: 'Cannot delete the system actor: script-side action attribution resolves through it' };
+    return { success: false, error: 'Cannot delete the system actor — script-side action attribution resolves through it' };
   }
 
   try {
@@ -219,14 +224,17 @@ export async function revealAdminPassword(id: number): Promise<
         entity: 'admin',
         entityId: String(id),
         beforeValues: { adminId: id },
-        // The failure happened before any secret was read, so the log carries a named reason instead of the driver's message.
+        // A named reason, not a message: this failed before any secret was read, and the reason
+        // belongs in the log while whatever the driver said does not.
         afterValues: { error: 'NotFound' },
         result: 'failure',
       });
       return { success: false, error: 'Admin not found' };
     }
     const parsed = parseStoredPassword(row.authentication);
-    // The audit row records the disclosure kind, never the secret itself.
+    // Why kind only: the row records that this admin's secret was disclosed, never the secret.
+    // An admin credential is the one that re-grants every permission below it, so leaving this
+    // read unlogged made it the single sensitive read on the panel with no trail.
     await recordAudit({
       verb: 'password:reveal',
       entity: 'admin',
@@ -238,7 +246,9 @@ export async function revealAdminPassword(id: number): Promise<
     if (parsed.kind === 'bcrypt') return { success: true, kind: 'bcrypt' };
     return { success: true, kind: 'plaintext', value: parsed.value };
   } catch (error) {
-    // A failed reveal is the shape a break-in takes, so the error name is the whole payload; a message could carry the refused query.
+    // Why this row exists: a reveal that fails is the shape a break-in attempt takes, and
+    // password:reveal is already a verb whose failure pages Discord. The error name is the whole
+    // payload — a message here can carry the query that was refused.
     await recordAudit({
       verb: 'password:reveal',
       entity: 'admin',

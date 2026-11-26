@@ -251,9 +251,11 @@ describe('contest task surface bulk detach', () => {
             { id: 1, name: 'sum', title: 'Sum' },
             { id: 2, name: 'bob', title: 'Bob' },
           ]}
+          expanded
           locale="en"
           permissionKeys={['task:update']}
           copy={en}
+          onToggle={vi.fn()}
           onAddTask={vi.fn()}
           onAttachTasks={vi.fn()}
           onRemoveTask={vi.fn()}
@@ -289,9 +291,11 @@ describe('contest task surface bulk detach', () => {
         <ContestTasksSection
           contestId={7}
           tasks={[{ id: 1, name: 'sum', title: 'Sum' }]}
+          expanded
           locale="en"
           permissionKeys={['task:update']}
           copy={en}
+          onToggle={vi.fn()}
           onAddTask={vi.fn()}
           onAttachTasks={vi.fn()}
           onRemoveTask={vi.fn()}
@@ -325,6 +329,7 @@ describe('team membership day-two action', () => {
           ]}
           permissionKeys={['team:update', 'participation:update', 'username:set']}
           contests={[{ id: 9, name: 'Autumn' }]}
+          navigation={en.navigation}
           copy={TEAM_COPY}
           locale="en"
         />,

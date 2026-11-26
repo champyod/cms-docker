@@ -23,7 +23,7 @@ interface SelectProps extends Omit<React.SelectHTMLAttributes<HTMLSelectElement>
 /**
  * A native `<select>` on purpose. The browser already gives keyboard navigation, type-ahead,
  * platform pickers on touch and a screen-reader announcement that a hand-built listbox has to
- * re-earn in every browser; no option here needs rich markup.
+ * re-earn in every browser; nothing in this panel needs an option rendered as rich markup.
  * The error is linked with `aria-describedby`, not only coloured.
  */
 export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(

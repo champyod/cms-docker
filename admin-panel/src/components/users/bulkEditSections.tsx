@@ -1,17 +1,12 @@
 'use client';
 
 import { Button } from '@/components/core/Button';
-import { Input } from '@/components/core/Input';
-import { Select, type SelectOption } from '@/components/core/Select';
 import { useDictionary } from '@/hooks/useDictionary';
 import { IpAllowlistInput } from './IpAllowlistInput';
 import type { ContestOption } from './bulkEditActions';
 
-const FIELD_WIDTH = 'w-full sm:w-64';
-
-function contestOptions(contests: ContestOption[]): SelectOption[] {
-  return contests.map((contest) => ({ value: String(contest.id), label: `#${contest.id} - ${contest.name}` }));
-}
+const CONTEST_SELECT_CLASS = 'bg-background/60 border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/30 transition-colors';
+const TEXT_INPUT_CLASS = 'bg-background/60 border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/30 transition-colors';
 
 interface SectionBoxProps {
   title: string;
@@ -39,27 +34,29 @@ interface ContestSectionProps {
 export function ContestSection({ contests, selectedContestId, loading, hasRows, onContestIdChange, onRunContestMutation }: ContestSectionProps) {
   return (
     <SectionBox title="Contest membership">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-        <div className={FIELD_WIDTH}>
-          <Select
-            label="Contest"
-            value={String(selectedContestId)}
-            onChange={(event) => onContestIdChange(Number(event.target.value) || 0)}
-            options={contestOptions(contests)}
-          />
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="positiveOutline" onClick={() => onRunContestMutation('add')} disabled={loading || !hasRows || !selectedContestId}>
-            Add to contest
-          </Button>
-          <Button
-            variant="negativeOutline"
-            onClick={() => onRunContestMutation('remove')}
-            disabled={loading || !hasRows || !selectedContestId}
-          >
-            Remove from contest
-          </Button>
-        </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <select
+          value={selectedContestId}
+          title="Select contest"
+          onChange={(event) => onContestIdChange(Number(event.target.value) || 0)}
+          className={CONTEST_SELECT_CLASS}
+        >
+          {contests.map((contest) => (
+            <option key={contest.id} value={contest.id}>
+              #{contest.id} - {contest.name}
+            </option>
+          ))}
+        </select>
+        <Button variant="positiveOutline" onClick={() => onRunContestMutation('add')} disabled={loading || !hasRows || !selectedContestId}>
+          Add to contest
+        </Button>
+        <Button
+          variant="negativeOutline"
+          onClick={() => onRunContestMutation('remove')}
+          disabled={loading || !hasRows || !selectedContestId}
+        >
+          Remove from contest
+        </Button>
       </div>
     </SectionBox>
   );
@@ -81,41 +78,47 @@ interface TeamSectionProps {
 export function TeamSection({ contests, teamContestId, teamCode, teamsOptions, loading, hasRows, onTeamContestIdChange, onTeamCodeChange, onRunTeamSet, onRunTeamRemoveAny }: TeamSectionProps) {
   return (
     <SectionBox title="Team assignment">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-        <div className={FIELD_WIDTH}>
-          <Select
-            label="Contest"
-            value={String(teamContestId)}
-            onChange={(event) => onTeamContestIdChange(Number(event.target.value) || 0)}
-            options={contestOptions(contests)}
+      <div className="flex flex-wrap items-center gap-2">
+        <select
+          value={teamContestId}
+          title="Select contest for team"
+          onChange={(event) => onTeamContestIdChange(Number(event.target.value) || 0)}
+          className={CONTEST_SELECT_CLASS}
+        >
+          {contests.map((contest) => (
+            <option key={contest.id} value={contest.id}>
+              #{contest.id} - {contest.name}
+            </option>
+          ))}
+        </select>
+        {teamsOptions.length > 0 ? (
+          <select
+            value={teamCode}
+            onChange={(e) => onTeamCodeChange(e.target.value)}
+            className={CONTEST_SELECT_CLASS}
+            title="Select team"
+          >
+            <option value="">Select team</option>
+            {teamsOptions.map((code) => (
+              <option key={code} value={code}>{code}</option>
+            ))}
+          </select>
+        ) : (
+          <input
+            type="text"
+            value={teamCode}
+            onChange={(event) => onTeamCodeChange(event.target.value)}
+            placeholder="Team code"
+            title="Team code"
+            className={`${TEXT_INPUT_CLASS} font-mono`}
           />
-        </div>
-        <div className={FIELD_WIDTH}>
-          {teamsOptions.length > 0 ? (
-            <Select
-              label="Team"
-              value={teamCode}
-              onChange={(event) => onTeamCodeChange(event.target.value)}
-              options={[{ value: '', label: 'Select team' }, ...teamsOptions.map((code) => ({ value: code, label: code }))]}
-            />
-          ) : (
-            <Input
-              label="Team code"
-              value={teamCode}
-              onChange={(event) => onTeamCodeChange(event.target.value)}
-              placeholder="Team code"
-              className="font-mono"
-            />
-          )}
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="positiveOutline" onClick={onRunTeamSet} disabled={loading || !hasRows || !teamContestId}>
-            Add to team
-          </Button>
-          <Button variant="negativeOutline" onClick={onRunTeamRemoveAny} disabled={loading || !hasRows}>
-            Remove from any team
-          </Button>
-        </div>
+        )}
+        <Button variant="positiveOutline" onClick={onRunTeamSet} disabled={loading || !hasRows || !teamContestId}>
+          Add to team
+        </Button>
+        <Button variant="negativeOutline" onClick={onRunTeamRemoveAny} disabled={loading || !hasRows}>
+          Remove from any team
+        </Button>
       </div>
     </SectionBox>
   );
@@ -136,36 +139,34 @@ interface ProfileSectionProps {
 export function ProfileSection({ timezone, emailDomain, loading, hasRows, onTimezoneChange, onEmailDomainChange, onRunTimezoneUpdate, onRunEmailDomainUpdate, onRunEmailClear }: ProfileSectionProps) {
   return (
     <SectionBox title="Profile fields">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-        <div className={FIELD_WIDTH}>
-          <Input
-            label="Timezone"
-            value={timezone}
-            onChange={(event) => onTimezoneChange(event.target.value)}
-            placeholder="Timezone"
-          />
-        </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          type="text"
+          value={timezone}
+          onChange={(event) => onTimezoneChange(event.target.value)}
+          placeholder="Timezone"
+          title="Timezone"
+          className={TEXT_INPUT_CLASS}
+        />
         <Button variant="ghost" onClick={onRunTimezoneUpdate} disabled={loading || !hasRows}>
           Update timezone
         </Button>
       </div>
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-        <div className={FIELD_WIDTH}>
-          <Input
-            label="Email domain"
-            value={emailDomain}
-            onChange={(event) => onEmailDomainChange(event.target.value)}
-            placeholder="example.com"
-          />
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="ghost" onClick={onRunEmailDomainUpdate} disabled={loading || !hasRows}>
-            Set email domain
-          </Button>
-          <Button variant="ghost" onClick={onRunEmailClear} disabled={loading || !hasRows}>
-            Reset email
-          </Button>
-        </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          type="text"
+          value={emailDomain}
+          onChange={(event) => onEmailDomainChange(event.target.value)}
+          placeholder="example.com"
+          title="Email domain"
+          className={TEXT_INPUT_CLASS}
+        />
+        <Button variant="ghost" onClick={onRunEmailDomainUpdate} disabled={loading || !hasRows}>
+          Set email domain
+        </Button>
+        <Button variant="ghost" onClick={onRunEmailClear} disabled={loading || !hasRows}>
+          Reset email
+        </Button>
       </div>
     </SectionBox>
   );
@@ -186,15 +187,17 @@ export function IpAllowlistSection({ contests, contestId, ip, loading, hasRows, 
   const dictionary = useDictionary();
   return (
     <SectionBox title={dictionary.users.bulkEdit.ipTitle}>
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-        <div className={FIELD_WIDTH}>
-          <Select
-            label={dictionary.users.bulkEdit.ipContest}
-            value={String(contestId)}
-            onChange={(event) => onContestIdChange(Number(event.target.value) || 0)}
-            options={contestOptions(contests)}
-          />
-        </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <select
+          value={contestId}
+          title={dictionary.users.bulkEdit.ipContest}
+          onChange={(event) => onContestIdChange(Number(event.target.value) || 0)}
+          className={CONTEST_SELECT_CLASS}
+        >
+          {contests.map((contest) => (
+            <option key={contest.id} value={contest.id}>#{contest.id} - {contest.name}</option>
+          ))}
+        </select>
         <IpAllowlistInput value={ip} onChange={onIpChange} />
         <Button variant="positiveOutline" onClick={onRunIpAllowlist} disabled={loading || !hasRows || !contestId}>
           {dictionary.users.bulkEdit.ipApply}

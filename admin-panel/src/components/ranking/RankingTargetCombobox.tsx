@@ -30,7 +30,7 @@ const DEBOUNCE_MS = 250;
 const LIST_LIMIT = 50;
 
 const FIELD_CLASSES =
-  'w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-2';
+  'w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]';
 const LIST_CLASSES =
   'absolute z-20 mt-1 max-h-64 w-full overflow-auto rounded-md border border-border bg-card p-1 shadow-lg';
 const OPTION_CLASSES = 'cursor-pointer rounded px-2 py-1.5 text-sm text-foreground hover:bg-accent';

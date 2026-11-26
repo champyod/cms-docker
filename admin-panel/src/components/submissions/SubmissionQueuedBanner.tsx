@@ -43,7 +43,7 @@ function TimeoutBanner({ retry, title, description, retryLabel }: {
         <AlertTriangle className="w-4 h-4 shrink-0" aria-hidden="true" />
         <span>
           <span className="font-semibold">{title}</span>
-          {': '}
+          {' — '}
           {description}
         </span>
       </span>

@@ -4,13 +4,13 @@ import { Users } from 'lucide-react';
 
 import { EmptyState } from '@/components/core/EmptyState';
 import { RecordList } from '@/components/list/RecordList';
-import { useDictionary } from '@/hooks/useDictionary';
 import type { ListSortInput } from '@/lib/list-sorting';
 import type { Dictionary } from '@/lib/dictionary';
 import type { TeamSummary } from '@/lib/people-read-model-types';
 
 import { TeamRowActions } from './TeamRowActions';
 import { buildTeamColumns } from './teamColumns';
+import type { TeamCapabilities } from './useTeamListActions';
 
 export type TeamListCopy = Pick<Dictionary['teams'], 'addTeam' | 'tableEmptyTitle' | 'tableEmptyDescription'>;
 
@@ -18,8 +18,10 @@ export interface TeamListTableProps {
   readonly teams: readonly TeamSummary[];
   readonly recordHref: (team: TeamSummary) => string;
   readonly permissionKeys: readonly string[];
+  readonly capabilities: TeamCapabilities;
   readonly onEdit: (team: TeamSummary) => void;
   readonly onDelete: (teamId: number) => void;
+  readonly onCreate: () => void;
   readonly copy: TeamListCopy;
   readonly sort?: ListSortInput;
   readonly onSortChange?: (sort: ListSortInput) => void;
@@ -29,17 +31,18 @@ export function TeamListTable({
   teams,
   recordHref,
   permissionKeys,
+  capabilities,
   onEdit,
   onDelete,
+  onCreate,
   copy,
   sort,
   onSortChange,
 }: TeamListTableProps): React.JSX.Element {
-  const dict = useDictionary();
   return (
     <RecordList
       rows={teams}
-      columns={buildTeamColumns(dict.common.notSet)}
+      columns={buildTeamColumns()}
       getRowKey={(team) => team.id}
       getRecordHref={recordHref}
       renderRowActions={(team) => (
@@ -56,6 +59,8 @@ export function TeamListTable({
           icon={Users}
           title={copy.tableEmptyTitle}
           description={copy.tableEmptyDescription}
+          actionLabel={capabilities.canCreate ? copy.addTeam : undefined}
+          onAction={capabilities.canCreate ? onCreate : undefined}
         />
       }
       sort={sort}

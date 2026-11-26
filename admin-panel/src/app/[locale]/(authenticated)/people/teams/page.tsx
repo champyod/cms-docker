@@ -1,7 +1,6 @@
 import { notFound } from 'next/navigation';
-import { ListPage } from '@/components/patterns/ListPage';
+import { PageSurface } from '@/components/core/PageSurface';
 import { TeamList } from '@/components/teams/TeamList';
-import { TeamListHeader } from '@/components/teams/TeamListHeader';
 import { LiveRefresh } from '@/lib/live/live-refresh';
 import { getDictionary } from '@/i18n';
 import type { Dictionary } from '@/lib/dictionary';
@@ -53,31 +52,20 @@ export default async function PeopleTeamsPage({ params, searchParams }: {
   const sort = readListSort({ sort: query.sort, dir: query.dir });
   const { teams, effectivePermissions } = await loadTeamsListPage(sort);
   return (
-    <ListPage
+    <PageSurface
       breadcrumbs={listBreadcrumbs(locale, 'people', 'people.teams', dict)}
       title={teamsLabel}
       description={dict.teams.subtitle}
-      actions={
-        <>
-          {/* Renders nothing: the stream keeps the rows current, the header carries the actions. */}
-          <LiveRefresh url="/api/teams/stream" />
-          <TeamListHeader
-            locale={locale}
-            permissionKeys={[...effectivePermissions]}
-            navigation={dict.navigation}
-            copy={dict.teams}
-            docsLinkLabel={dict.docs.viewDocumentation}
-          />
-        </>
-      }
+      actions={<LiveRefresh url="/api/teams/stream" />}
     >
       <TeamList
         initialTeams={teams}
         permissionKeys={[...effectivePermissions]}
         navigation={dict.navigation}
         copy={dict.teams}
+        docsLinkLabel={dict.docs.viewDocumentation}
         initialSort={sort}
       />
-    </ListPage>
+    </PageSurface>
   );
 }

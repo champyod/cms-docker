@@ -16,8 +16,6 @@ interface AuditDetailPanelProps {
   error: string | null;
   detail: AuditDetailRow | null;
   onClose: () => void;
-  /** common.notSet: a field whose value the record does not hold. */
-  missing: string;
 }
 
 export function AuditDetailPanel({
@@ -27,7 +25,6 @@ export function AuditDetailPanel({
   error,
   detail,
   onClose,
-  missing,
 }: AuditDetailPanelProps): React.JSX.Element {
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
@@ -42,7 +39,9 @@ export function AuditDetailPanel({
     setTimeout(() => setCopiedField(null), COPY_FEEDBACK_DURATION_MS);
   };
 
-  // A block under the table pushed the clicked row off the screen on every open.
+  // Why a side panel and not a block under the table: an entry's detail is
+  // read against the rows above it, and a block below pushed the row the
+  // reader clicked off the screen on every open.
   return (
     <SidePanel
       open={entry !== undefined && (loading || detail !== null || error !== null)}
@@ -50,7 +49,7 @@ export function AuditDetailPanel({
         if (open) return;
         onClose();
       }}
-      title={entry === undefined ? dict.expandedDetails : `${entry.verb}, ${entry.entity_name ?? entry.entity}`}
+      title={entry === undefined ? dict.expandedDetails : `${entry.verb} · ${entry.entity_name ?? entry.entity}`}
     >
       {loading && <div className="text-sm text-muted-foreground animate-pulse">Loading details…</div>}
       {error !== null && (
@@ -62,7 +61,6 @@ export function AuditDetailPanel({
         <AuditDetailContent
           detail={detail}
           dict={dict}
-          missing={missing}
           copiedField={copiedField}
           onCopy={(text, field) => {
             void handleCopy(text, field);

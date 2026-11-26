@@ -30,7 +30,7 @@ export function UserPreferredLanguagesField({
       canRead={access.canRead}
       canUpdate={access.canUpdate}
       label="Preferred Languages"
-      lockHint="Read-only: you lack user:update"
+      lockHint="Read-only — you lack user:update"
     >
       <div className="space-y-2">
         <div className="flex flex-wrap gap-2">
@@ -42,7 +42,7 @@ export function UserPreferredLanguagesField({
               return (
                 <span key={code} className={cn('inline-flex items-center gap-1 rounded-full border px-2 py-1 text-xs', known ? 'border-border bg-muted' : 'border-amber-500/40 bg-amber-500/10 text-amber-700')}>
                   <span className="font-mono">{code}</span>
-                  {!known ? <span className="text-xs">unknown</span> : null}
+                  {!known ? <span className="text-[0.625rem]">unknown</span> : null}
                   {access.canUpdate ? (
                     <button type="button" onClick={() => onRemove(code)} className="ml-1 text-muted-foreground hover:text-foreground">×</button>
                   ) : null}
@@ -74,7 +74,7 @@ export function UserPreferredLanguagesField({
         {(() => {
           const pending = normalizeLanguageCode(draft);
           if (!pending || isKnownLanguageCode(pending)) return null;
-          return <p className="text-xs text-amber-600">Unrecognised code: will be saved as “{pending}” but may not match any statement. Use a code from the shared languages list (languages.json).</p>;
+          return <p className="text-xs text-amber-600">Unrecognised code — will be saved as “{pending}” but may not match any statement. Use a code from the shared languages list (languages.json).</p>;
         })()}
         <p className="text-xs text-muted-foreground">Stored normalized (trim + lowercase). Exact match against statement.language.</p>
       </div>

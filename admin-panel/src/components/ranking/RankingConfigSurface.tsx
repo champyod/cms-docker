@@ -5,6 +5,7 @@ import { Ban, Play } from 'lucide-react';
 
 import { endTarget, showTarget } from '@/app/actions/rankingConfig';
 import { Button } from '@/components/core/Button';
+import { Card } from '@/components/core/Card';
 import { EmptyState } from '@/components/core/EmptyState';
 import { FormField, SelectField } from '@/components/core/FormField';
 import { Input } from '@/components/core/Input';
@@ -27,7 +28,14 @@ export interface RankingConfigSurfaceProps {
   readonly canShow: boolean;
 }
 
-/** Config says what the board shows; an override is the exception that wins over it. */
+/**
+ * The board's config: the contests the ranking draws.
+ *
+ * WHY it sits beside the override surface and is not part of it: the config says what the board
+ * shows and an override is the exception that wins over it, so they are two surfaces with two
+ * jobs. Presenting them as one list — which is what the retired wording did — is what left an
+ * operator unable to say which of the two they were looking at.
+ */
 export function RankingConfigSurface({
   copy,
   rows,
@@ -40,11 +48,22 @@ export function RankingConfigSurface({
   const [failure, setFailure] = useState<string | null>(null);
 
   if (!canShow) {
-    return <ShownList copy={copy} rows={rows} onEnd={null} />;
+    return (
+      <Card className="space-y-3">
+        <Text as="h2" variant="h3">
+          {copy.title}
+        </Text>
+        <ShownList copy={copy} rows={rows} onEnd={null} />
+      </Card>
+    );
   }
 
   return (
-    <div className="space-y-4">
+    <Card className="space-y-4">
+      <Text as="h2" variant="h3">
+        {copy.title}
+      </Text>
+      <Text variant="muted">{copy.hint}</Text>
       <form
         action={async (formData: FormData) => {
           setFailure(null);
@@ -112,7 +131,7 @@ export function RankingConfigSurface({
         onClose={reasonPrompt.close}
         onSubmit={reasonPrompt.submit}
       />
-    </div>
+    </Card>
   );
 }
 
@@ -135,7 +154,7 @@ function ShownList({ copy, rows, onEnd }: ShownListProps): React.JSX.Element {
             <span className="truncate font-medium">{row.key}</span>
             <span className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
               <span className="truncate">
-                {row.kind}, {row.reason}
+                {row.kind} · {row.reason}
               </span>
               {/*
                 WHY the author is on every row: a config row can be written outside the panel

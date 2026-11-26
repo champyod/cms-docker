@@ -1,20 +1,18 @@
 import { notFound } from 'next/navigation';
-import { getDictionary } from '@/i18n';
 import { AuthorizationError, requirePermission } from '@/lib/server/authorization';
 import { isRoutePermitted } from '@/lib/navigation/permissions';
 import { ROUTE_REGISTRY } from '@/lib/navigation/registry';
 import type { RouteId } from '@/lib/navigation/types';
 import { getContestParticipants } from '@/lib/queries/contest-detail';
 import { parseRecordId, readRecordOrNotFound } from '@/lib/queries/record-access';
-import { BoardPage } from '@/components/patterns/BoardPage';
 import { ContestParticipantsTab } from '@/components/contests/contest-detail/ContestParticipantsTab';
-import { ContestRosterSection } from '@/components/contests/contest-detail/ContestRosterSection';
 
 type ContestRouteProps = {
   params: Promise<{ locale: string; id: string }>;
 };
 
-// The page resolves the registry route itself so a disabled or narrowed descriptor 404s before the data is read.
+// Why: the reader enforces the same keys, but the page must resolve the exact
+// registry route first so a disabled or narrowed descriptor 404s before data.
 async function authorizeContestTab(routeId: RouteId): Promise<ReadonlySet<string>> {
   const route = ROUTE_REGISTRY.find((candidate) => candidate.id === routeId);
   if (!route || !route.enabled) notFound();
@@ -29,32 +27,11 @@ async function authorizeContestTab(routeId: RouteId): Promise<ReadonlySet<string
   }
 }
 
-export default async function ContestParticipantsPage({ params }: ContestRouteProps): Promise<React.JSX.Element> {
-  const { locale, id } = await params;
+export default async function ContestParticipantsPage({ params }: ContestRouteProps) {
+  const { id } = await params;
   const contestId = parseRecordId(id);
   if (contestId === null) notFound();
-  const effective = await authorizeContestTab('contests.tabs.participants');
-  const dictionary = await getDictionary(locale);
+  await authorizeContestTab('contests.tabs.participants');
   const data = await readRecordOrNotFound(() => getContestParticipants(contestId));
-  const count = data.participations.length;
-  return (
-    <BoardPage
-      // The record shell above renders the contest's name, its trail and its tabs.
-      ownsHeader={false}
-      sections={[
-        {
-          key: 'participants',
-          title: 'Participants',
-          description: `${count} ${count === 1 ? 'participant' : 'participants'} in this contest, with the actions each row allows.`,
-          rows: <ContestParticipantsTab data={data} />,
-        },
-        {
-          key: 'roster',
-          title: dictionary.contests.roster.title,
-          description: dictionary.contests.roster.description,
-          rows: <ContestRosterSection contestId={data.contestId} permissionKeys={[...effective]} />,
-        },
-      ]}
-    />
-  );
+  return <ContestParticipantsTab data={data} />;
 }

@@ -37,7 +37,7 @@ export function AdminAccountFields({
         canRead={initialData ? fieldAccess.name.canRead : canCreate}
         canUpdate={initialData ? fieldAccess.name.canUpdate : canCreate}
         label="Display Name"
-        lockHint="Read-only: you lack admin:update"
+        lockHint="Read-only — you lack admin:update"
       >
         <Input
           value={formData.name}
@@ -64,7 +64,7 @@ export function AdminAccountFields({
         canRead={initialData ? fieldAccess.password.canRead : canCreate}
         canUpdate={initialData ? fieldAccess.password.canUpdate : canCreate}
         label={`Password ${initialData ? '(Leave empty to keep current)' : ''}`}
-        lockHint="Read-only: you lack admin:password:update"
+        lockHint="Read-only — you lack admin:password:update"
       >
         <PasswordFieldWithKind
           label=""

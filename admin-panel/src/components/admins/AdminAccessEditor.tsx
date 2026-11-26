@@ -88,7 +88,7 @@ export function AdminAccessEditor({
                 <div className="flex items-center gap-2">
                   <span className="text-sm text-foreground font-medium truncate">{group.name}</span>
                   {group.is_seeded && (
-                    <span className="px-1.5 py-0.5 text-xs rounded-full bg-muted text-muted-foreground">Seeded</span>
+                    <span className="px-1.5 py-0.5 text-[0.625rem] rounded-full bg-muted text-muted-foreground">Seeded</span>
                   )}
                 </div>
                 <p className="text-xs text-muted-foreground truncate">{group.description ?? 'No description'}</p>
@@ -122,7 +122,7 @@ export function AdminAccessEditor({
         </div>
         {overrides.length === 0 && (
           <p className="text-xs text-muted-foreground italic">
-            This admin has no overrides: access matches their groups exactly.
+            This admin has no overrides — access matches their groups exactly.
           </p>
         )}
         {overrides.map((draft, index) => (
@@ -134,7 +134,7 @@ export function AdminAccessEditor({
               <select
                 value={draft.permissionKey}
                 onChange={(event) => handleOverrideKey(index, event.target.value)}
-                className="flex-1 h-9 min-w-0 rounded-md border border-input bg-transparent px-2 text-xs font-mono outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-2"
+                className="flex-1 h-9 min-w-0 rounded-md border border-input bg-transparent px-2 text-xs font-mono outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
               >
                 {PERMISSION_REGISTRY.map((definition) => (
                   <option key={definition.key} value={definition.key}>
@@ -145,7 +145,7 @@ export function AdminAccessEditor({
               <select
                 value={draft.effect}
                 onChange={(event) => handleOverrideEffect(index, event.target.value as OverrideEffect)}
-                className="h-9 rounded-md border border-input bg-transparent px-2 text-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-2"
+                className="h-9 rounded-md border border-input bg-transparent px-2 text-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
               >
                 <option value="allow">Allow</option>
                 <option value="deny">Deny</option>
@@ -185,7 +185,7 @@ export function AdminAccessEditor({
           ))}
           {effectivePermissions.size === 0 && (
             <p className="text-xs text-muted-foreground italic">
-              No effective permissions: this admin will be denied everything.
+              No effective permissions — this admin will be denied everything.
             </p>
           )}
         </div>

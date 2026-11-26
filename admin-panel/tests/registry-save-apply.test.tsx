@@ -5,7 +5,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import en from '@/dictionaries/en.json';
 import { DictionaryProvider } from '@/components/providers/DictionaryProvider';
 import { ExposureApplyNotice } from '@/components/infrastructure/ExposureApplyNotice';
-import { RegistryKindSection } from '@/components/infrastructure/RegistryKindSection';
+import { ServiceRegistryView } from '@/components/infrastructure/ServiceRegistryView';
 import type { ServiceRecord } from '@/lib/service-wiring-contract';
 
 vi.mock('next/navigation', () => ({
@@ -44,15 +44,16 @@ const SERVICE: ServiceRecord = {
   pull_policy: 'missing',
 };
 
-function renderView(kind: 'service' | 'exposure' = 'service'): void {
+function renderView(): void {
   render(
     <DictionaryProvider dict={en}>
-      <RegistryKindSection
-        kind={kind}
+      <ServiceRegistryView
         services={[SERVICE]}
         wirings={[]}
         exposures={[]}
         contests={[]}
+        title="Services"
+        description="The service registry"
         permissionKeys={['container:control']}
         frontVhosts={[]}
       />
@@ -62,7 +63,8 @@ function renderView(kind: 'service' | 'exposure' = 'service'): void {
 
 describe('the exposure control promises the whole job', () => {
   it('reads Save & apply on the exposure editor and keeps a plain Save elsewhere', () => {
-    renderView('exposure');
+    renderView();
+    fireEvent.click(screen.getByRole('button', { name: copy.tabs.exposures }));
     fireEvent.click(screen.getByRole('button', { name: copy.actions.addExposure }));
     expect(screen.queryByRole('button', { name: copy.actions.saveApply })).not.toBeNull();
 

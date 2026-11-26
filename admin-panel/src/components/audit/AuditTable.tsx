@@ -1,16 +1,20 @@
 'use client';
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, useTransition } from 'react';
 import { usePathname } from 'next/navigation';
 import { useAppRouter } from '@/hooks/useAppRouter';
 import { useLiveStream } from '@/hooks/useLiveStream';
 import type { AuditCursorFrame } from '@/lib/live/frames';
 import type { ListSortInput } from '@/lib/list-sorting';
+import { useDebouncedSearch } from '@/hooks/useDebouncedSearch';
 import { EmptyState } from '@/components/core/EmptyState';
 import { ResponsiveTable } from '@/components/core/ResponsiveTable';
-import { getAuditEntry } from '@/app/actions/audit';
+import { TablePaginationControls } from '@/components/core/TablePaginationControls';
+import { getAuditEntry, getDistinctEntities } from '@/app/actions/audit';
 import type { AuditDetailRow } from '@/app/actions/audit';
 import { Filter } from 'lucide-react';
+import { AuditFilters } from './AuditFilters';
+import { AuditToolbar } from './AuditToolbar';
 import { AuditDetailPanel } from './AuditDetailPanel';
 import { createAuditRowRenderers } from './auditRowRenderers';
 import {
@@ -23,26 +27,42 @@ import type { AuditTableProps } from './auditTypes';
 
 export type { AuditTableProps } from './auditTypes';
 
-/** This component owns the one thing only it knows: which row the reader opened. */
 export function AuditTable({
   entries,
+  total,
+  totalPages,
+  currentPage,
+  filters,
   dict,
-  missing,
   sort,
-  autoRefresh = false,
 }: AuditTableProps): React.JSX.Element {
   const router = useAppRouter();
+  const [isPending, startTransition] = useTransition();
   // Why the hook and not window.location.pathname: it hands back the path with the base path stripped.
   const pathname = usePathname();
+
+  const [entityFilter, setEntityFilter] = useState(filters.entity ?? '');
+  const [verbFilter, setVerbFilter] = useState(filters.verb ?? '');
+  const [actorIdFilter, setActorIdFilter] = useState(filters.actorId ?? '');
+  const [resultFilter, setResultFilter] = useState(filters.result ?? '');
+  const [ipFilter, setIpFilter] = useState(filters.ip ?? '');
+  const [showViews, setShowViews] = useState(filters.showViews ?? false);
+  const [searchFilter, setSearchFilter] = useState(filters.search ?? '');
+  const [fromDateFilter, setFromDateFilter] = useState(filters.fromDate ?? '');
+  const [toDateFilter, setToDateFilter] = useState(filters.toDate ?? '');
+  const [autoRefresh, setAutoRefresh] = useState(false);
 
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
   const [expandedDetail, setExpandedDetail] = useState<AuditDetailRow | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
 
+  const [entities, setEntities] = useState<string[]>([]);
+  const [pageInput, setPageInput] = useState(String(currentPage));
   const latestAuditIdRef = useRef<string | null>(null);
 
-  // The rows on screen are this page's own query, so a new row is only visible through the reload the stream triggers.
+  // Why the cursor and not the rows: the rows on screen are this page's own query, so a new one is only
+  // visible through the reload the stream triggers — and only once per new row.
   const onAuditFrame = useCallback(
     (frame: AuditCursorFrame): void => {
       if (latestAuditIdRef.current === frame.latestId) return;
@@ -52,12 +72,71 @@ export function AuditTable({
     [router],
   );
 
-  // The stream's status reports the push channel, not the rows; the rows say whether the read succeeded.
+  // Why the stream's own status is not projected anywhere: it reports the push channel, not the
+  // rows, and the rows this page reads are what say whether the read succeeded.
   useLiveStream<AuditCursorFrame>({
     url: '/api/audit/stream',
     onFrame: onAuditFrame,
     enabled: autoRefresh,
   });
+
+  useEffect(() => {
+    void (async () => {
+      const result = await getDistinctEntities();
+      if (result.success) setEntities(result.data);
+    })();
+  }, []);
+
+  const navigateWithFilters = useCallback(
+    (overrides?: Record<string, string>) => {
+      const params = new URLSearchParams();
+      const merged = {
+        entity: entityFilter,
+        verb: verbFilter,
+        actorId: actorIdFilter,
+        result: resultFilter,
+        ip: ipFilter,
+        search: searchFilter,
+        fromDate: fromDateFilter,
+        toDate: toDateFilter,
+        ...overrides,
+      };
+      for (const [key, val] of Object.entries(merged)) {
+        if (val) params.set(key, val);
+      }
+      if (showViews) params.set('views', 'all');
+      params.set('page', overrides?.page ?? '1');
+      startTransition(() => {
+        router.push(`?${params.toString()}`);
+      });
+    },
+    [entityFilter, verbFilter, actorIdFilter, resultFilter, ipFilter, showViews, searchFilter, fromDateFilter, toDateFilter, router],
+  );
+
+  const applySearch = useDebouncedSearch({
+    value: searchFilter,
+    delayMs: 300,
+    onApply: (search) => navigateWithFilters({ search }),
+  });
+
+  const handleApplyFilters = () => {
+    applySearch(searchFilter);
+  };
+
+  const handleClearFilters = () => {
+    setEntityFilter('');
+    setVerbFilter('');
+    setActorIdFilter('');
+    setResultFilter('');
+    setIpFilter('');
+    setShowViews(false);
+    setSearchFilter('');
+    setFromDateFilter('');
+    setToDateFilter('');
+    startTransition(() => {
+      router.push('?');
+    });
+  };
 
   const applySort = useCallback((next: ListSortInput): void => {
     const params = new URLSearchParams(window.location.search);
@@ -72,6 +151,11 @@ export function AuditTable({
     const query = params.toString();
     router.replace(query.length > 0 ? `?${query}` : pathname);
   }, [router, pathname]);
+
+  const handlePageChange = (newPage: number) => {
+    setPageInput(String(newPage));
+    navigateWithFilters({ page: String(newPage) });
+  };
 
   const handleRowClick = async (id: string) => {
     if (expandedRowId === id) {
@@ -92,17 +176,19 @@ export function AuditTable({
         setDetailError(result.error);
       }
     } catch (error) {
-      // Only transport-level rejections reach here, and they must still clear the spinner.
+      // The action body reports failures via the result; only transport-level
+      // rejections reach here, and they must still clear the spinner.
       setDetailError(error instanceof Error ? error.message : 'Request failed');
     } finally {
       setLoadingDetail(false);
     }
   };
 
-  // One column definition drives the desktop rows and the mobile cards, so the two layouts cannot drift.
+  // Why: one column definition drives desktop rows and mobile cards, so
+  // the two layouts cannot drift apart.
   const columns = useMemo(
-    () => buildAuditColumns(dict, { formatTimestamp, truncate, resultBadgeVariant }, missing),
-    [dict, missing],
+    () => buildAuditColumns(dict, { formatTimestamp, truncate, resultBadgeVariant }),
+    [dict],
   );
 
   const { getRowProps, renderRowActions } = createAuditRowRenderers(expandedRowId, handleRowClick);
@@ -113,6 +199,50 @@ export function AuditTable({
 
   return (
     <div className="space-y-4">
+      <AuditFilters
+        dict={dict}
+        entities={entities}
+        entityFilter={entityFilter}
+        verbFilter={verbFilter}
+        actorIdFilter={actorIdFilter}
+        resultFilter={resultFilter}
+        ipFilter={ipFilter}
+        showViews={showViews}
+        searchFilter={searchFilter}
+        fromDateFilter={fromDateFilter}
+        toDateFilter={toDateFilter}
+        onEntityFilter={setEntityFilter}
+        onVerbFilter={setVerbFilter}
+        onActorIdFilter={setActorIdFilter}
+        onResultFilter={setResultFilter}
+        onIpFilter={setIpFilter}
+        onShowViews={setShowViews}
+        onSearchFilter={setSearchFilter}
+        onFromDateFilter={setFromDateFilter}
+        onToDateFilter={setToDateFilter}
+        onApply={handleApplyFilters}
+        onClear={handleClearFilters}
+      />
+
+      <AuditToolbar
+        dict={dict}
+        total={total}
+        isPending={isPending}
+        autoRefresh={autoRefresh}
+        onToggleAutoRefresh={() => setAutoRefresh((v) => !v)}
+        filters={{
+          entity: entityFilter,
+          verb: verbFilter,
+          actorId: actorIdFilter,
+          result: resultFilter,
+          ip: ipFilter,
+          showViews,
+          search: searchFilter,
+          fromDate: fromDateFilter,
+          toDate: toDateFilter,
+        }}
+      />
+
       <ResponsiveTable
         columns={columns}
         rows={entries}
@@ -127,7 +257,6 @@ export function AuditTable({
 
       <AuditDetailPanel
         entry={expandedEntry}
-        missing={missing}
         dict={dict}
         loading={loadingDetail}
         error={detailError}
@@ -136,6 +265,24 @@ export function AuditTable({
           if (expandedRowId !== null) void handleRowClick(expandedRowId);
         }}
       />
+
+      {totalPages > 1 && (
+        <TablePaginationControls
+          currentPage={currentPage}
+          totalPages={totalPages}
+          pageInput={pageInput}
+          onPageInputChange={setPageInput}
+          onPageGo={() => {
+            const target = Number(pageInput) || 1;
+            const clamped = Math.max(1, Math.min(target, totalPages));
+            handlePageChange(clamped);
+          }}
+          perPage={50}
+          onPerPageChange={() => { /* page size is fixed at 50 for audit */ }}
+          onPrev={() => handlePageChange(currentPage - 1)}
+          onNext={() => handlePageChange(currentPage + 1)}
+        />
+      )}
     </div>
   );
 }

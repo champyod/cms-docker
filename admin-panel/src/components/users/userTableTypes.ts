@@ -37,7 +37,8 @@ export interface UserTableProps {
   onSortChange?: (sort: ListSortInput) => void;
 }
 
-// Position is precomputed so the column model stays a pure row-to-node map.
+// Why: position is precomputed so the shared column model stays a pure
+// row-to-node map without needing a row index at render time.
 export interface UserRow {
   user: UsersPageRow;
   position: number;
@@ -50,6 +51,4 @@ export interface BuildUserColumnsArgs {
   selectAllLabel: string;
   onToggleAll: (checked: boolean) => void;
   onToggleOne: (userId: number, checked: boolean) => void;
-  /** The word a cell shows when the record holds nothing: common.notSet, from the page's dictionary. */
-  missing: string;
 }

@@ -22,7 +22,10 @@ export interface ShortcutRouteBinding {
   readonly href: string;
 }
 
-// A module under hooks must not reach into components, so the label join lives here.
+// Why the join lives here and not in the hook: the chord layer knows only the key
+// and the frozen route id, because a module under `hooks/` must not reach into
+// `components/` to resolve a label. This is the one component that renders a
+// chord list, so this is the one place the presentation needs resolving.
 function useShortcutBindings(
   permissionKeys: readonly string[],
 ): readonly ShortcutRouteBinding[] {
@@ -90,7 +93,7 @@ export function ShortcutOverlay({ open, onOpenChange, bindings = [] }: ShortcutO
           <ShortcutRow keys={['Enter']} label="Open selected row" />
         </ShortcutGroup>
       </div>
-      <ShortcutGroup title="Go to: press g, then key">
+      <ShortcutGroup title="Go to — press g, then key">
         <div className="grid gap-x-8 sm:grid-cols-2">
           {bindings.map((binding) => (
             <ShortcutRow

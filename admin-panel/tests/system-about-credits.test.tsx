@@ -161,14 +161,11 @@ describe('about page', () => {
     expect(source.getAttribute('href')).toBe(ROOT_CREDITS.project.url);
   });
 
-  it('titles the licence, the panel surface, and the software section from the dictionary', async () => {
+  it('titles the licence, the panel surface, and the software count from the dictionary', async () => {
     await renderPage();
     expect(screen.getByText(ROOT_CREDITS.license.name)).toBeDefined();
     expect(screen.getByRole('heading', { name: 'Admin panel' })).toBeDefined();
-    // The section is named by its title and counted by its badge: a count inside the heading joins
-    // the name a reader navigating by headings hears.
-    expect(screen.getByRole('heading', { name: 'Software' })).toBeDefined();
-    expect(screen.getByText('(25)')).toBeDefined();
+    expect(screen.getByRole('heading', { name: 'Components (25)' })).toBeDefined();
   });
 
   it('keeps every address out of the component source', () => {

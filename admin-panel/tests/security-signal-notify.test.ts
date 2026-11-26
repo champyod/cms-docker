@@ -33,7 +33,11 @@ function pageOf(at: Date, keys: readonly string[]): PageRecord {
   return { notifiedAt: at.toISOString(), keys };
 }
 
-/** The same fact must not page every sixty seconds, and a new fact must not be swallowed by the floor. */
+/**
+ * Dedupe is the whole reason the channel can be trusted: the same lapsed waiver must not page every
+ * sixty seconds, a fact that was already said must stay said, and a fact that is *new* must not be
+ * swallowed by a floor meant for flapping producers.
+ */
 describe('security notification plan', () => {
   it('sends when a push-worthy fact has not been said before', () => {
     const plan = planNotification(lapsedWaiverDigest(), null, NOW);
@@ -45,7 +49,7 @@ describe('security notification plan', () => {
     expect(plan.body).toContain('review was due 2026-10-02');
   });
 
-  it('stays quiet when the same fact is still the only one: every tick, forever', () => {
+  it('stays quiet when the same fact is still the only one — every tick, forever', () => {
     const digest = lapsedWaiverDigest();
     const first = planNotification(digest, null, NOW);
     expect(first.send).toBe(true);
@@ -75,7 +79,8 @@ describe('security notification plan', () => {
 
     expect(plan.send).toBe(true);
     expect(plan.fresh.map((fact) => fact.key)).toEqual(['finding:rootfs:CVE-2026-2|openssl']);
-    // The message carries the whole state, so the operator is not left guessing about the older item.
+    // The message carries the whole state, not only the new line, so the operator is not left
+    // guessing whether the older item was fixed.
     expect(plan.facts).toHaveLength(2);
     expect(plan.body).toContain('waiver CVE-2026-9');
     expect(plan.body).toContain('glibc');
@@ -117,7 +122,8 @@ describe('security notification plan', () => {
     );
     const digest = buildSecurityDigest(makeSignalFacts(many), staleStaleness(), NOW);
 
-    // The list is bounded to what a message prints; the count still reports the whole push set.
+    // The list is bounded to what a message prints; the COUNT still reports the whole push set, so
+    // a truncation cannot turn 16 facts into 12.
     expect(digest.triggerCount).toBe(many.length + 1);
     expect(digest.triggers.filter((fact) => fact.kind === 'finding-critical')).toHaveLength(
       SIGNAL_RULES.maxLines,
@@ -138,7 +144,8 @@ describe('security notification plan', () => {
     expect(first.send).toBe(true);
     expect(first.overflowKey).toBe('more:on-page:40');
 
-    // The plan must carry the and-N-more key, or the next tick sees an unchanged list.
+    // Recording the plan must carry that key, otherwise the next tick sees an unchanged list and
+    // never mentions that forty more facts exist.
     const recorded = [...first.facts.map((fact) => fact.key), ...(first.overflowKey === null ? [] : [first.overflowKey])];
     const repeat = planNotification(withHidden, { notifiedAt: NOW.toISOString(), keys: recorded }, NOW);
     expect(repeat.send).toBe(false);

@@ -4,15 +4,17 @@ import { useState } from 'react';
 
 import { grantLoginExemption, revokeLoginExemption } from '@/app/actions/securityExemptions';
 import { Button } from '@/components/core/Button';
+import { Card } from '@/components/core/Card';
 import { Input } from '@/components/core/Input';
 import { ReasonDialog } from '@/components/core/ReasonDialog';
 import { useReasonPrompt } from '@/hooks/useReasonPrompt';
 import type { SecurityBlock } from '@/lib/security/block-ledger';
 import { EXEMPTION_SCOPES, type ExemptionScope } from '@/lib/security/exemption-scopes';
 
-// The native select is the one control with no core wrapper, so it carries the Input adapter's field surface.
+// The native select is the one control with no core wrapper, so it carries the
+// same field surface the Input adapter uses rather than a bare browser default.
 const SELECT_SURFACE =
-  'flex h-11 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-2';
+  'flex h-11 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]';
 
 const SCOPE_LABELS: Record<ExemptionScope, string> = {
   account_address: 'Account + address',
@@ -28,7 +30,6 @@ function exemptionIdentityLabel(subject: string, ip: string): string {
   return `${subject || '*'} @ ${ip || '*'}`;
 }
 
-/** The grant form stays even with no rows: an operator arrives here to create the first exemption. */
 export function ExemptionsPanel({ exemptions }: ExemptionsPanelProps): React.JSX.Element {
   const prompt = useReasonPrompt();
   const [scope, setScope] = useState<ExemptionScope>('account_address');
@@ -40,8 +41,13 @@ export function ExemptionsPanel({ exemptions }: ExemptionsPanelProps): React.JSX
   const canGrant = !missingInput;
 
   return (
-    <div className="space-y-3">
-      {prompt.feedback !== null && <p className="text-sm text-muted-foreground">{prompt.feedback}</p>}
+    <Card>
+      <h2 className="mb-1 text-lg font-semibold">Permanent exemptions</h2>
+      <p className="mb-3 text-sm text-muted-foreground">
+        A standing lift: the chosen account or address is never locked out or challenged until it is
+        revoked. This is a login-layer exemption, separate from the host bans fail2ban applies.
+      </p>
+      {prompt.feedback !== null && <p className="mb-3 text-sm text-muted-foreground">{prompt.feedback}</p>}
 
       <div className="flex flex-wrap items-end gap-2">
         <label className="space-y-1.5">
@@ -79,15 +85,17 @@ export function ExemptionsPanel({ exemptions }: ExemptionsPanelProps): React.JSX
         </Button>
       </div>
 
-      {exemptions.length > 0 && (
-        <ul className="space-y-2">
+      {exemptions.length === 0 ? (
+        <p className="mt-4 text-sm text-muted-foreground">No permanent exemption is active.</p>
+      ) : (
+        <ul className="mt-4 space-y-2">
           {exemptions.map((exemption) => {
             const subject = exemption.subject ?? '';
             const exemptionIp = exemption.ip ?? '';
             return (
               <li key={exemption.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border p-3">
                 <span className="font-mono text-sm">
-                  {exemption.subject ?? 'any account'}, {exemption.ip ?? 'any address'}
+                  {exemption.subject ?? 'any account'} · {exemption.ip ?? 'any address'}
                 </span>
                 <Button
                   variant="danger"
@@ -110,6 +118,6 @@ export function ExemptionsPanel({ exemptions }: ExemptionsPanelProps): React.JSX
       )}
 
       <ReasonDialog request={prompt.request} onClose={prompt.close} onSubmit={prompt.submit} />
-    </div>
+    </Card>
   );
 }

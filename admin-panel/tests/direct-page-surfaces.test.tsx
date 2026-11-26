@@ -19,17 +19,6 @@ vi.mock('next/navigation', () => ({
   redirect: vi.fn(() => {
     throw new Error('NEXT_REDIRECT');
   }),
-  // The list pages render client controls that read the current address and navigate; the
-  // static render only needs them to exist, not to move.
-  usePathname: () => '/en/contests',
-  useRouter: () => ({
-    push: vi.fn(),
-    replace: vi.fn(),
-    refresh: vi.fn(),
-    back: vi.fn(),
-    forward: vi.fn(),
-    prefetch: vi.fn(),
-  }),
 }));
 
 vi.mock('@/i18n', () => ({
@@ -84,7 +73,7 @@ async function renderTasks(locale: string): Promise<string> {
 async function renderDashboard(locale: string): Promise<string> {
   vi.mocked(getServiceStatus).mockResolvedValue({
     success: true,
-    status: 'ok',
+    status: 'online',
     running: 3,
     total: 3,
   } as never);

@@ -137,7 +137,7 @@ export function TaskSelectionModal({
                   aria-label={`${copy.selectRow} ${task.name}`}
                   onChange={(event) => toggle(task.id, event.target.checked)}
                 />
-                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted text-sm font-bold text-muted-foreground">
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-sm font-bold text-primary">
                   {task.name.substring(0, 2).toUpperCase()}
                 </span>
                 <span>

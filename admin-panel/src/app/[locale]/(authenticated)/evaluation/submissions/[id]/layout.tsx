@@ -59,7 +59,10 @@ function findRoute(routeId: RouteId): RouteDescriptor {
   return route;
 }
 
-// A submission has no name of its own; the task is what a reader recognises, and an unreadable task or submitter falls back to the id.
+// Why the task leads: a submission has no name of its own, and the task it was
+// sent for is what a reader recognises; the submitter is the next identifier down.
+// A row whose task and submitter the caller may not read falls back to the id,
+// which is the one value this page can always show.
 export function submissionHeading(summary: SubmissionSummary): string {
   return summary.task?.name ?? `#${summary.id}`;
 }
@@ -71,7 +74,7 @@ export function submissionDescription(summary: SubmissionSummary): string | null
   const fullName = [user.firstName, user.lastName]
     .filter((part): part is string => part !== null && part.trim() !== '')
     .join(' ');
-  return fullName === '' ? user.username : `${fullName}, ${user.username}`;
+  return fullName === '' ? user.username : `${fullName} · ${user.username}`;
 }
 
 export type SubmissionStatusLabels = Record<JudgingPhaseLabelKey, string> & {
@@ -91,7 +94,7 @@ export function submissionStatus(
   }
   if (judging !== null) segments.push(labels[judgingPhaseLabelKey(judging.phase)]);
   if (official) segments.push(labels.official);
-  return segments.length === 0 ? undefined : { kind: 'info', title: segments.join(', ') };
+  return segments.length === 0 ? undefined : { kind: 'info', title: segments.join(' · ') };
 }
 
 function statusLabelsFor(dictionary: Dictionary): SubmissionStatusLabels {
@@ -108,7 +111,8 @@ function statusLabelsFor(dictionary: Dictionary): SubmissionStatusLabels {
   };
 }
 
-// A tab the reader may not open is omitted rather than disabled, so the rail never advertises a route that would 404.
+// Why: a tab the reader may not open is omitted entirely rather than rendered
+// disabled, so the record rail never advertises a route that would 404.
 export function buildSubmissionTabs(
   locale: string,
   submissionId: number,
@@ -133,7 +137,9 @@ function isListPermitted(effective: ReadonlySet<string>): boolean {
   return descriptor !== undefined && descriptor.enabled && isRoutePermitted(descriptor, effective);
 }
 
-// A missing row and a 403 both render as the concealed not-found view; a 401 or unexpected failure keeps propagating.
+// Why: the summary read is what proves the record exists and that the caller may
+// open it, so a missing row and a 403 both render as the concealed not-found
+// view while a 401 or an unexpected failure keeps propagating.
 async function loadSubmissionRecord(submissionId: number): Promise<{
   readonly effective: ReadonlySet<string>;
   readonly summary: SubmissionSummary;
@@ -165,7 +171,8 @@ function buildDescription(
 ): React.ReactNode {
   const identity = submissionDescription(summary);
   const hasRelations = summary.user !== null || summary.task !== null || summary.contest !== null;
-  // The chip keeps the header when relations are unreadable, because the comparison is still worth reaching.
+  // Why the previous chip counts: a submission whose relations this reader may not
+  // read still has a comparison worth reaching, so the chip alone keeps the header.
   if (identity === null && !hasRelations && previousId === undefined) return undefined;
   return (
     <span className="flex flex-wrap items-center gap-x-2 gap-y-1">

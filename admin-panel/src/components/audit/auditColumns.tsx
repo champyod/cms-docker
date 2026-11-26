@@ -5,19 +5,20 @@ import type { AuditDict } from './auditTypes';
 
 export interface AuditColumnHelpers {
   formatTimestamp: (iso: string) => string;
-  truncate: (text: string | null, max: number, missing: string) => string;
+  truncate: (text: string | null, max: number) => string;
   resultBadgeVariant: (result: string) => 'success' | 'destructive' | 'neutral';
 }
 
-// The formatter is built per call, so one per row on every render; module scope builds it once.
+// Why module scope: the formatter is built per call, so one per audit row on every
+// render of both the desktop table and the mobile cards.
 const AUDIT_TIME_FORMAT = new Intl.DateTimeFormat();
 
 export function formatTimestamp(iso: string): string {
   return AUDIT_TIME_FORMAT.format(new Date(iso));
 }
 
-export function truncate(text: string | null, max: number, missing: string): string {
-  if (!text) return missing;
+export function truncate(text: string | null, max: number): string {
+  if (!text) return '—';
   return text.length > max ? `${text.slice(0, max)}…` : text;
 }
 
@@ -27,11 +28,11 @@ export function resultBadgeVariant(result: string): 'success' | 'destructive' | 
   return 'neutral';
 }
 
-// One column definition drives the desktop rows and the mobile cards, so the two layouts cannot drift.
+// Why: one column definition drives desktop rows and mobile cards, so
+// the two layouts cannot drift apart.
 export function buildAuditColumns(
   dict: AuditDict,
   helpers: AuditColumnHelpers,
-  missing: string,
 ): ResponsiveColumn<AuditLogRow>[] {
   return [
     {
@@ -50,7 +51,7 @@ export function buildAuditColumns(
       sortKey: 'actor_id',
       render: (entry) => (
         <span className="font-mono text-xs text-indigo-400">
-          {entry.actor_name ?? (entry.actor_id !== null ? `#${entry.actor_id}` : missing)}
+          {entry.actor_name ?? (entry.actor_id !== null ? `#${entry.actor_id}` : '—')}
         </span>
       ),
     },
@@ -58,7 +59,7 @@ export function buildAuditColumns(
       key: 'ip',
       header: dict.ip,
       render: (entry) => (
-        <span className="font-mono text-xs text-muted-foreground">{entry.ip ?? missing}</span>
+        <span className="font-mono text-xs text-muted-foreground">{entry.ip ?? '—'}</span>
       ),
     },
     {
@@ -78,7 +79,7 @@ export function buildAuditColumns(
       header: dict.columns.entityName,
       render: (entry) => (
         <span className="text-sm text-foreground">
-          {entry.entity_name ?? (entry.entity_id !== null ? `#${entry.entity_id}` : missing)}
+          {entry.entity_name ?? (entry.entity_id !== null ? `#${entry.entity_id}` : '—')}
         </span>
       ),
     },
@@ -95,7 +96,7 @@ export function buildAuditColumns(
       header: dict.columns.reason,
       render: (entry) => (
         <span className="block max-w-[200px] text-sm text-muted-foreground">
-          {helpers.truncate(entry.reason, 60, missing)}
+          {helpers.truncate(entry.reason, 60)}
         </span>
       ),
     },

@@ -1,17 +1,9 @@
+import { authorizeRoutePage } from '@/lib/navigation/page-authorization';
 import { readBannedAddresses, readLoginActivity, readLoginLockouts } from '@/app/actions/securityBlocks';
 import { readLoginExemptions } from '@/app/actions/securityExemptions';
-import { InlineAlert } from '@/components/core/InlineAlert';
-import { Text } from '@/components/core/Typography';
-import { BoardPage, boardSection, type BoardSection } from '@/components/patterns/BoardPage';
-import { BannedAddressList } from '@/components/security/BannedAddressList';
-import { CaptchaStatusSummary } from '@/components/security/CaptchaStatusSummary';
-import { ExemptionsPanel } from '@/components/security/ExemptionsPanel';
-import { LockoutList } from '@/components/security/LockoutList';
-import { LoginActivityTable } from '@/components/security/LoginActivityTable';
-import { QueueUnbanForm } from '@/components/security/QueueUnbanForm';
+import { BlocksPanel } from '@/components/security/BlocksPanel';
 import { getDictionary } from '@/i18n';
 import { readCaptchaStatus } from '@/lib/captcha-status';
-import { authorizeRoutePage } from '@/lib/navigation/page-authorization';
 import { listLoginSurfaces, surfaceLabels } from '@/lib/security/login-surfaces';
 
 export default async function SecurityBlocksPage({
@@ -32,77 +24,15 @@ export default async function SecurityBlocksPage({
     getDictionary(locale),
     listLoginSurfaces(),
   ]);
-  const labels = surfaceLabels(surfaces);
-
-  const sections: readonly BoardSection[] = [
-    {
-      key: 'captcha',
-      title: dict.security.blocks.captchaTitle,
-      description:
-        'Whether the challenge is on, at which thresholds, and whether the providers behind it answer.',
-      rows: <CaptchaStatusSummary status={captcha} copy={dict.security.blocks} />,
-    },
-    {
-      key: 'bans',
-      title: 'Banned addresses',
-      description:
-        'Host-level IP bans applied by fail2ban at the proxy. These are a different layer from the login lockouts below, which the web servers count per account and address.',
-      state: banned.agentReported ? undefined : (
-        <InlineAlert tone="warning" density="compact" announce="polite">
-          The host security agent has not reported state yet, so no live ban is listed. An unban queued
-          below is applied when the agent next runs.
-        </InlineAlert>
-      ),
-      ...boardSection(banned.bans.length === 0, (
-        <>
-          <Text variant="muted">{dict.security.blocks.emptyBans}</Text>
-          <QueueUnbanForm jailNames={banned.jailNames} />
-        </>
-      ), (
-        <>
-          <BannedAddressList bans={banned.bans} />
-          <QueueUnbanForm jailNames={banned.jailNames} />
-        </>
-      )),
-    },
-    {
-      key: 'exemptions',
-      title: 'Permanent exemptions',
-      description:
-        'A standing lift: the chosen account or address is never locked out or challenged until it is revoked. This is a login-layer exemption, separate from the host bans fail2ban applies.',
-      ...boardSection(exemptions.length === 0, (
-        <>
-          <Text variant="muted">{dict.security.blocks.emptyExemptions}</Text>
-          <ExemptionsPanel exemptions={[]} />
-        </>
-      ), <ExemptionsPanel exemptions={exemptions} />),
-    },
-    {
-      key: 'activity',
-      title: 'Login activity',
-      description:
-        'Live failure counters from the shared store: every failed sign-in, the account and address it came from, when it last failed, and when that account last signed in. A counter clears whole when its window lapses; clearing lifts it now. Expand a row for the attempts behind it.',
-      // An unreadable counter store is a failed read, not an empty counter, so the section shows the failure instead.
-      state: activity.ok ? undefined : (
-        <InlineAlert tone="destructive" density="compact" announce="polite">
-          {activity.error}
-        </InlineAlert>
-      ),
-      ...boardSection(activity.ok && activity.rows.length === 0, <Text variant="muted">{dict.security.blocks.emptyActivity}</Text>, activity.ok ? <LoginActivityTable missing={dict.common.notSet} rows={activity.rows} labels={labels} /> : null),
-    },
-    {
-      key: 'lockouts',
-      title: 'Login lockouts',
-      description:
-        'The captcha hard limit: after repeated failed passwords the contest and admin web servers refuse the account and address for the lockout window. Lifting one clears the counter and closes the record.',
-      ...boardSection(lockouts.length === 0, <Text variant="muted">{dict.security.blocks.emptyLockouts}</Text>, <LockoutList lockouts={lockouts} />),
-    },
-  ];
-
   return (
-    <BoardPage
-      ownsHeader={false}
-      sections={sections}
+    <BlocksPanel
+      banned={banned}
+      lockouts={lockouts}
+      exemptions={exemptions}
+      activity={activity}
+      captcha={captcha}
+      captchaCopy={dict.security.blocks}
+      labels={surfaceLabels(surfaces)}
     />
   );
 }

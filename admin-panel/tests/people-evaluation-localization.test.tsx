@@ -6,53 +6,26 @@ import { cleanup, render } from '@testing-library/react';
 import en from '@/dictionaries/en.json';
 import th from '@/dictionaries/th.json';
 import { DictionaryProvider } from '@/components/providers/DictionaryProvider';
-import UserHistoryPage from '@/app/[locale]/(authenticated)/people/users/[id]/history/page';
+import { UserHistoryTab } from '@/components/users/UserHistoryTab';
 import { UserProfileTab } from '@/components/users/UserProfileTab';
-import UserProfilePage from '@/app/[locale]/(authenticated)/people/users/[id]/profile/page';
-import { UserTeamsEmpty, UserTeamsTab } from '@/components/users/UserTeamsTab';
-import { TeamContestsEmpty, TeamContestsTab } from '@/components/teams/TeamContestsTab';
+import { UserTeamsTab } from '@/components/users/UserTeamsTab';
+import { TeamContestsTab } from '@/components/teams/TeamContestsTab';
 import { TeamListHeader } from '@/components/teams/TeamListHeader';
-import { TeamMembersEmpty, TeamMembersTab } from '@/components/teams/TeamMembersTab';
+import { TeamMembersTab } from '@/components/teams/TeamMembersTab';
 import { TeamOverviewTab } from '@/components/teams/TeamOverviewTab';
 import { buildConfirmationCopy } from '@/lib/confirmation-copy';
-import { getUserHistory, getUserProfile, getUserSummary } from '@/lib/people-read-models';
 import type { UserHistory, UserProfile, UserSummary } from '@/lib/people-read-model-types';
-import type { TeamContest, TeamMember, TeamSummary, UserTeamMembership } from '@/lib/people-read-model-types';
+import type { TeamContest, TeamMember, TeamSummary } from '@/lib/people-read-model-types';
 
 afterEach(() => cleanup());
 
 vi.mock('next/navigation', () => ({
-  notFound: vi.fn(() => { throw new Error('NEXT_NOT_FOUND'); }),
-  redirect: vi.fn((target: string) => { throw new Error(`NEXT_REDIRECT:${target}`); }),
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }),
   usePathname: () => '/th/people/users/17/history',
   useSearchParams: () => new URLSearchParams(),
 }));
 
 vi.mock('sonner', () => ({ toast: { loading: vi.fn(), success: vi.fn(), error: vi.fn() } }));
-
-// The fact strip is where the labels live, so the page render pins the copy.
-vi.mock('@/lib/server/authorization', () => ({
-  // The keys the three record tabs gate on, so the pages resolve their descriptor instead of concealing themselves.
-  requirePermission: vi.fn(async () => new Set(['user:read', 'participation:list', 'submission:read', 'team:read'])),
-  AuthorizationError: class AuthorizationError extends Error {
-    readonly status: 401 | 403;
-    constructor(status: 401 | 403) {
-      super(`Unauthorized: ${status}`);
-      this.status = status;
-    }
-  },
-}));
-
-vi.mock('@/lib/people-read-models', () => ({
-  getUserHistory: vi.fn(),
-  getUserProfile: vi.fn(),
-  getUserSummary: vi.fn(),
-}));
-
-vi.mock('@/i18n', () => ({
-  getDictionary: vi.fn(async (locale: string) => (locale === 'th' ? th : en)),
-}));
 
 function keyPaths(value: unknown, prefix = ''): string[] {
   if (typeof value !== 'object' || value === null) return [prefix];
@@ -130,66 +103,26 @@ describe('dictionary parity', () => {
 });
 
 describe('User record tab copy', () => {
-  it('renders Thai field labels on the profile page', async () => {
-    vi.mocked(getUserProfile).mockResolvedValue(PROFILE);
-    vi.mocked(getUserSummary).mockResolvedValue(SUMMARY);
+  it('renders Thai field labels on the profile tab', () => {
+    const body = text(
+      <UserProfileTab profile={PROFILE} summary={SUMMARY} navigation={th.navigation} copy={th.users} permissionKeys={[]} />,
+    );
 
-    const body = text(await UserProfilePage({ params: Promise.resolve({ locale: 'th', id: '17' }) }));
-
-    for (const label of [
-      th.users.profile.name,
-      th.users.profile.email,
-      th.users.profile.timezone,
-      th.users.profile.languages,
-      th.users.profile.teams,
-    ]) {
-      expect(body).toContain(label);
-    }
-    // The values too: a strip of headings with nothing under them would pass a label-only check.
-    expect(body).toContain('Asia/Bangkok');
-    expect(body).toContain('THA-01');
+    expect(body).toContain(th.users.profile.username);
+    expect(body).toContain(th.users.profile.timezone);
+    expect(body).toContain(th.users.profile.savedPassword);
     expect(body).not.toContain(en.users.profile.timezone);
   });
 
-  it('renders the Thai saved-password label on the profile tab', () => {
-    const body = text(<UserProfileTab userId={SUMMARY.id} copy={th.users} permissionKeys={[]} />);
-
-    expect(body).toContain(th.users.profile.savedPassword);
-    expect(body).not.toContain(en.users.profile.savedPassword);
-  });
-
-  it('renders the team code as a row link, without repeating the tab label as a heading', () => {
-    const body = text(
-      <UserTeamsTab
-        missing={th.common.notSet}
-        memberships={[{
-          id: 1,
-          contestId: 2,
-          contestName: 'Practice Round',
-          teamId: 4,
-          teamCode: 'THA-01',
-        } as unknown as UserTeamMembership]}
-        copy={th.users}
-        locale="th"
-      />,
-    );
-
-    expect(body).toContain('THA-01');
-    // The label lives on the layout's frame and the tab rail, so a copy here would say it three times.
-    expect(body).not.toContain(th.navigation.people['user-tabs'].teams.label);
-  });
-
   it('renders the Thai empty state on the user teams tab', () => {
-    const body = text(<UserTeamsEmpty copy={th.users} />);
+    const body = text(<UserTeamsTab memberships={[]} navigation={th.navigation} copy={th.users} locale="th" />);
 
     expect(body).toContain(th.users.teamsTab.emptyTitle);
     expect(body).toContain(th.users.teamsTab.emptyDescription);
   });
 
-  it('renders Thai section titles, the account access heading, and the last-login line', async () => {
-    vi.mocked(getUserHistory).mockResolvedValue(HISTORY);
-
-    const body = text(await UserHistoryPage({ params: Promise.resolve({ locale: 'th', id: '17' }) }));
+  it('renders Thai section titles, the Account Access heading, and the last-login line', () => {
+    const body = text(<UserHistoryTab history={HISTORY} navigation={th.navigation} copy={th.users} />);
 
     expect(body).toContain(th.users.history.accountAccess);
     expect(body).toContain('2026-01-15T08:30:00Z');
@@ -200,7 +133,9 @@ describe('User record tab copy', () => {
 });
 
 describe('docs affordance label', () => {
-  // The docs title had no reader left once the Docs header went, so the wording is pinned outright.
+  // Why the literals, not a contrast against docs.title: that key had no reader
+  // left once the Docs header was removed, so the affordance is pinned outright
+  // to the verb-phrase wording in each locale.
   it('keeps the original English wording instead of the documentation name', () => {
     expect(en.docs.viewDocumentation).toBe('View Documentation');
     expect(en.docs.viewDocumentation).not.toBe('CMS Documentation');
@@ -216,13 +151,7 @@ describe('docs affordance label', () => {
     const renderHeader = (dict: typeof en): string | null => {
       const { container } = render(
         <DictionaryProvider dict={dict}>
-          <TeamListHeader
-            locale="en"
-            permissionKeys={['team:create']}
-            navigation={dict.navigation}
-            copy={dict.teams}
-            docsLinkLabel={dict.docs.viewDocumentation}
-          />
+          <TeamListHeader locale="en" canCreate onCreate={vi.fn()} copy={dict.teams} docsLinkLabel={dict.docs.viewDocumentation} />
         </DictionaryProvider>,
       );
       return container.querySelector('a[title]')?.getAttribute('title') ?? null;
@@ -239,6 +168,7 @@ describe('Team record tab copy', () => {
       <TeamOverviewTab
         team={TEAM}
         permissionKeys={['team:read', 'team:update']}
+        navigation={th.navigation}
         copy={th.teams}
         locale="th"
       />,
@@ -254,6 +184,7 @@ describe('Team record tab copy', () => {
       <TeamOverviewTab
         team={TEAM}
         permissionKeys={['team:read']}
+        navigation={th.navigation}
         copy={th.teams}
         locale="th"
       />,
@@ -264,10 +195,10 @@ describe('Team record tab copy', () => {
   });
 
   it('renders Thai empty states and the overflow count on the members and contests tabs', () => {
-    const members = text(<TeamMembersTab teamId={4} members={MEMBERS} permissionKeys={['team:read']} contests={[]} copy={th.teams} locale="th" />);
-    const emptyMembers = text(<TeamMembersEmpty teamId={4} permissionKeys={['team:read']} contests={[]} copy={th.teams} />);
-    const contests = text(<TeamContestsTab missing={th.common.notSet} contests={CONTESTS} locale="th" />);
-    const emptyContests = text(<TeamContestsEmpty copy={th.teams} />);
+    const members = text(<TeamMembersTab teamId={4} members={MEMBERS} permissionKeys={['team:read']} contests={[]} navigation={th.navigation} copy={th.teams} locale="th" />);
+    const emptyMembers = text(<TeamMembersTab teamId={4} members={[]} permissionKeys={['team:read']} contests={[]} navigation={th.navigation} copy={th.teams} locale="th" />);
+    const contests = text(<TeamContestsTab contests={CONTESTS} navigation={th.navigation} copy={th.teams} locale="th" />);
+    const emptyContests = text(<TeamContestsTab contests={[]} navigation={th.navigation} copy={th.teams} locale="th" />);
 
     expect(members).toContain('Practice Round');
     expect(emptyMembers).toContain(th.teams.members.emptyTitle);

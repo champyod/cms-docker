@@ -8,7 +8,7 @@ import { useAppRouter } from '@/hooks/useAppRouter';
 import { ResponsiveTable } from '@/components/core/ResponsiveTable';
 import { Button } from '@/components/core/Button';
 import { RowActions, rowActionGroupLabel, type RowAction } from '@/components/core/RowActions';
-import { Pencil, Trash2, FileText } from 'lucide-react';
+import { Pencil, Trash2, Plus, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ROW_SELECTED_CLASSES } from '@/hooks/shortcut-rows';
 import { EmptyState } from '@/components/core/EmptyState';
@@ -16,7 +16,7 @@ import type { ListSortInput } from '@/lib/list-sorting';
 import { TaskModal } from './TaskModal';
 import { TaskBulkAssignDialog } from './TaskBulkAssignDialog';
 import { buildTaskColumns, type TaskRow } from './taskColumns';
-import { useRegisterTaskListRefresh } from './useTaskListRefresh';
+import { RecordListPager } from '@/components/list/RecordListPager';
 import { BulkActionBar } from '@/components/core/BulkActionBar';
 import { ApplyLimitsButton } from '@/components/limits/ApplyLimitsButton';
 import { useListSelection } from '@/hooks/useListSelection';
@@ -30,6 +30,8 @@ import { useDictionary } from '@/hooks/useDictionary';
 
 interface TaskListProps {
   initialTasks: TaskRow[];
+  totalPages: number;
+  currentPage: number;
   permissionKeys: readonly string[];
   initialSort?: ListSortInput;
 }
@@ -45,7 +47,7 @@ function buildTaskRowActions(
   ];
 }
 
-export function TaskList({ initialTasks, permissionKeys, initialSort }: TaskListProps): React.JSX.Element {
+export function TaskList({ initialTasks, totalPages, currentPage, permissionKeys, initialSort }: TaskListProps): React.JSX.Element {
   const router = useAppRouter();
   const pathname = usePathname();
   const locale = pathname.split('/')[1] ?? 'en';
@@ -58,6 +60,7 @@ export function TaskList({ initialTasks, permissionKeys, initialSort }: TaskList
   const dict = useDictionary();
 
   const effective = useMemo(() => new Set(permissionKeys), [permissionKeys]);
+  const canCreateTasks = hasEffectivePermission(effective, ACTION_PERMISSIONS.createTask);
   const canUpdateTasks = hasEffectivePermission(effective, ACTION_PERMISSIONS.updateTask);
   const canDeleteTasks = hasEffectivePermission(effective, ACTION_PERMISSIONS.deleteTask);
   // Why both: the assign route and the service it reuses demand task:update and
@@ -66,10 +69,6 @@ export function TaskList({ initialTasks, permissionKeys, initialSort }: TaskList
 
   const taskIds = useMemo(() => tasks.map((task) => task.id), [tasks]);
   const selection = useListSelection('tasks.list', taskIds);
-  // Why the header reloads through this registration: its create dialog renders in the page
-  // header, outside this component, and only this component knows the current query.
-  const refreshList = useCallback((): void => { router.refresh(); }, [router]);
-  useRegisterTaskListRefresh(refreshList);
 
   const handleEdit = (task: TaskRow): void => {
     if (!canUpdateTasks) return;
@@ -89,6 +88,12 @@ export function TaskList({ initialTasks, permissionKeys, initialSort }: TaskList
     if (result?.success) router.refresh();
   };
 
+  const handleCreate = (): void => {
+    if (!canCreateTasks) return;
+    setSelectedTask(null);
+    setIsModalOpen(true);
+  };
+
   const handleAssigned = (): void => {
     selection.clear();
     router.refresh();
@@ -102,6 +107,12 @@ export function TaskList({ initialTasks, permissionKeys, initialSort }: TaskList
       () => apiClient.post('/api/tasks/batch', { action: 'assign', taskIds: [...selection.selectedIds], contestIds: [] }),
     );
     if (result?.success) handleAssigned();
+  };
+
+  const handlePageChange = (next: number): void => {
+    const url = new URL(window.location.href);
+    url.searchParams.set('page', String(next));
+    router.push(url.toString());
   };
 
   const applySort = (next: ListSortInput): void => {
@@ -125,6 +136,15 @@ export function TaskList({ initialTasks, permissionKeys, initialSort }: TaskList
 
   return (
     <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-xl font-bold text-foreground">All Tasks</h2>
+        {canCreateTasks && (
+          <Button variant="positive" icon={Plus} onClick={handleCreate}>
+            Create Task
+          </Button>
+        )}
+      </div>
+
       {/* Why one bar with two gates: assignment additionally needs task:switch_dataset while
           editing limits needs task:update alone, so each group renders behind its own gate and an
           operator who may not move tasks still reaches the limits entry. */}
@@ -179,6 +199,10 @@ export function TaskList({ initialTasks, permissionKeys, initialSort }: TaskList
         onSortChange={applySort}
         emptyState={<EmptyState icon={FileText} title="No tasks found" />}
       />
+
+      {totalPages > 1 && (
+        <RecordListPager currentPage={currentPage} totalPages={totalPages} onPageChange={handlePageChange} />
+      )}
 
       <TaskModal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setSelectedTask(null); }} task={selectedTask as never} onSuccess={() => { setIsModalOpen(false); router.refresh(); }} permissionKeys={permissionKeys} />
 

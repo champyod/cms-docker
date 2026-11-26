@@ -1,6 +1,5 @@
 'use client';
 
-import { useDictionary } from '@/hooks/useDictionary';
 import { SaveButton } from '@/components/core/SaveButton';
 import type { ContestData } from '@/lib/contests-repo';
 import type { ContestOverviewData } from '@/lib/queries/contest-detail';
@@ -13,7 +12,8 @@ import {
 
 export type ContestOverviewTabProps = { data: ContestOverviewData };
 
-// The overview owns only timing; the full form would clobber fields this reader never loads.
+// Why: the overview owns only timing — sending the full form would clobber
+// settings fields this reader never loads, so the payload is picked narrowly.
 function buildOverviewPayload(form: ContestSettingsFormState): Partial<ContestData> {
   return {
     start: form.start,
@@ -24,7 +24,6 @@ function buildOverviewPayload(form: ContestSettingsFormState): Partial<ContestDa
 }
 
 export function ContestOverviewTab({ data }: ContestOverviewTabProps): React.JSX.Element {
-  const copy = useDictionary().contests.settings;
   const { formData, updateForm, saving, justSaved, timeErrors, handleSave } = useContestSettingsState(
     data.contest.id,
     toOverviewFormState(data.contest),
@@ -33,12 +32,13 @@ export function ContestOverviewTab({ data }: ContestOverviewTabProps): React.JSX
   return (
     <div className="space-y-6">
       <ContestStatusCard
+        contest={data.contest}
         formData={{ start: formData.start, stop: formData.stop, analysis_start: formData.analysis_start, analysis_stop: formData.analysis_stop }}
         onChange={(patch) => updateForm(patch)}
         timeErrors={timeErrors}
       />
       <div className="flex justify-end">
-        <SaveButton saving={saving} justSaved={justSaved} idleLabel={copy.saveChanges} disabled={saving} onClick={() => { void handleSave(); }} />
+        <SaveButton saving={saving} justSaved={justSaved} idleLabel="Save Changes" disabled={saving} onClick={() => { void handleSave(); }} />
       </div>
     </div>
   );

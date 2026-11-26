@@ -6,12 +6,10 @@ import { ROUTE_REGISTRY } from '@/lib/navigation/registry';
 import type { RouteId } from '@/lib/navigation/types';
 import { getTeamSummary } from '@/lib/people-read-models';
 import { parseRecordId, readRecordOrNotFound } from '@/lib/queries/record-access';
-import { DetailPage } from '@/components/patterns/DetailPage';
-import { leaderName } from '@/components/teams/teamColumns';
 import { TeamOverviewTab } from '@/components/teams/TeamOverviewTab';
-import { formatCount } from '@/lib/format-number';
 
-// The page resolves the registry route itself so a disabled or narrowed descriptor 404s before the data is read.
+// Why: the reader enforces the same keys, but the page must resolve the exact
+// registry route first so a disabled or narrowed descriptor 404s before data.
 async function authorizeTeamTab(routeId: RouteId): Promise<ReadonlySet<string>> {
   const route = ROUTE_REGISTRY.find((candidate) => candidate.id === routeId);
   if (!route || !route.enabled) notFound();
@@ -33,21 +31,13 @@ export default async function TeamOverviewPage({ params }: { params: Promise<{ l
   const effective = await authorizeTeamTab('people.team-tabs.overview');
   const dictionary = await getDictionary(locale);
   const summary = await readRecordOrNotFound(() => getTeamSummary(id));
-  const copy = dictionary.teams.overview;
   return (
-    <DetailPage
-      ownsHeader={false}
-      facts={[
-        { term: copy.leader, value: leaderName(summary, dictionary.common.notSet) },
-        { term: copy.members, value: formatCount(summary.participationCount, locale) },
-      ]}
-    >
-      <TeamOverviewTab
-        team={summary}
-        permissionKeys={[...effective]}
-        copy={dictionary.teams}
-        locale={locale as 'en' | 'th'}
-      />
-    </DetailPage>
+    <TeamOverviewTab
+      team={summary}
+      permissionKeys={[...effective]}
+      navigation={dictionary.navigation}
+      copy={dictionary.teams}
+      locale={locale as 'en' | 'th'}
+    />
   );
 }

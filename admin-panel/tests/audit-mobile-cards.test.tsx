@@ -77,12 +77,18 @@ describe('AuditTable mobile cards', () => {
   it('renders entry fields and failure badge in row and card', () => {
     const entry = makeEntry({ id: '41', result: 'failure' });
     const { getAllByText } = render(
-      <AuditTable missing="Not set"
+      <AuditTable
         entries={[entry]}
+        total={1}
+        totalPages={1}
+        currentPage={1}
+        filters={{}}
         dict={DICT}
+        permissionKeys={[]}
       />
     );
-    // One row model renders in both layouts, so each value appears twice.
+    // Why: ResponsiveTable renders one row model in both layouts, so
+    // each value appears twice (desktop row + mobile card).
     expect(getAllByText('task:update').length).toBeGreaterThan(0);
     expect(getAllByText('failure').length).toBeGreaterThan(0);
     expect(getAllByText('Fix limits').length).toBeGreaterThan(0);

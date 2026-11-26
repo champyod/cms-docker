@@ -3,27 +3,27 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MotionGlobalConfig } from 'motion/react';
-import { DictionaryProvider } from '@/components/providers/DictionaryProvider';
-import en from '@/dictionaries/en.json';
 import { ContestCountdownTimezoneMenu } from '@/components/contests/contest-detail/ContestCountdownTimezoneMenu';
 
-// happy-dom rejects on Animation.cancel of an unfinished animation; instant animations avoid the driver.
+// Why: happy-dom rejects on Animation.cancel() when an unfinished animation is torn down, and
+// vitest fails the run on that unhandled rejection; instant animations avoid the driver.
 MotionGlobalConfig.skipAnimations = true;
 
-// globals are disabled, so the automatic cleanup does not run and every render would stay in the document.
+// Why: globals are disabled in vitest.config.ts, so the automatic afterEach cleanup does not
+// run and every render would otherwise stay in the document; see notification-bell-dropdown.test.tsx.
 afterEach(() => cleanup());
 
 const PANEL_SELECTOR = '.countdown-zone-panel';
 
 describe('countdown timezone panel', () => {
   it('stays closed until its control is used', () => {
-    render(<DictionaryProvider dict={en}><ContestCountdownTimezoneMenu value="UTC" onChange={() => undefined} /></DictionaryProvider>);
+    render(<ContestCountdownTimezoneMenu value="UTC" onChange={() => undefined} />);
     expect(document.querySelector(PANEL_SELECTOR)).toBeNull();
   });
 
   it('portals the open panel onto the body, outside the toolbar it belongs to', async () => {
     const user = userEvent.setup();
-    const { container } = render(<DictionaryProvider dict={en}><ContestCountdownTimezoneMenu value="UTC" onChange={() => undefined} /></DictionaryProvider>);
+    const { container } = render(<ContestCountdownTimezoneMenu value="UTC" onChange={() => undefined} />);
 
     await user.click(screen.getByRole('button', { name: 'Select timezone' }));
 
@@ -37,7 +37,7 @@ describe('countdown timezone panel', () => {
   it('lists the zones and reports the one that was picked', async () => {
     const user = userEvent.setup();
     const picked: string[] = [];
-    render(<DictionaryProvider dict={en}><ContestCountdownTimezoneMenu value="UTC" onChange={(zone) => picked.push(zone)} /></DictionaryProvider>);
+    render(<ContestCountdownTimezoneMenu value="UTC" onChange={(zone) => picked.push(zone)} />);
 
     await user.click(screen.getByRole('button', { name: 'Select timezone' }));
     // The list shows the first 200 of the runtime's zones, so the search box is what reaches the rest.

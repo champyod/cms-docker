@@ -55,7 +55,7 @@ export function PasswordKindSelector({
           className={cn(
             'px-2.5 py-1 text-xs font-medium rounded-md transition-all',
             kind === option.value
-              ? 'bg-accent text-foreground shadow-sm'
+              ? 'bg-indigo-500/20 text-indigo-300 shadow-sm shadow-indigo-500/20'
               : 'text-muted-foreground hover:text-foreground'
           )}
         >
@@ -70,7 +70,8 @@ interface SavedPasswordFieldProps {
   reveal: RevealProps;
 }
 
-/** The secret arrives once per mount; the ref keeps a Hide and Reveal pair from re-arming the fetch. */
+/** Why the request is latched in a ref: the secret arrives once per mount, and a
+ * ref keeps a Hide/Reveal pair from re-arming the fetch on every reopen. */
 function useSavedPasswordReveal(reveal: RevealProps) {
   const [isRevealed, setIsRevealed] = useState(false);
   const hasRequestedRef = useRef(false);
@@ -145,8 +146,8 @@ export function PasswordFieldWithKind({
         <PasswordKindSelector kind={kind} onKind={onKind} />
       </div>
       {reveal?.state === 'bcrypt' && (
-        <p className="text-xs text-muted-foreground">
-          Stored as bcrypt: irreversible. Typing replaces it.
+        <p className="text-xs text-amber-400/80">
+          Stored as bcrypt — irreversible. Typing replaces it.
         </p>
       )}
       {reveal?.state === 'plaintext' && <SavedPasswordField reveal={reveal} />}

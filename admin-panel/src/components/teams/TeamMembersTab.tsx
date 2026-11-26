@@ -5,8 +5,8 @@ import Link from 'next/link';
 import { ExternalLink, RotateCcw, Users } from 'lucide-react';
 
 import { BulkActionBar } from '@/components/core/BulkActionBar';
-import { Badge } from '@/components/core/Badge';
 import { Button } from '@/components/core/Button';
+import { Card } from '@/components/core/Card';
 import { EmptyState } from '@/components/core/EmptyState';
 import { Input } from '@/components/core/Input';
 import { SELECTION_CHECKBOX_CLASS } from '@/components/core/SelectionColumn';
@@ -14,34 +14,23 @@ import { TeamBulkActionsDialog } from '@/components/teams/TeamBulkActionsDialog'
 import { TeamRotateAccountsDialog } from '@/components/teams/TeamRotateAccountsDialog';
 import { useAppRouter } from '@/hooks/useAppRouter';
 import type { Dictionary } from '@/lib/dictionary';
-import { useDictionary } from '@/hooks/useDictionary';
 import { interpolate } from '@/lib/interpolate';
 import { buildRoute } from '@/lib/navigation/routes';
 import { ACTION_PERMISSIONS, hasEffectivePermission } from '@/lib/permission-engine';
 import type { TeamMember } from '@/lib/people-read-model-types';
 
-interface ContestOption {
-  readonly id: number;
-  readonly name: string;
-}
-
 export interface TeamMembersTabProps {
   readonly teamId: number;
   readonly members: readonly TeamMember[];
   readonly permissionKeys: readonly string[];
-  readonly contests: readonly ContestOption[];
+  readonly contests: readonly { id: number; name: string }[];
+  readonly navigation: Dictionary['navigation'];
   readonly copy: Dictionary['teams'];
   readonly locale: 'en' | 'th';
 }
 
-export interface TeamMembersEmptyProps {
-  readonly teamId: number;
-  readonly permissionKeys: readonly string[];
-  readonly contests: readonly ContestOption[];
-  readonly copy: Dictionary['teams'];
-}
-
-// An unreadable user id is never inferred; the link is omitted rather than wrong.
+// Why: an unreadable user id is never inferred, so the record link is omitted
+// instead of pointing at a row the reader may not open.
 function memberProfileHref(locale: 'en' | 'th', member: TeamMember): string | null {
   if (member.userId === null) return null;
   return buildRoute(locale, 'people.user-tabs.profile', { id: member.userId });
@@ -60,8 +49,6 @@ function MemberRow({ member, locale, copy, selected, onToggle }: {
   readonly selected: boolean;
   readonly onToggle: (userId: number, checked: boolean) => void;
 }): React.JSX.Element {
-  // common.notSet: a member whose name or contest the record does not hold.
-  const missing = useDictionary().common.notSet;
   const href = memberProfileHref(locale, member);
   return (
     <div className="p-4 flex flex-wrap items-center justify-between gap-3">
@@ -75,19 +62,19 @@ function MemberRow({ member, locale, copy, selected, onToggle }: {
             aria-label={`${copy.members.selectRow} ${member.username ?? ''}`}
           />
         )}
-        <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-xs font-bold text-muted-foreground">
-          {(member.username ?? missing).substring(0, 2).toUpperCase()}
+        <div className="w-8 h-8 rounded-full bg-primary/15 flex items-center justify-center text-xs font-bold text-primary">
+          {(member.username ?? '—').substring(0, 2).toUpperCase()}
         </div>
         <div>
-          <div className="font-medium">{member.username ?? missing}</div>
-          <div className="text-xs text-muted-foreground">{`${member.firstName ?? ''} ${member.lastName ?? ''}`.trim() || missing}</div>
+          <div className="font-medium">{member.username ?? '—'}</div>
+          <div className="text-xs text-muted-foreground">{`${member.firstName ?? ''} ${member.lastName ?? ''}`.trim() || '—'}</div>
         </div>
       </div>
       <div className="flex items-center gap-2">
         {member.contests.slice(0, 3).map((contest, index) => (
-          <Badge key={`${contest.id ?? contest.name ?? 'contest'}-${index}`} variant="neutral" className="normal-case tracking-normal font-medium">
-            {contest.name ?? missing}
-          </Badge>
+          <span key={`${contest.id ?? contest.name ?? 'contest'}-${index}`} className="text-xs px-2 py-0.5 bg-primary/10 text-primary rounded-full">
+            {contest.name ?? '—'}
+          </span>
         ))}
         {member.contests.length > 3 && (
           <span className="text-xs text-muted-foreground">
@@ -95,7 +82,7 @@ function MemberRow({ member, locale, copy, selected, onToggle }: {
           </span>
         )}
         {href && (
-          <Link href={href} className="inline-flex size-11 shrink-0 items-center justify-center text-muted-foreground hover:text-foreground transition-colors" aria-label={member.username ?? undefined}>
+          <Link href={href} className="inline-flex size-11 shrink-0 items-center justify-center text-muted-foreground hover:text-primary transition-colors" aria-label={member.username ?? undefined}>
             <ExternalLink className="w-4 h-4" />
           </Link>
         )}
@@ -104,64 +91,26 @@ function MemberRow({ member, locale, copy, selected, onToggle }: {
   );
 }
 
-/** The empty roster carries the same dialog as the header: adding accounts is how it stops being empty. */
-function useBulkAffordance(permissionKeys: readonly string[]): {
-  readonly canUpdateTeam: boolean;
-  readonly canUpdateParticipation: boolean;
-  readonly canBulk: boolean;
-  readonly canRotate: boolean;
-} {
+/**
+ * A team's members, with the filter and the selection that drive the day-2 rotation.
+ *
+ * WHY the filter drives the list and the header cell selects what the filter matches: assigning a
+ * team to a term's worth of accounts was one row at a time, and the day-two rotation was the same
+ * work again. The select-all box walks the filtered set, so it never reaches a member the
+ * operator's filter hid, and the toolbar states how many accounts the action will touch before it
+ * runs.
+ *
+ * WHY this surface owns its own selection state: the ids here are users, the rows carry contests
+ * and the action is scoped to this team, so the selection is this page's own — only the write
+ * behind the toolbar is shared (`lib/panel-actions/contest-accounts`).
+ */
+export function TeamMembersTab({ teamId, members, permissionKeys, contests, navigation, copy, locale }: TeamMembersTabProps): React.JSX.Element {
+  const router = useAppRouter();
   const effective = useMemo(() => new Set(permissionKeys), [permissionKeys]);
   const canUpdateTeam = hasEffectivePermission(effective, ACTION_PERMISSIONS.updateTeam);
   const canUpdateParticipation = hasEffectivePermission(effective, ACTION_PERMISSIONS.updateParticipation);
-  return {
-    canUpdateTeam,
-    canUpdateParticipation,
-    canBulk: canUpdateTeam || canUpdateParticipation,
-    canRotate: hasEffectivePermission(effective, 'username:set'),
-  };
-}
-
-/** The list layout renders the empty slot, and the dialog must live with it or an empty roster has no way out. */
-export function TeamMembersEmpty({ teamId, permissionKeys, contests, copy }: TeamMembersEmptyProps): React.JSX.Element {
-  const router = useAppRouter();
-  const { canUpdateTeam, canUpdateParticipation, canBulk } = useBulkAffordance(permissionKeys);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  return (
-    <>
-      <EmptyState
-        icon={Users}
-        title={copy.members.emptyTitle}
-        description={copy.members.emptyDescription}
-      />
-      {canBulk && (
-        <div className="mt-4 flex justify-end">
-          <Button type="button" variant="secondary" onClick={() => setDialogOpen(true)}>
-            {copy.bulkActions.button}
-          </Button>
-        </div>
-      )}
-      {canBulk && (
-        <TeamBulkActionsDialog
-          isOpen={dialogOpen}
-          onClose={() => setDialogOpen(false)}
-          onSuccess={() => { router.refresh(); }}
-          teamId={teamId}
-          selectedUserIds={[]}
-          contests={contests}
-          canUpdateTeam={canUpdateTeam}
-          canUpdateParticipation={canUpdateParticipation}
-          copy={copy}
-        />
-      )}
-    </>
-  );
-}
-
-/** The select-all walks the filtered set, and the selection is this page's own: only the write is shared. */
-export function TeamMembersTab({ teamId, members, permissionKeys, contests, copy, locale }: TeamMembersTabProps): React.JSX.Element {
-  const router = useAppRouter();
-  const { canUpdateTeam, canUpdateParticipation, canBulk, canRotate } = useBulkAffordance(permissionKeys);
+  const canBulk = canUpdateTeam || canUpdateParticipation;
+  const canRotate = hasEffectivePermission(effective, 'username:set');
 
   const [selected, setSelected] = useState<ReadonlySet<number>>(new Set());
   const [term, setTerm] = useState('');
@@ -197,9 +146,18 @@ export function TeamMembersTab({ teamId, members, permissionKeys, contests, copy
     });
   };
 
+  const bulkButton = canBulk ? (
+    <Button type="button" variant="secondary" onClick={() => setDialogOpen(true)}>
+      {copy.bulkActions.button}
+    </Button>
+  ) : null;
+
   const header = (
     <div className="flex flex-wrap items-end justify-between gap-3 p-4">
       <div className="flex flex-wrap items-end gap-3">
+        <span className="pb-2 font-bold">
+          {`${navigation.people['team-tabs'].members.label} (${members.length})`}
+        </span>
         <label className="flex items-center gap-2 pb-2 text-sm text-foreground">
           <input
             type="checkbox"
@@ -219,11 +177,7 @@ export function TeamMembersTab({ teamId, members, permissionKeys, contests, copy
           onChange={(event) => setTerm(event.target.value)}
         />
       </div>
-      {canBulk && (
-        <Button type="button" variant="secondary" onClick={() => setDialogOpen(true)}>
-          {copy.bulkActions.button}
-        </Button>
-      )}
+      {bulkButton}
     </div>
   );
 
@@ -268,13 +222,28 @@ export function TeamMembersTab({ teamId, members, permissionKeys, contests, copy
     </div>
   ) : null;
 
+  if (members.length === 0) {
+    return (
+      <>
+        <EmptyState
+          icon={Users}
+          title={copy.members.emptyTitle}
+          description={copy.members.emptyDescription}
+        />
+        {bulkButton && <div className="mt-4 flex justify-end">{bulkButton}</div>}
+        {dialog}
+      </>
+    );
+  }
+
   return (
-    <>
+    <Card className="overflow-hidden">
       {header}
       {toolbar}
       <div className="divide-y divide-border">
         {filtered.map((member, index) => (
-          // An unreadable user id leaves only the row position to distinguish two members.
+          // Why: an unreadable user id leaves only the row position to
+          // distinguish two members, so it joins the readable key.
           <MemberRow
             key={`${member.userId ?? member.username ?? 'member'}-${index}`}
             member={member}
@@ -284,14 +253,10 @@ export function TeamMembersTab({ teamId, members, permissionKeys, contests, copy
             onToggle={toggleOne}
           />
         ))}
-        {filtered.length === 0 && (
-          <div className="p-4">
-            <EmptyState icon={Users} title={copy.members.emptyTitle} description={copy.members.emptyDescription} />
-          </div>
-        )}
+        {filtered.length === 0 && <EmptyState icon={Users} title={copy.members.emptyTitle} description={copy.members.emptyDescription} />}
       </div>
       {dialog}
       {rotateDialog}
-    </>
+    </Card>
   );
 }

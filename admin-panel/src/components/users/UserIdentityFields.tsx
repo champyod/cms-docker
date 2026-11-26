@@ -1,7 +1,7 @@
 'use client';
 
-import { Input } from '@/components/core/Input';
 import { RestrictedField } from '@/components/core/RestrictedField';
+import { cn } from '@/lib/utils';
 import type { FieldAccessTable } from '@/lib/field-permissions';
 import type { UserFormState } from './userFormState';
 
@@ -9,12 +9,14 @@ interface UserIdentityFieldsProps {
   formData: UserFormState;
   updateForm: (updates: Partial<UserFormState>) => void;
   fieldAccess: FieldAccessTable<'users'>;
+  inputClassName: string;
 }
 
 export function UserIdentityFields({
   formData,
   updateForm,
   fieldAccess,
+  inputClassName,
 }: UserIdentityFieldsProps): React.JSX.Element {
   return (
     <>
@@ -23,14 +25,14 @@ export function UserIdentityFields({
           canRead={fieldAccess.first_name.canRead}
           canUpdate={fieldAccess.first_name.canUpdate}
           label="First Name"
-          lockHint="Read-only: you lack user:update"
+          lockHint="Read-only — you lack user:update"
         >
-          <Input
+          <input
             required
             type="text"
-            aria-label="First Name"
             value={formData.first_name}
-            onChange={(event) => updateForm({ first_name: event.target.value })}
+            onChange={(e) => updateForm({ first_name: e.target.value })}
+            className={cn(inputClassName, 'font-sans')}
             placeholder="John"
           />
         </RestrictedField>
@@ -38,14 +40,14 @@ export function UserIdentityFields({
           canRead={fieldAccess.last_name.canRead}
           canUpdate={fieldAccess.last_name.canUpdate}
           label="Last Name"
-          lockHint="Read-only: you lack user:update"
+          lockHint="Read-only — you lack user:update"
         >
-          <Input
+          <input
             required
             type="text"
-            aria-label="Last Name"
             value={formData.last_name}
-            onChange={(event) => updateForm({ last_name: event.target.value })}
+            onChange={(e) => updateForm({ last_name: e.target.value })}
+            className={cn(inputClassName, 'font-sans')}
             placeholder="Doe"
           />
         </RestrictedField>
@@ -54,15 +56,14 @@ export function UserIdentityFields({
         canRead={fieldAccess.username.canRead}
         canUpdate={fieldAccess.username.canUpdate}
         label="Username"
-        lockHint="Read-only: you lack user:update"
+        lockHint="Read-only — you lack user:update"
       >
-        <Input
+        <input
           required
           type="text"
-          aria-label="Username"
           value={formData.username}
-          onChange={(event) => updateForm({ username: event.target.value })}
-          className="font-mono"
+          onChange={(e) => updateForm({ username: e.target.value })}
+          className={cn(inputClassName, 'font-mono')}
           placeholder="johndoe"
         />
       </RestrictedField>
@@ -71,13 +72,13 @@ export function UserIdentityFields({
         canRead={fieldAccess.email.canRead}
         canUpdate={fieldAccess.email.canUpdate}
         label="Email (Optional)"
-        lockHint="Read-only: you lack user:update"
+        lockHint="Read-only — you lack user:update"
       >
-        <Input
+        <input
           type="email"
-          aria-label="Email (Optional)"
           value={formData.email}
-          onChange={(event) => updateForm({ email: event.target.value })}
+          onChange={(e) => updateForm({ email: e.target.value })}
+          className={cn(inputClassName, 'font-sans')}
           placeholder="john@example.com"
         />
       </RestrictedField>

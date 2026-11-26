@@ -60,7 +60,10 @@ async function updateConfigToml(ext: ImageExtension | null): Promise<void> {
   await fs.writeFile(tomlPath, setLogoPath(content, ext), 'utf-8');
 }
 
-/** The service reads the volume directory, so losing the config.toml pointer must not fail the upload. */
+/**
+ * The service reads the volume directory, so an upload still serves on a
+ * deployment without a config.toml. Losing the pointer must not fail the upload.
+ */
 async function pointConfigAtLogo(ext: ImageExtension | null): Promise<void> {
   try {
     await updateConfigToml(ext);
@@ -120,7 +123,7 @@ async function readLogoUpload(formData: FormData): Promise<UploadedLogo | NextRe
 
   const ext = logoExtension(file.name || LOGO_FILENAME_STEM);
   if (ext === null) {
-    return apiError({ status: 400, message: 'Unsupported format. Allowed: png, jpg, jpeg, gif, bmp' });
+    return apiError({ status: 400, message: 'Unsupported format — allowed: png, jpg, jpeg, gif, bmp' });
   }
   return { buffer: Buffer.from(await file.arrayBuffer()), ext };
 }

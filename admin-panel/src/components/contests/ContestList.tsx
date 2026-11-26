@@ -9,9 +9,9 @@ import { EmptyState } from '@/components/core/EmptyState';
 import { ResponsiveTable } from '@/components/core/ResponsiveTable';
 import { ContestModal } from './ContestModal';
 import { DeployConfirmModal } from './DeployConfirmModal';
+import { ContestListHeader } from './contest-list/ContestListHeader';
 import { ContestRowActions, buildContestColumns, getContestRowClassName, getContestRowProps, type ContestRowData } from './contest-list/ContestTableRows';
 import { ContestBulkEditDialog } from './contest-list/ContestBulkEditDialog';
-import { useRegisterContestListRefresh } from './contest-list/useContestListRefresh';
 import { useContestListActions } from './contest-list/useContestListActions';
 import { Button } from '@/components/core/Button';
 import { BulkActionBar } from '@/components/core/BulkActionBar';
@@ -28,6 +28,7 @@ import type { ListSortInput } from '@/lib/list-sorting';
 
 interface ContestListProps {
   initialContests: ContestRowData[];
+  totalPages: number;
   permissionKeys: readonly string[];
   initialSort?: ListSortInput;
 }
@@ -49,7 +50,8 @@ function resolveContestPermissions(permissionKeys: readonly string[]): ContestPe
   };
 }
 
-export function ContestList({ initialContests, permissionKeys, initialSort }: ContestListProps): React.JSX.Element {
+export function ContestList({ initialContests, totalPages, permissionKeys, initialSort }: ContestListProps): React.JSX.Element {
+  void totalPages;
   const [contests] = useSyncedState(initialContests);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditWindowOpen, setIsEditWindowOpen] = useState(false);
@@ -63,10 +65,8 @@ export function ContestList({ initialContests, permissionKeys, initialSort }: Co
 
   const contestIds = useMemo(() => contests.map((contest) => contest.id), [contests]);
   const selection = useListSelection('contests.list', contestIds);
-  // The create dialog renders in the page header, and only this component knows the current query.
-  const refreshList = useCallback((): void => { router.refresh(); }, [router]);
-  useRegisterContestListRefresh(refreshList);
 
+  const handleCreate = () => { if (!permissions.canCreate) return; setSelectedContest(null); setIsModalOpen(true); };
   const handleEdit = useCallback(async (id: number) => {
     if (!permissions.canUpdate) return;
     const result = await apiClient.get<{ contest: ExistingContest }>(`/api/contests/${id}`);
@@ -84,7 +84,8 @@ export function ContestList({ initialContests, permissionKeys, initialSort }: Co
     router.push(buildRoute(locale, 'contests.record', { id }));
   }, [router, locale]);
 
-  // One column definition drives the desktop rows and the mobile cards, so the two layouts cannot drift.
+  // Why: one column definition drives desktop rows and mobile cards, so
+  // the two layouts cannot drift apart.
   const columns = useMemo(
     () => [
       buildSelectionColumn<ContestRowData>({
@@ -121,6 +122,7 @@ export function ContestList({ initialContests, permissionKeys, initialSort }: Co
 
   return (
     <div className="space-y-6">
+      <ContestListHeader locale={locale} canManage={permissions.canCreate} onCreate={handleCreate} />
       {permissions.canUpdate && (
         <BulkActionBar selectedCount={selection.selectedCount} countLabel={dict.states.selection.count} clearLabel={dict.states.selection.clear} onClear={selection.clear}>
           <Button variant="secondary" onClick={() => setIsEditWindowOpen(true)}>Edit window</Button>
@@ -147,7 +149,7 @@ export function ContestList({ initialContests, permissionKeys, initialSort }: Co
         sort={initialSort}
         onSortChange={applySort}
         emptyState={
-          <EmptyState icon={Trophy} title={dict.contests.list.emptyTitle} description={dict.contests.list.emptyDescription} />
+          <EmptyState icon={Trophy} title="No contests found" description="Create your first contest to get started." />
         }
       />
       <ContestModal isOpen={isModalOpen} onClose={handleClose} contest={selectedContest} onSuccess={handleSuccess} permissionKeys={permissionKeys} />

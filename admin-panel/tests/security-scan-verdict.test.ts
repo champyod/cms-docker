@@ -8,7 +8,11 @@ import {
   type ScanRunFacts,
 } from '@/lib/security/scan-report';
 
-/** Each verdict tier is pinned so a calm reading is never printed over standing work. */
+/**
+ * Why these exist: an unwaived HIGH is unfixed and unwaived, and the first version of the
+ * announcement called that "nothing needs you" in green. The verdict has three tiers, and each
+ * one is pinned here so the calm reading can never again be printed over standing work.
+ */
 function facts(over: Partial<ScanRunFacts> & { high?: number; highWithFix?: number } = {}): ScanRunFacts {
   const high = over.high ?? 0;
   const highWithFix = over.highWithFix ?? 0;
@@ -31,30 +35,31 @@ function facts(over: Partial<ScanRunFacts> & { high?: number; highWithFix?: numb
 describe('the announcement changes tier with what is actually unwaived', () => {
   it('names standing unwaived HIGH amber, never "nothing needs you"', () => {
     const message = buildScanAnnouncement(facts({ high: 1415, highWithFix: 12 }));
-    expect(message.title).toBe('1,415 HIGH findings need a decision, box-a');
+    expect(message.title).toBe('1,415 HIGH findings need a decision · box-a');
     expect(message.color).toBe(SCAN_WARN_COLOR);
     expect(message.mention).toBe(false);
-    expect(message.body.split('\n')[0]).toContain('12 can be patched: patch or accept');
+    expect(message.body.split('\n')[0]).toContain('12 can be patched — patch or accept');
     expect(message.body).not.toContain('all MEDIUM/LOW or accepted');
   });
 
   it('says there is nothing to apply when no fixed version exists', () => {
-    // The real feed's unwaived HIGH mostly carry no available version, so patch-or-accept is unactionable.
+    // Production on 2026-11-13: 1,415 unwaived HIGH and not one carrying an `available` version —
+    // 1,105 of them the same 221 kernel CVEs. "Patch or accept" was advice nobody could act on.
     const message = buildScanAnnouncement(facts({ high: 1415, highWithFix: 0 }));
-    expect(message.title).toBe('1,415 HIGH findings await an upstream fix, box-a');
+    expect(message.title).toBe('1,415 HIGH findings await an upstream fix · box-a');
     expect(message.color).toBe(SCAN_WARN_COLOR);
-    expect(message.body.split('\n')[0]).toContain('no patch exists yet: nothing to apply today');
+    expect(message.body.split('\n')[0]).toContain('no patch exists yet — nothing to apply today');
   });
 
   it('keeps the singular readable', () => {
     const message = buildScanAnnouncement(facts({ high: 1, highWithFix: 1 }));
-    expect(message.title).toBe('1 HIGH finding needs a decision, box-a');
-    expect(message.body.split('\n')[0]).toContain('1 can be patched: patch or accept');
+    expect(message.title).toBe('1 HIGH findings need a decision · box-a');
+    expect(message.body.split('\n')[0]).toContain('1 can be patched — patch or accept');
   });
 
   it('reds and pings when an unwaived CRITICAL outranks the HIGH list', () => {
     const message = buildScanAnnouncement(facts({ high: 900, criticals: 3 }));
-    expect(message.title).toBe('3 CRITICAL findings awaiting action, box-a');
+    expect(message.title).toBe('3 CRITICAL findings need action now · box-a');
     expect(message.color).toBe(SCAN_ALERT_COLOR);
     expect(message.mention).toBe(true);
     expect(message.body.split('\n')[0]).toContain('fix these today');
@@ -62,7 +67,7 @@ describe('the announcement changes tier with what is actually unwaived', () => {
 
   it('earns the calm green line only below HIGH', () => {
     const message = buildScanAnnouncement(facts({ high: 0 }));
-    expect(message.title).toBe('Nothing needs action, box-a');
+    expect(message.title).toBe('Nothing needs action · box-a');
     expect(message.color).toBe(SCAN_REPORT_COLOR);
     expect(message.body.split('\n')[0]).toContain('all MEDIUM/LOW or accepted');
   });
