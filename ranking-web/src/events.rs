@@ -10,6 +10,7 @@ use tokio::sync::{broadcast, mpsc};
 use tokio_stream::wrappers::ReceiverStream;
 
 use crate::feed::{self, RankingEvent};
+use crate::http::identity_of;
 use crate::AppState;
 
 /// Python pings after a quiet period, so the first tick is a full interval away
@@ -35,14 +36,30 @@ pub async fn events(
     }
     let feed = state.feed().clone();
     let receiver = feed.subscribe();
+    let identity = match identity_of(&state).await {
+        Ok(identity) => identity,
+        Err(refusal) => return refusal.response(),
+    };
     let replay = match feed.since(last_event_id(&headers, &query).as_deref()) {
         Some(events) => events
             .into_iter()
-            .map(|event| Bytes::from(event.frame()))
+            .map(|event| Bytes::from(masked_frame(&event, identity)))
             .collect(),
         None => vec![Bytes::from_static(feed::REINIT)],
     };
-    stream_response(replay, receiver)
+    stream_response(replay, receiver, identity)
+}
+
+fn masked_frame(event: &RankingEvent, identity: crate::identity::Identity) -> String {
+    if !identity.masked() {
+        return event.frame();
+    }
+    RankingEvent {
+        id: event.id.clone(),
+        name: event.name.clone(),
+        data: identity.event_data(&event.name, &event.data),
+    }
+    .frame()
 }
 
 /// The SSE spec puts the reconnect cursor in a header; the page's polyfill puts it
@@ -100,9 +117,13 @@ fn media_specificity(media: &str) -> Option<u8> {
     }
 }
 
-fn stream_response(replay: Vec<Bytes>, receiver: broadcast::Receiver<RankingEvent>) -> Response {
+fn stream_response(
+    replay: Vec<Bytes>,
+    receiver: broadcast::Receiver<RankingEvent>,
+    identity: crate::identity::Identity,
+) -> Response {
     let (sender, out) = mpsc::channel::<Result<Bytes, Infallible>>(CHANNEL);
-    tokio::spawn(pump(replay, receiver, sender));
+    tokio::spawn(pump(replay, receiver, sender, identity));
     let body = Body::from_stream(ReceiverStream::new(out));
     Response::builder()
         .status(StatusCode::OK)
@@ -116,6 +137,7 @@ async fn pump(
     replay: Vec<Bytes>,
     mut receiver: broadcast::Receiver<RankingEvent>,
     sender: mpsc::Sender<Result<Bytes, Infallible>>,
+    identity: crate::identity::Identity,
 ) {
     if send(&sender, Bytes::from_static(feed::COMMENT))
         .await
@@ -136,7 +158,10 @@ async fn pump(
             _ = &mut deadline => return,
             event = receiver.recv() => match event {
                 Ok(event) => {
-                    if send(&sender, Bytes::from(event.frame())).await.is_err() {
+                    if send(&sender, Bytes::from(masked_frame(&event, identity)))
+                        .await
+                        .is_err()
+                    {
                         return;
                     }
                 }

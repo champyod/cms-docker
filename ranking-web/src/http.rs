@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use axum::extract::State;
 use axum::http::{header, StatusCode};
 use axum::response::{IntoResponse, Json, Response};
@@ -7,6 +9,7 @@ use serde::Serialize;
 use tower_http::services::ServeDir;
 
 use crate::board;
+use crate::identity::Identity;
 use crate::json::{json_response, stamped_json};
 use crate::public_config::public_config;
 use crate::store::{
@@ -145,8 +148,20 @@ async fn root(State(state): State<AppState>) -> Response {
 async fn scores(State(state): State<AppState>) -> Response {
     // A refusal, never a partial or empty board: a page that renders an empty
     // scoreboard during a contest is worse than one that renders an error.
+    let identity = match identity_of(&state).await {
+        Ok(identity) => identity,
+        Err(refusal) => return refusal.response(),
+    };
     match state.standings().await {
-        Ok(standings) => stamped_json(standings.ledger.scores()),
+        Ok(standings) => {
+            let scored: BTreeMap<String, BTreeMap<String, f64>> = standings
+                .ledger
+                .scores()
+                .iter()
+                .map(|(user, tasks)| (identity.public_key(user), tasks.clone()))
+                .collect();
+            stamped_json(&scored)
+        }
         Err(error) => refuse(&error.to_string()),
     }
 }
@@ -155,11 +170,26 @@ async fn scores(State(state): State<AppState>) -> Response {
 /// by the server, so a rename, a hide, a guest, a score or a pin reaches the reader
 /// without the client recomputing anything.
 async fn board(State(state): State<AppState>) -> Response {
+    let identity = match identity_of(&state).await {
+        Ok(identity) => identity,
+        Err(refusal) => return refusal.response(),
+    };
     match state.standings().await {
-        Ok(standings) => stamped_json(&board::board_view(
-            standings.ledger.board(),
-            &standings.users,
-        )),
+        Ok(standings) => {
+            let view: BTreeMap<String, board::BoardEntry> =
+                board::board_view(standings.ledger.board(), &standings.users)
+                    .into_iter()
+                    .map(|(key, mut entry)| {
+                        if identity.masked() {
+                            let (first, last) = identity.name("", "");
+                            entry.f_name = first;
+                            entry.l_name = last;
+                        }
+                        (identity.public_key(&key), entry)
+                    })
+                    .collect();
+            stamped_json(&view)
+        }
         Err(error) => refuse(&error.to_string()),
     }
 }
@@ -167,20 +197,51 @@ async fn board(State(state): State<AppState>) -> Response {
 /// The team board: each team's visible members summed, with the team-level overrides
 /// applied to the aggregate rather than to each member.
 async fn board_teams(State(state): State<AppState>) -> Response {
+    let identity = match identity_of(&state).await {
+        Ok(identity) => identity,
+        Err(refusal) => return refusal.response(),
+    };
     match state.standings().await {
-        Ok(standings) => stamped_json(&board::team_board_view(
-            standings.ledger.board(),
-            &standings.users,
-            &standings.team_names,
-            &standings.overrides,
-        )),
+        Ok(standings) => {
+            let view = board::team_board_view(
+                standings.ledger.board(),
+                &standings.users,
+                &standings.team_names,
+                &standings.overrides,
+            )
+            .into_iter()
+            .map(|(team, mut entry)| {
+                entry.members = entry
+                    .members
+                    .iter()
+                    .map(|member| identity.public_key(member))
+                    .collect();
+                (team, entry)
+            })
+            .collect::<BTreeMap<_, _>>();
+            stamped_json(&view)
+        }
         Err(error) => refuse(&error.to_string()),
     }
 }
 
 async fn history(State(state): State<AppState>) -> Response {
+    let identity = match identity_of(&state).await {
+        Ok(identity) => identity,
+        Err(refusal) => return refusal.response(),
+    };
     match state.standings().await {
-        Ok(standings) => json_response(&standings.ledger.history().to_vec()),
+        Ok(standings) => {
+            let rows: Vec<(String, String, i64, f64)> = standings
+                .ledger
+                .history()
+                .iter()
+                .map(|(user, task, time, delta)| {
+                    (identity.public_key(user), task.clone(), *time, *delta)
+                })
+                .collect();
+            json_response(&rows)
+        }
         Err(error) => refuse(&error.to_string()),
     }
 }
@@ -193,8 +254,27 @@ async fn overrides(State(state): State<AppState>) -> Response {
         Ok(shown) => shown,
         Err(refusal) => return refusal.response(),
     };
+    let identity = match identity_of(&state).await {
+        Ok(identity) => identity,
+        Err(refusal) => return refusal.response(),
+    };
     match crate::overrides::load_overrides(db.pool(), shown.contest_ids()).await {
-        Ok(rows) => json_response(&rows),
+        Ok(rows) => {
+            let rows: Vec<_> = rows
+                .into_iter()
+                .map(|mut row| {
+                    if row.target_kind == "user" {
+                        row.target_key = identity.public_key(&row.target_key);
+                        if matches!(row.action.as_str(), "rename" | "guest") && row.value.is_some()
+                        {
+                            row.value = Some("—".to_string());
+                        }
+                    }
+                    row
+                })
+                .collect();
+            json_response(&rows)
+        }
         Err(error) => refuse(&error.to_string()),
     }
 }
@@ -251,6 +331,22 @@ async fn appearance_of(state: &AppState) -> Result<Option<Appearance>, Refusal> 
     load_appearance(db.pool())
         .await
         .map_err(|error| Refusal(error.to_string()))
+}
+
+/// The identity rule every public response obeys. The panel's anonymous flag is
+/// the only input; a missing appearance row is not anonymous.
+pub(crate) async fn identity_of(state: &AppState) -> Result<Identity, Refusal> {
+    // A service with no database cannot have an appearance row; the face route is
+    // the one public read that can still answer, and it has no policy to apply.
+    let Some(db) = state.db() else {
+        return Ok(Identity::new(false));
+    };
+    let appearance = load_appearance(db.pool())
+        .await
+        .map_err(|error| Refusal(error.to_string()))?;
+    Ok(Identity::new(
+        appearance.as_ref().is_some_and(Appearance::anonymous),
+    ))
 }
 
 /// What the board is told to show, or the refusal the caller must return.

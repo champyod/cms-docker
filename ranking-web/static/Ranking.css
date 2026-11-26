@@ -1315,6 +1315,11 @@ abbr {
     white-space: nowrap;
 }
 
+/* A server-masked board shows this label instead of a checkbox. */
+#Views_anon.anon-locked {
+    opacity: 0.65;
+}
+
 .persp-view {
     display: none;
     margin: 12px 0;

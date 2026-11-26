@@ -9,6 +9,7 @@ pub mod entity_routes;
 pub mod events;
 pub mod feed;
 pub mod http;
+pub mod identity;
 pub mod json;
 pub mod login;
 pub mod overrides;
