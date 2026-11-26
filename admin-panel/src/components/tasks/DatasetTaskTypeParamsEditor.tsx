@@ -118,8 +118,7 @@ interface FieldListProps {
 
 function FieldList({ taskType, fields, pastedNotice, onFieldChange }: FieldListProps): React.JSX.Element {
   const defs = getTaskTypeFieldDefs(taskType);
-  // Why the lint message: an empty definition list means the type is not one
-  // the lib knows, and that message is the one the form shows beside it.
+  // Why the lint message: an empty definition list means the lib does not know the type, and that is the message the form shows beside it.
   if (defs.length === 0) return <p className="text-xs text-destructive">{lintTaskTypeFields(fields, taskType)}</p>;
   return (
     <>
