@@ -10,6 +10,8 @@ use cms_ranking::scoring::{
 fn assemble(overrides: &Overrides) -> Ledger {
     let tasks = vec![TaskMode {
         key: "t0".to_string(),
+        contest_id: 1,
+        contest: "c1".to_string(),
         mode: ScoreMode::Max,
     }];
     let submissions = vec![
@@ -62,7 +64,152 @@ fn override_row(kind: &str, key: &str, action: &str, value: Option<&str>) -> Ove
         target_key: key.to_string(),
         action: action.to_string(),
         payload: value.map(|value| serde_json::json!({ "value": value })),
+        contest_id: 1,
     }
+}
+
+fn override_row_in(
+    contest_id: i32,
+    kind: &str,
+    key: &str,
+    action: &str,
+    value: Option<&str>,
+) -> OverrideRow {
+    let mut row = override_row(kind, key, action, value);
+    row.contest_id = contest_id;
+    row
+}
+
+/// Two contests share one service: the same user's rows are separate, and an override
+/// filed under one contest cannot hide or rename the other contest's row.
+fn assemble_two_contests(overrides: &Overrides) -> Ledger {
+    let tasks = vec![
+        TaskMode {
+            key: "t0".to_string(),
+            contest_id: 1,
+            contest: "c1".to_string(),
+            mode: ScoreMode::Max,
+        },
+        TaskMode {
+            key: "t1".to_string(),
+            contest_id: 2,
+            contest: "c2".to_string(),
+            mode: ScoreMode::Max,
+        },
+    ];
+    let submissions = vec![
+        Submission {
+            key: "s0".to_string(),
+            user: "u0".to_string(),
+            task: "t0".to_string(),
+            time: 1,
+        },
+        Submission {
+            key: "s1".to_string(),
+            user: "u0".to_string(),
+            task: "t1".to_string(),
+            time: 1,
+        },
+    ];
+    let subchanges = vec![
+        Subchange {
+            key: "c0".to_string(),
+            submission: "s0".to_string(),
+            time: 2,
+            score: Some(10.0),
+            token: None,
+            extra: None,
+        },
+        Subchange {
+            key: "c1".to_string(),
+            submission: "s1".to_string(),
+            time: 3,
+            score: Some(20.0),
+            token: None,
+            extra: None,
+        },
+    ];
+    assemble_with(
+        &tasks,
+        &submissions,
+        &subchanges,
+        overrides,
+        &BTreeMap::new(),
+        &TaskSnapshot::default(),
+    )
+    .expect("max is a known score mode")
+}
+
+#[test]
+fn a_hide_in_one_contest_does_not_hide_the_same_user_in_another() {
+    let overrides = Overrides::fold(&[
+        override_row_in(1, "user", "u0", "hide", None),
+        override_row_in(2, "user", "u0", "rename", Some("Second Contest")),
+    ]);
+    let ledger = assemble_two_contests(&overrides);
+    assert_eq!(ledger.board().len(), 1, "only the C1 row is hidden");
+    let row = board_row(&ledger, "u0");
+    assert_eq!(row.contest, "c2");
+    assert_eq!(row.score, 20.0);
+    assert_eq!(row.name.as_deref(), Some("Second Contest"));
+}
+
+#[test]
+fn two_contest_renames_keep_two_rows_and_two_names() {
+    let overrides = Overrides::fold(&[
+        override_row_in(1, "user", "u0", "rename", Some("First Contest")),
+        override_row_in(2, "user", "u0", "rename", Some("Second Contest")),
+    ]);
+    let ledger = assemble_two_contests(&overrides);
+    assert_eq!(ledger.board().len(), 2);
+    let users = BTreeMap::from([(
+        "u0".to_string(),
+        UserNames {
+            f_name: "Real".to_string(),
+            l_name: "Name".to_string(),
+            team: None,
+        },
+    )]);
+    let view = board_view(ledger.board(), &users);
+    assert_eq!(view.len(), 2, "each contest row has its own map key");
+    let names: Vec<&str> = view.values().map(|entry| entry.f_name.as_str()).collect();
+    assert!(names.contains(&"First") && names.contains(&"Second"));
+}
+
+#[test]
+fn a_freeze_in_one_contest_does_not_hold_the_other() {
+    let overrides = Overrides::fold(&[override_row_in(1, "user", "u0", "freeze", Some("1"))]);
+    let ledger = assemble_two_contests(&overrides);
+    let c1 = ledger
+        .board()
+        .iter()
+        .find(|row| row.contest == "c1")
+        .expect("c1 row");
+    let c2 = ledger
+        .board()
+        .iter()
+        .find(|row| row.contest == "c2")
+        .expect("c2 row");
+    assert_eq!(c1.score, 0.0, "C1's change is after its freeze");
+    assert_eq!(c2.score, 20.0, "C2 is not frozen");
+}
+
+#[test]
+fn a_score_override_in_one_contest_does_not_replace_the_other() {
+    let overrides = Overrides::fold(&[override_row_in(1, "user", "u0", "score", Some("99"))]);
+    let ledger = assemble_two_contests(&overrides);
+    let c1 = ledger
+        .board()
+        .iter()
+        .find(|row| row.contest == "c1")
+        .expect("c1 row");
+    let c2 = ledger
+        .board()
+        .iter()
+        .find(|row| row.contest == "c2")
+        .expect("c2 row");
+    assert_eq!(c1.score, 99.0);
+    assert_eq!(c2.score, 20.0, "C2 keeps its own score");
 }
 
 fn board_row<'a>(ledger: &'a Ledger, key: &str) -> &'a BoardRow {
@@ -377,6 +524,8 @@ fn the_team_board_sums_members_and_names_the_team() {
 fn a_team_score_override_replaces_the_summed_total() {
     let tasks = vec![TaskMode {
         key: "t0".to_string(),
+        contest_id: 1,
+        contest: "c1".to_string(),
         mode: ScoreMode::Max,
     }];
     let submissions = vec![

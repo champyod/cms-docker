@@ -183,12 +183,20 @@ async fn board(State(state): State<AppState>) -> Response {
                 board::board_view(standings.ledger.board(), &standings.users)
                     .into_iter()
                     .map(|(key, mut entry)| {
+                        let user = entry.user.clone();
+                        let public = identity.public_key(&user);
                         if identity.masked() {
                             let (first, last) = identity.name("", "");
                             entry.f_name = first;
                             entry.l_name = last;
+                            entry.user = public.clone();
                         }
-                        (identity.public_key(&key), entry)
+                        let id = if key == user {
+                            entry.user.clone()
+                        } else {
+                            format!("{}{}{}", entry.user, '\u{1f}', entry.contest_id)
+                        };
+                        (id, entry)
                     })
                     .collect();
             stamped_json(&view)

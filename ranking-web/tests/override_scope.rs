@@ -145,3 +145,114 @@ async fn a_config_showing_nothing_folds_no_override() {
 
     clear(&pool).await.expect("the cleanup applies");
 }
+
+/// Two contests shown at once and one user scoring in both: the board must carry two
+/// rows, and a C1 hide must leave the C2 row standing. This is the per-contest row
+/// contract, not only the shown-set SQL predicate above.
+#[tokio::test]
+#[ignore = "requires a live postgres carrying the ranking tables"]
+async fn a_user_in_two_shown_contests_gets_one_row_per_contest() {
+    let pool = pool();
+    clear(&pool).await.expect("the cleanup applies");
+    sqlx::query(
+        "INSERT INTO ranking_users (key, f_name, l_name, team) VALUES ('u0', 'Grace', 'Hopper', NULL)",
+    )
+    .execute(&pool)
+    .await
+    .expect("the user applies");
+    sqlx::query(
+        "INSERT INTO ranking_tasks (key, name, short_name, contest, contest_id, max_score, \
+         score_precision, extra_headers, display_order, score_mode) VALUES \
+         ('t0', 'Task One', 'T0', 'c0', 1, 100.0, 0, '[]'::jsonb, 0, 'max'), \
+         ('t1', 'Task Two', 'T1', 'c1', 2, 100.0, 0, '[]'::jsonb, 1, 'max')",
+    )
+    .execute(&pool)
+    .await
+    .expect("the tasks apply");
+    sqlx::query(
+        "INSERT INTO ranking_submissions (key, \"user\", task, time) VALUES \
+         ('s0', 'u0', 't0', 1), ('s1', 'u0', 't1', 1)",
+    )
+    .execute(&pool)
+    .await
+    .expect("the submissions apply");
+    sqlx::query(
+        "INSERT INTO ranking_subchanges (key, submission, time, score) VALUES \
+         ('c0', 's0', 2, 10.0), ('c1', 's1', 3, 20.0)",
+    )
+    .execute(&pool)
+    .await
+    .expect("the subchanges apply");
+    sqlx::query(
+        "INSERT INTO ranking_overrides (contest_id, target_kind, target_key, action, payload, reason) \
+         VALUES (1, 'user', 'u0', 'hide', NULL, 'scope test'), \
+                (2, 'user', 'u0', 'rename', '{\"value\": \"Second Contest\"}'::jsonb, 'scope test')",
+    )
+    .execute(&pool)
+    .await
+    .expect("the overrides apply");
+    show_only(&pool, &[1, 2]).await.expect("the config applies");
+
+    let board = load_board(&pool, ServedContest::EveryContest)
+        .await
+        .expect("the board assembles");
+    assert_eq!(board.len(), 1, "the C1 hide removes only the C1 row");
+    let row = board.get("u0").expect("the C2 row keeps the user key");
+    assert_eq!(row.contest_id, 2);
+    assert_eq!(row.score, 20.0);
+    assert_eq!(row.f_name, "Second");
+
+    clear(&pool).await.expect("the cleanup applies");
+}
+
+/// With no hide, the same user is two visible rows with two map keys.
+#[tokio::test]
+#[ignore = "requires a live postgres carrying the ranking tables"]
+async fn two_shown_contests_give_one_user_two_distinct_rows() {
+    let pool = pool();
+    clear(&pool).await.expect("the cleanup applies");
+    sqlx::query(
+        "INSERT INTO ranking_users (key, f_name, l_name, team) VALUES ('u0', 'Grace', 'Hopper', NULL)",
+    )
+    .execute(&pool)
+    .await
+    .expect("the user applies");
+    sqlx::query(
+        "INSERT INTO ranking_tasks (key, name, short_name, contest, contest_id, max_score, \
+         score_precision, extra_headers, display_order, score_mode) VALUES \
+         ('t0', 'Task One', 'T0', 'c0', 1, 100.0, 0, '[]'::jsonb, 0, 'max'), \
+         ('t1', 'Task Two', 'T1', 'c1', 2, 100.0, 0, '[]'::jsonb, 1, 'max')",
+    )
+    .execute(&pool)
+    .await
+    .expect("the tasks apply");
+    sqlx::query(
+        "INSERT INTO ranking_submissions (key, \"user\", task, time) VALUES \
+         ('s0', 'u0', 't0', 1), ('s1', 'u0', 't1', 1)",
+    )
+    .execute(&pool)
+    .await
+    .expect("the submissions apply");
+    sqlx::query(
+        "INSERT INTO ranking_subchanges (key, submission, time, score) VALUES \
+         ('c0', 's0', 2, 10.0), ('c1', 's1', 3, 20.0)",
+    )
+    .execute(&pool)
+    .await
+    .expect("the subchanges apply");
+    show_only(&pool, &[1, 2]).await.expect("the config applies");
+
+    let board = load_board(&pool, ServedContest::EveryContest)
+        .await
+        .expect("the board assembles");
+    assert_eq!(board.len(), 2);
+    let rows: Vec<_> = board.values().collect();
+    assert!(rows
+        .iter()
+        .any(|row| row.contest_id == 1 && row.score == 10.0));
+    assert!(rows
+        .iter()
+        .any(|row| row.contest_id == 2 && row.score == 20.0));
+
+    clear(&pool).await.expect("the cleanup applies");
+}

@@ -202,9 +202,10 @@ pub fn assemble_with(
         submissions,
         subchanges,
         &mut skipped,
-        overrides.frozen_at(),
+        overrides,
+        tasks,
     );
-    Ok(finish(scores, skipped, overrides, teams))
+    Ok(finish(scores, skipped, overrides, teams, tasks))
 }
 
 /// One Score per user/task pair, keyed by the pair a subchange resolves back to.
@@ -247,8 +248,13 @@ fn replay_subchanges(
     submissions: &[Submission],
     subchanges: &[Subchange],
     skipped: &mut SkippedSubchanges,
-    frozen_at: Option<i64>,
+    overrides: &Overrides,
+    tasks: &[TaskMode],
 ) {
+    let task_contest: BTreeMap<&str, i32> = tasks
+        .iter()
+        .map(|task| (task.key.as_str(), task.contest_id))
+        .collect();
     let owners: BTreeMap<&str, (&str, &str)> = submissions
         .iter()
         .map(|submission| {
@@ -268,13 +274,16 @@ fn replay_subchanges(
         // WHY before the owner lookup: a frozen-out change is not a skip, it is the
         // freeze doing its job. Counting it would make a healthy freeze look like a
         // stream of malformed rows on the diagnostics surface.
-        if frozen_at.is_some_and(|cutoff| change.time > cutoff) {
-            continue;
-        }
         let Some((user, task)) = owners.get(change.submission.as_str()) else {
             skipped.orphan += 1;
             continue;
         };
+        let frozen_at = task_contest
+            .get(task)
+            .and_then(|contest_id| overrides.scope(*contest_id).frozen_at());
+        if frozen_at.is_some_and(|cutoff| change.time > cutoff) {
+            continue;
+        }
         if let Some(score) = scores.get_mut(&(user.to_string(), task.to_string())) {
             score.append(change);
         }
@@ -290,6 +299,7 @@ fn finish(
     skipped: SkippedSubchanges,
     overrides: &Overrides,
     teams: &BTreeMap<String, String>,
+    tasks: &[TaskMode],
 ) -> Ledger {
     let mut ledger = Ledger {
         skipped_subchanges: skipped,
@@ -298,13 +308,21 @@ fn finish(
     };
     let board_hidden = overrides.board_hidden();
     let mut merged: Vec<(String, String, i64, f64)> = Vec::new();
-    let mut rows: BTreeMap<String, BoardRow> = BTreeMap::new();
+    let mut rows: BTreeMap<(i32, String), BoardRow> = BTreeMap::new();
+    let meta: BTreeMap<&str, (i32, &str)> = tasks
+        .iter()
+        .map(|task| (task.key.as_str(), (task.contest_id, task.contest.as_str())))
+        .collect();
     for ((user, task), score) in &scores {
         let team = teams.get(user).map(String::as_str);
+        let Some((contest_id, contest)) = meta.get(task.as_str()).copied() else {
+            continue;
+        };
+        let scope = overrides.scope(contest_id);
         // WHY the hidden test gates every output and not only the board row: a hidden
         // participation must not survive as a score, a history row or a sublist entry
         // either, or /history and /sublist would serve what /board withholds.
-        if board_hidden || board::is_hidden(overrides, user, team) {
+        if board_hidden || board::is_hidden(scope, user, team) {
             continue;
         }
         if score.value() > 0.0 {
@@ -314,7 +332,15 @@ fn finish(
                 .or_default()
                 .insert(task.clone(), score.value());
         }
-        board::record_row(&mut rows, overrides, user, team, score.value());
+        board::record_row(
+            &mut rows,
+            scope,
+            contest_id,
+            contest,
+            user,
+            team,
+            score.value(),
+        );
         for (time, change) in score.history() {
             merged.push((user.clone(), task.clone(), *time, *change));
         }

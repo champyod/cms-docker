@@ -62,6 +62,7 @@ pub struct GuestRow {
     pub kind: TargetKind,
     pub key: String,
     pub name: String,
+    pub contest_id: i32,
 }
 
 /// One ranking_overrides row as the store reads it.
@@ -71,6 +72,7 @@ pub struct OverrideRow {
     pub target_key: String,
     pub action: String,
     pub payload: Option<Value>,
+    pub contest_id: i32,
 }
 
 /// The user-keyed and team-keyed half of one action, kept together.
@@ -96,6 +98,46 @@ impl<T> Sides<T> {
     }
 }
 
+/// The user/team half of the board for one contest. A board row is a participation in
+/// one contest, so every action that names a user or a team must be looked up inside the
+/// contest that row belongs to; the global sets below remain for the entity and task
+/// surfaces, which are not per-contest.
+#[derive(Debug, Default, Clone)]
+pub struct ContestScope {
+    hidden: Sides<HashSet<String>>,
+    renamed: Sides<HashMap<String, String>>,
+    scored: Sides<HashMap<String, f64>>,
+    pinned: Sides<HashMap<String, i64>>,
+    guests: Vec<GuestRow>,
+    frozen_at: Option<i64>,
+}
+
+impl ContestScope {
+    pub fn hides(&self, kind: TargetKind, key: &str) -> bool {
+        self.hidden.get(kind).contains(key)
+    }
+
+    pub fn renamed(&self, kind: TargetKind, key: &str) -> Option<&str> {
+        self.renamed.get(kind).get(key).map(String::as_str)
+    }
+
+    pub fn scored(&self, kind: TargetKind, key: &str) -> Option<f64> {
+        self.scored.get(kind).get(key).copied()
+    }
+
+    pub fn pinned(&self, kind: TargetKind, key: &str) -> Option<i64> {
+        self.pinned.get(kind).get(key).copied()
+    }
+
+    pub fn guests(&self) -> &[GuestRow] {
+        &self.guests
+    }
+
+    pub fn frozen_at(&self) -> Option<i64> {
+        self.frozen_at
+    }
+}
+
 /// The active overrides, folded once so the one pass looks each target up in O(1).
 #[derive(Debug, Default, Clone)]
 pub struct Overrides {
@@ -104,6 +146,7 @@ pub struct Overrides {
     scored: Sides<HashMap<String, f64>>,
     pinned: Sides<HashMap<String, i64>>,
     guests: Vec<GuestRow>,
+    scopes: std::collections::BTreeMap<i32, ContestScope>,
     skipped: usize,
     /// The latest freeze cutoff seen, in projection time. WHY latest and not Sides:
     /// a freeze is a property of the scoreboard, not of a user or a team, so unlike
@@ -288,6 +331,24 @@ impl HiddenTargets {
     }
 }
 
+fn folded_guest(
+    overrides: &mut Overrides,
+    scope: &mut ContestScope,
+    kind: TargetKind,
+    key: &str,
+    name: String,
+    contest_id: i32,
+) -> bool {
+    let row = GuestRow {
+        kind,
+        key: key.to_string(),
+        name: name.clone(),
+        contest_id,
+    };
+    overrides.guests.push(row.clone());
+    scope.guests.push(row);
+    true
+}
 impl Overrides {
     /// Drops an unreadable row and counts it rather than refusing: one typo must not black out the board.
     pub fn fold(rows: &[OverrideRow]) -> Self {
@@ -300,6 +361,15 @@ impl Overrides {
 
     pub fn guests(&self) -> &[GuestRow] {
         &self.guests
+    }
+
+    /// The overrides that belong to one contest. An absent scope is empty, not an error:
+    /// a contest with no override row must draw its board with no names, hides or pins.
+    pub fn scope(&self, contest_id: i32) -> &ContestScope {
+        static EMPTY: std::sync::OnceLock<ContestScope> = std::sync::OnceLock::new();
+        self.scopes
+            .get(&contest_id)
+            .unwrap_or_else(|| EMPTY.get_or_init(ContestScope::default))
     }
 
     pub fn skipped(&self) -> usize {
@@ -372,18 +442,60 @@ impl Overrides {
             return;
         };
         let key = row.target_key.as_str();
+        let mut scope = self.scopes.remove(&row.contest_id).unwrap_or_default();
         let folded = match row.action.as_str() {
             ACTION_HIDE => {
                 self.hidden.get_mut(kind).insert(key.to_string());
+                scope.hidden.get_mut(kind).insert(key.to_string());
                 true
             }
-            ACTION_GUEST => self.fold_guest(kind, key, &row.payload),
-            ACTION_RENAME => self.fold_rename(kind, key, &row.payload),
-            ACTION_PIN => self.fold_pin(kind, key, &row.payload),
-            ACTION_SCORE => self.fold_score(kind, key, &row.payload),
-            ACTION_FREEZE => self.fold_freeze(&row.payload),
+            ACTION_GUEST => match payload_name(&row.payload) {
+                Some(name) => folded_guest(self, &mut scope, kind, key, name, row.contest_id),
+                None => false,
+            },
+            ACTION_RENAME => match payload_name(&row.payload) {
+                Some(name) => {
+                    self.renamed
+                        .get_mut(kind)
+                        .insert(key.to_string(), name.clone());
+                    scope.renamed.get_mut(kind).insert(key.to_string(), name);
+                    true
+                }
+                None => false,
+            },
+            ACTION_PIN => {
+                match payload_name(&row.payload).and_then(|value| value.parse::<i64>().ok()) {
+                    Some(rank) => {
+                        self.pinned.get_mut(kind).insert(key.to_string(), rank);
+                        scope.pinned.get_mut(kind).insert(key.to_string(), rank);
+                        true
+                    }
+                    None => false,
+                }
+            }
+            ACTION_SCORE => {
+                match payload_name(&row.payload).and_then(|value| value.parse::<f64>().ok()) {
+                    Some(score) => {
+                        self.scored.get_mut(kind).insert(key.to_string(), score);
+                        scope.scored.get_mut(kind).insert(key.to_string(), score);
+                        true
+                    }
+                    None => false,
+                }
+            }
+            ACTION_FREEZE => {
+                match payload_name(&row.payload).and_then(|value| value.parse::<i64>().ok()) {
+                    Some(at) => {
+                        self.frozen_at = Some(at);
+                        scope.frozen_at = Some(at);
+                        true
+                    }
+                    None => false,
+                }
+            }
             _ => false,
         };
+        self.scopes.insert(row.contest_id, scope);
         if !folded {
             self.skipped += 1;
         }
@@ -438,45 +550,6 @@ impl Overrides {
         }
     }
 
-    fn fold_guest(&mut self, kind: TargetKind, key: &str, payload: &Option<Value>) -> bool {
-        let Some(name) = payload_name(payload) else {
-            return false;
-        };
-        self.guests.push(GuestRow {
-            kind,
-            key: key.to_string(),
-            name,
-        });
-        true
-    }
-
-    fn fold_rename(&mut self, kind: TargetKind, key: &str, payload: &Option<Value>) -> bool {
-        let Some(name) = payload_name(payload) else {
-            return false;
-        };
-        self.renamed.get_mut(kind).insert(key.to_string(), name);
-        true
-    }
-
-    fn fold_pin(&mut self, kind: TargetKind, key: &str, payload: &Option<Value>) -> bool {
-        let Some(rank) = payload_name(payload).and_then(|value| value.parse::<i64>().ok()) else {
-            return false;
-        };
-        self.pinned.get_mut(kind).insert(key.to_string(), rank);
-        true
-    }
-
-    fn fold_score(&mut self, kind: TargetKind, key: &str, payload: &Option<Value>) -> bool {
-        let Some(score) = payload_name(payload).and_then(|value| value.parse::<f64>().ok()) else {
-            return false;
-        };
-        if !score.is_finite() {
-            return false;
-        }
-        self.scored.get_mut(kind).insert(key.to_string(), score);
-        true
-    }
-
     /// A freeze carries the projection-time cutoff to hold the board at. Parsed as an
     /// integer because projection time is whole seconds; a fractional or malformed
     /// value is refused so a typo is reported in `skipped` rather than truncating the
@@ -505,6 +578,8 @@ pub struct Override {
     pub target_key: String,
     pub action: String,
     pub value: Option<String>,
+    pub contest_id: i32,
+    pub contest: Option<String>,
 }
 
 /// The active override rows that can reach the board the config shows, as the raw log.
@@ -519,8 +594,10 @@ pub async fn load_overrides(
     contest_ids: &[i32],
 ) -> Result<Vec<Override>, StoreError> {
     let rows = sqlx::query_as::<_, Override>(
-        "SELECT target_kind, target_key, action, payload->>'value' AS value \
-         FROM ranking_overrides WHERE active AND contest_id = ANY($1) ORDER BY id",
+        "SELECT o.target_kind, o.target_key, o.action, o.payload->>'value' AS value, \
+                o.contest_id, c.key AS contest \
+         FROM ranking_overrides AS o LEFT JOIN ranking_contests AS c ON c.contest_id = o.contest_id \
+         WHERE o.active AND o.contest_id = ANY($1) ORDER BY o.id",
     )
     .bind(contest_ids)
     .fetch_all(pool)
@@ -578,6 +655,8 @@ mod tests {
             target_key: key.to_string(),
             action: action.to_string(),
             value: value.map(str::to_string),
+            contest_id: 1,
+            contest: Some("c0".to_string()),
         }
     }
 
@@ -609,6 +688,7 @@ mod tests {
             target_key: key.to_string(),
             action: action.to_string(),
             payload: None,
+            contest_id: 1,
         }
     }
 

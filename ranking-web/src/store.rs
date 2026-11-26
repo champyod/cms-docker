@@ -372,6 +372,7 @@ pub async fn load_standings(pool: &PgPool, served: ServedContest) -> Result<Stan
 /// with no task of it, which is the only row a withheld task's contest leaves behind.
 #[derive(sqlx::FromRow)]
 struct SnapshotRow {
+    contest_id: i32,
     contest: String,
     task: Option<String>,
     score_mode: Option<String>,
@@ -388,12 +389,13 @@ struct SnapshotRow {
 /// WHY the two arms are one statement: the causes are a question about these same rows, so a
 /// query of their own would be the reader asking itself something it already knows.
 const SNAPSHOT_SQL: &str = "\
-SELECT contest, task, score_mode FROM (\
-    SELECT t.contest AS contest, t.key AS task, t.score_mode AS score_mode, \
-           t.display_order AS display_order \
+SELECT contest_id, contest, task, score_mode FROM (\
+    SELECT t.contest_id AS contest_id, t.contest AS contest, t.key AS task, \
+           t.score_mode AS score_mode, t.display_order AS display_order \
     FROM ranking_tasks AS t WHERE t.contest_id = ANY($1) \
     UNION ALL \
-    SELECT c.key AS contest, NULL AS task, NULL AS score_mode, NULL AS display_order \
+    SELECT c.contest_id AS contest_id, c.key AS contest, NULL AS task, \
+           NULL AS score_mode, NULL AS display_order \
     FROM ranking_contests AS c WHERE c.contest_id = ANY($1)\
 ) AS snapshot ORDER BY display_order, task";
 
@@ -737,7 +739,12 @@ fn project_tasks(
                 mode: wire,
             });
         };
-        modes.push(TaskMode { key, mode });
+        modes.push(TaskMode {
+            key,
+            contest_id: row.contest_id,
+            contest: row.contest,
+            mode,
+        });
     }
     Ok((modes, snapshot))
 }
@@ -784,6 +791,7 @@ struct OverrideRowRecord {
     target_key: String,
     action: String,
     payload: Option<serde_json::Value>,
+    contest_id: i32,
 }
 
 /// The active overrides that reach the shown board, in one query, folded for the board assembly.
@@ -807,7 +815,7 @@ pub(crate) async fn load_overrides(
     shown: &ShownSet,
 ) -> Result<Overrides, StoreError> {
     let rows = sqlx::query_as::<_, OverrideRowRecord>(
-        "SELECT target_kind, target_key, action, payload FROM ranking_overrides \
+        "SELECT target_kind, target_key, action, payload, contest_id FROM ranking_overrides \
          WHERE active AND contest_id = ANY($1) ORDER BY id",
     )
     .bind(shown.contest_ids())
@@ -820,13 +828,14 @@ pub(crate) async fn load_overrides(
             target_key: row.target_key,
             action: row.action,
             payload: row.payload,
+            contest_id: row.contest_id,
         })
         .collect();
     rows.extend(
         load_hidden(pool, shown)
             .await?
             .into_iter()
-            .map(hidden_as_hide_row),
+            .map(|row| hidden_as_hide_row(row.key, row.contest_id)),
     );
     Ok(Overrides::fold(&rows))
 }
@@ -887,32 +896,34 @@ async fn load_users(pool: &PgPool) -> Result<BTreeMap<String, UserNames>, StoreE
 #[derive(sqlx::FromRow)]
 struct HiddenRow {
     key: String,
+    contest_id: i32,
 }
 
 /// A hidden participation behaves as the `hide` override it is, so the board's one hide
 /// rule covers it and no filter site needs a second predicate. WHY it reuses the fold's
 /// own spellings: the tombstone enters the one fold that already hides a user, so a
 /// rename of either spelling cannot silently unhide everyone.
-fn hidden_as_hide_row(key: String) -> OverrideRow {
+fn hidden_as_hide_row(key: String, contest_id: i32) -> OverrideRow {
     OverrideRow {
         target_kind: TARGET_USER.to_string(),
         target_key: key,
         action: ACTION_HIDE.to_string(),
         payload: None,
+        contest_id,
     }
 }
 
 /// The keys the panel hid in a shown contest. WHY the shown set bounds it: a tombstone is scoped
 /// to the contest it was filed in, so one filed under a contest the board does not draw changes
 /// nothing here, and an empty shown set hides nobody.
-async fn load_hidden(pool: &PgPool, shown: &ShownSet) -> Result<Vec<String>, StoreError> {
+async fn load_hidden(pool: &PgPool, shown: &ShownSet) -> Result<Vec<HiddenRow>, StoreError> {
     let rows = sqlx::query_as::<_, HiddenRow>(
-        "SELECT key FROM ranking_hidden WHERE contest_id = ANY($1) ORDER BY key",
+        "SELECT key, contest_id FROM ranking_hidden WHERE contest_id = ANY($1) ORDER BY key",
     )
     .bind(shown.contest_ids())
     .fetch_all(pool)
     .await?;
-    Ok(rows.into_iter().map(|row| row.key).collect())
+    Ok(rows)
 }
 
 #[cfg(test)]
@@ -942,6 +953,7 @@ mod tests {
             target_key: key.to_string(),
             action: "hide".to_string(),
             payload: None,
+            contest_id: 1,
         }
     }
 
@@ -954,11 +966,13 @@ mod tests {
     fn a_contest_row_with_no_task_is_a_snapshot_contest_and_not_a_column() {
         let rows = vec![
             SnapshotRow {
+                contest_id: 0,
                 contest: "c0".to_string(),
                 task: None,
                 score_mode: None,
             },
             SnapshotRow {
+                contest_id: 1,
                 contest: "c1".to_string(),
                 task: Some("t0".to_string()),
                 score_mode: Some("max".to_string()),
@@ -981,6 +995,7 @@ mod tests {
     #[test]
     fn a_task_row_with_an_unreadable_mode_still_refuses() {
         let rows = vec![SnapshotRow {
+            contest_id: 0,
             contest: "c0".to_string(),
             task: Some("t0".to_string()),
             score_mode: Some("nonsense".to_string()),
@@ -1101,13 +1116,13 @@ mod tests {
     /// applies, so no board path needs a second filter for it.
     #[test]
     fn a_hidden_row_folds_into_the_hide_rule() {
-        let overrides = Overrides::fold(&[hidden_as_hide_row("u0".to_string())]);
+        let overrides = Overrides::fold(&[hidden_as_hide_row("u0".to_string(), 1)]);
         assert!(
-            board::is_hidden(&overrides, "u0", None),
+            board::is_hidden(overrides.scope(1), "u0", None),
             "the tombstoned key is hidden"
         );
         assert!(
-            !board::is_hidden(&overrides, "u1", None),
+            !board::is_hidden(overrides.scope(1), "u1", None),
             "a key with no tombstone stays"
         );
     }
