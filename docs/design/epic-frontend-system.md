@@ -43,7 +43,7 @@ next page, or redirects the round in progress.
 ## Rules this epic is held to
 
 - A step lands only with its gate green and its negative control shown to fail.
-- Debt is counted: raw controls (173), undeclared pages (75), status-colour misuse (197). Each may
+- Debt is counted: raw controls (168), undeclared pages (75), status-colour misuse (197). Each may
   fall, never rise.
 - One writer per worktree index. A step handed to a subagent gets its own lane.
 - Every gate takes its inputs from environment variables, so a negative control can run it against a
