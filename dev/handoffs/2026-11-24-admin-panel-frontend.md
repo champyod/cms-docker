@@ -88,6 +88,7 @@ DONE WHEN:
 | `7487eb09` | `ParticipationFormFields` uses Select, Checkbox and Input; raw controls 216 to 209 |
 | `f2c75237` | `task-modal-extra` token fields use Select and Input; raw controls 209 to 204 |
 | `7324fe5b` | bulk edit sections use Select and Input with labels; raw controls 204 to 197 |
+| `9f6e0302` | task modal General and Grading fields use Input and Select; raw controls 197 to 191 |
 
 Backend commits by another writer are interleaved: `947168fc`, `bd6b8ba1`, `11e28781`,
 `52818b79`, `9f4564b5`. Do not touch them.
