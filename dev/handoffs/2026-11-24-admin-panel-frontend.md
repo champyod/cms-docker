@@ -93,6 +93,7 @@ DONE WHEN:
 | `784539a0` | team bulk actions use Select, Textarea and Input; raw controls 185 to 179 |
 | `56677f50` | dataset task type params use Select, Input, Textarea and Tabs; raw controls 179 to 173 |
 | `9340d972` | contest settings use Input and Checkbox; raw controls 173 to 168 |
+| `76463b88` | contest Tokens tab uses Select and Input; raw controls 168 to 163 |
 
 Backend commits by another writer are interleaved: `947168fc`, `bd6b8ba1`, `11e28781`,
 `52818b79`, `9f4564b5`. Do not touch them.
