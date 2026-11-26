@@ -344,9 +344,14 @@ pub(crate) async fn identity_of(state: &AppState) -> Result<Identity, Refusal> {
     let appearance = load_appearance(db.pool())
         .await
         .map_err(|error| Refusal(error.to_string()))?;
-    Ok(Identity::new(
-        appearance.as_ref().is_some_and(Appearance::anonymous),
-    ))
+    let identity = Identity::new(appearance.as_ref().is_some_and(Appearance::anonymous));
+    if identity.masked() {
+        static ANNOUNCED: std::sync::OnceLock<()> = std::sync::OnceLock::new();
+        if ANNOUNCED.set(()).is_ok() {
+            eprintln!("cms-ranking: anonymous board identity masking is active");
+        }
+    }
+    Ok(identity)
 }
 
 /// What the board is told to show, or the refusal the caller must return.
