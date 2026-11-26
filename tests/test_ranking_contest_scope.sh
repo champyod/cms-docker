@@ -43,7 +43,7 @@ missing() {
 check "the override row carries the contest it was filed under" \
     has "${RANKING}/src/overrides.rs" 'pub contest_id: i32'
 check "the fold keeps a per-contest scope for every user and team action" \
-    has "${RANKING}/src/overrides.rs" 'pub struct ContestScope'
+    has "${RANKING}/src/contest_scope.rs" 'pub struct ContestScope'
 check "the fold records each row into its own contest scope" \
     has "${RANKING}/src/overrides.rs" 'self\.scopes\.insert\(row\.contest_id, scope\)'
 check "a contest with no override row reads an empty scope" \
@@ -65,7 +65,7 @@ check "the replay reads the freeze of the change's own contest" \
 check "the board view keeps the real user beside the row id" \
     has "${RANKING}/src/board.rs" 'pub user: String'
 check "the team board groups by contest and team" \
-    has "${RANKING}/src/board.rs" 'BTreeMap<\(i32, String\), TeamAcc>'
+    has "${RANKING}/src/team_board.rs" 'BTreeMap<\(i32, String\), TeamAcc>'
 check "the override payload serves the contest key the page keys on" \
     has "${RANKING}/src/overrides.rs" 'c\.key AS contest'
 check "a no-longer-global user override is gone from the ledger" \
@@ -89,7 +89,7 @@ check "the contest column is styled" \
 check "the diagnostics counts the contests on the board and their scopes" \
     has "${RANKING}/src/http.rs" 'contests_with_overrides: standings\.overrides\.scoped_contests\(\)'
 check "a contest with no override reads an empty scope" \
-    has "${RANKING}/src/overrides.rs" 'pub fn is_empty\(&self\) -> bool'
+    has "${RANKING}/src/contest_scope.rs" 'pub fn is_empty\(&self\) -> bool'
 check "ranks restart in each contest" \
     has "${RANKING}/tests/overrides.rs" 'fn ranks_restart_in_each_contest'
 check "the live scope suite covers two shown contests" \

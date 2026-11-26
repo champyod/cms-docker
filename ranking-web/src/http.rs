@@ -101,15 +101,13 @@ pub fn router(state: AppState) -> Router {
         .route("/credits", get(credits))
         .route("/events", get(crate::events::events));
     let router = crate::entity_routes::routes(router);
-    // One gate rather than the same check in five handlers, and it reads access_mode
-    // from the row /config serves, so a panel change applies on the next request.
+    // One gate for five handlers, reading the row /config serves so a panel change applies next request.
     let router = router.layer(axum::middleware::from_fn_with_state(
         state.clone(),
         crate::login::gate,
     ));
     match state.config().static_dir.clone() {
-        // The vendored page asks for its stylesheet, scripts and images by name at
-        // the root, so the directory is the fallback rather than one route.
+        // The page asks for its files at the root, so the directory is the fallback, not one route.
         Some(directory) => router
             .fallback_service(ServeDir::new(directory).fallback(any(unavailable)))
             .with_state(state),
@@ -131,9 +129,7 @@ async fn health(State(state): State<AppState>) -> (StatusCode, Json<Health>) {
 }
 
 async fn root(State(state): State<AppState>) -> Response {
-    // The page itself is a template now, but its stylesheet and scripts still come
-    // from this directory, so a deployment with none refuses rather than serving a
-    // bare document nothing can draw with.
+    // The template renders without this directory but cannot draw, so a deployment with none refuses.
     if state.config().static_dir.is_none() {
         return refuse("no RANKING_STATIC_DIR is configured");
     }
@@ -156,8 +152,7 @@ async fn root(State(state): State<AppState>) -> Response {
 }
 
 async fn scores(State(state): State<AppState>) -> Response {
-    // A refusal, never a partial or empty board: a page that renders an empty
-    // scoreboard during a contest is worse than one that renders an error.
+    // A refusal, never an empty board: a blank scoreboard mid-contest is worse than an error.
     let identity = match identity_of(&state).await {
         Ok(identity) => identity,
         Err(refusal) => return refusal.response(),
@@ -354,8 +349,7 @@ async fn appearance_of(state: &AppState) -> Result<Option<Appearance>, Refusal> 
 /// The identity rule every public response obeys. The panel's anonymous flag is
 /// the only input; a missing appearance row is not anonymous.
 pub(crate) async fn identity_of(state: &AppState) -> Result<Identity, Refusal> {
-    // A service with no database cannot have an appearance row; the face route is
-    // the one public read that can still answer, and it has no policy to apply.
+    // No database means no appearance row; the face route has no policy to apply anyway.
     let Some(db) = state.db() else {
         return Ok(Identity::new(false));
     };
@@ -408,8 +402,7 @@ async fn contest_of(state: &AppState, shown: &ShownSet) -> Result<Option<Ranking
 }
 
 async fn diagnostics(State(state): State<AppState>) -> Response {
-    // A refusal, never zeros: "no database" and "nothing was dropped" must not look
-    // alike, which is the same reason every other read route refuses here.
+    // A refusal, never zeros: "no database" and "nothing dropped" must not look alike.
     let identity = match identity_of(&state).await {
         Ok(identity) => identity,
         Err(refusal) => return refusal.response(),
