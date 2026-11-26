@@ -90,6 +90,7 @@ DONE WHEN:
 | `7324fe5b` | bulk edit sections use Select and Input with labels; raw controls 204 to 197 |
 | `9f6e0302` | task modal General and Grading fields use Input and Select; raw controls 197 to 191 |
 | `d9cd55a2` | contest General tab uses Input and Textarea; raw controls 191 to 185 |
+| `784539a0` | team bulk actions use Select, Textarea and Input; raw controls 185 to 179 |
 
 Backend commits by another writer are interleaved: `947168fc`, `bd6b8ba1`, `11e28781`,
 `52818b79`, `9f4564b5`. Do not touch them.
@@ -119,6 +120,9 @@ decision, not a blind colour removal.
 - **S12 is not zero.** 197 uses in 100 files. The gate holds the line but the debt is real.
 - **Epic lives under `docs/`.** `docs/` is end-user only by the workspace rule; this
   maintainer epic belongs under `dev/`. Moving it is a separate file-structure step.
+- **TeamBulkActionsDialog runs past the function ceiling.** The exported dialog is about 140
+  lines, mostly the three submit branches and the form JSX. Splitting it is its own step; the
+  raw-control conversion did not make it longer.
 - **Four unhandled happy-dom errors remain** in `tests/header-palette-focus.test.tsx` and
   `tests/palette-switch-deploy.test.tsx`: `AbortError: The animation was canceled`. They
   pre-date the frontend changes and were not touched. Full suite still reports 398 files /
@@ -132,9 +136,9 @@ decision, not a blind colour removal.
 
 ## Commit-message correction
 
-The subject form is correct. The bodies of the recent UI commits still carry process facts:
-preview dimensions, debt deltas, gate counts. Those belong in this handoff or the epic, not
-in the commit body.
+The bodies of the older UI commits carry process facts: preview dimensions, debt deltas,
+gate counts. Those belong in this handoff or the epic, not in the commit body. Commits from
+`9f6e0302` on state the reason, or carry no body for a record commit.
 
 Correct body: the reason the change exists, and only when it is not obvious from the subject.
 Example for `StatsCard`:
