@@ -1,6 +1,11 @@
 'use client';
 
 import { useRef, useState } from 'react';
+
+import { Input } from '@/components/core/Input';
+import { Select } from '@/components/core/Select';
+import { Tabs, type TabItem } from '@/components/core/Tabs';
+import { Textarea } from '@/components/core/Textarea';
 import {
   TASK_TYPE_PARAM_HELPERS,
   defaultTaskTypeFields,
@@ -23,15 +28,15 @@ interface EditorProps {
   onLintError: (error: string) => void;
 }
 
-const CONTROL_CLASS = 'w-full px-3 py-2 bg-muted/40 border border-border rounded-lg text-foreground focus:outline-none focus:border-ring focus-visible:ring-2 focus-visible:ring-ring/50';
-const CODE_CLASS = 'w-full px-4 py-2.5 bg-muted/40 border border-border rounded-lg text-foreground font-mono text-sm focus:outline-none focus:border-ring focus-visible:ring-2 focus-visible:ring-ring/50';
-const LABEL_CLASS = 'text-xs font-bold text-muted-foreground uppercase mb-1.5 block';
-const TOGGLE_ACTIVE = 'px-3 py-1 rounded-lg text-xs font-semibold bg-foreground text-background';
-const TOGGLE_IDLE = 'px-3 py-1 rounded-lg text-xs text-muted-foreground hover:bg-muted';
 const CODE_PLACEHOLDER = 'e.g. ["alone", ["input.txt", "output.txt"], "diff"]';
 const PASTE_NOTICE = 'Pasted content applied without lint. Edit manually to re-lint.';
 const INVALID_JSON = 'Task type parameters must be valid JSON.';
 const NOT_AN_ARRAY = 'Task type parameters must be a JSON array.';
+
+const VIEW_TABS: readonly TabItem[] = [
+  { id: 'visual', label: 'Visual' },
+  { id: 'code', label: 'JSON' },
+];
 
 /** The JSON view shows the list the worker will read, so an empty stored list
  *  is shown as this type's defaults rather than as `[]`. */
@@ -82,17 +87,26 @@ interface FieldControlProps {
 function FieldControl({ def, value, onChange }: FieldControlProps): React.JSX.Element {
   if (def.kind === 'choice') {
     return (
-      <select value={value} onChange={(e) => onChange(def, e.target.value)} className={CONTROL_CLASS}>
-        {choiceOptions(def, value).map((option) => (
-          <option key={option} value={option}>{option}</option>
-        ))}
-      </select>
+      <Select
+        label={def.label}
+        value={value}
+        onChange={(event) => onChange(def, event.target.value)}
+        options={choiceOptions(def, value).map((option) => ({ value: option, label: option }))}
+      />
     );
   }
   if (def.kind === 'int') {
-    return <input type="number" step="1" value={value} onChange={(e) => onChange(def, e.target.value)} className={CONTROL_CLASS} />;
+    return (
+      <Input
+        label={def.label}
+        type="number"
+        step={1}
+        value={value}
+        onChange={(event) => onChange(def, event.target.value)}
+      />
+    );
   }
-  return <input type="text" value={value} onChange={(e) => onChange(def, e.target.value)} className={CONTROL_CLASS} />;
+  return <Input label={def.label} type="text" value={value} onChange={(event) => onChange(def, event.target.value)} />;
 }
 
 interface FieldListProps {
@@ -112,10 +126,7 @@ function FieldList({ taskType, fields, pastedNotice, onFieldChange }: FieldListP
       {pastedNotice && <p className="text-xs text-muted-foreground mb-3">{PASTE_NOTICE}</p>}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         {defs.map((def) => (
-          <label key={def.key} className="block">
-            <span className={LABEL_CLASS}>{def.label}</span>
-            <FieldControl def={def} value={fields[def.key] ?? ''} onChange={onFieldChange} />
-          </label>
+          <FieldControl key={def.key} def={def} value={fields[def.key] ?? ''} onChange={onFieldChange} />
         ))}
       </div>
     </>
@@ -129,12 +140,12 @@ interface JsonBoxProps {
 
 function JsonBox({ codeText, onCodeChange }: JsonBoxProps): React.JSX.Element {
   return (
-    <textarea
+    <Textarea
       value={codeText}
-      onChange={(e) => onCodeChange(e.target.value)}
+      onChange={(event) => onCodeChange(event.target.value)}
       rows={5}
       spellCheck={false}
-      className={CODE_CLASS}
+      className="font-mono"
       placeholder={CODE_PLACEHOLDER}
     />
   );
@@ -147,12 +158,11 @@ interface ViewToggleProps {
 }
 
 function ViewToggle({ view, onVisual, onCode }: ViewToggleProps): React.JSX.Element {
-  return (
-    <div className="flex items-center gap-1 mb-3">
-      <button type="button" onClick={onVisual} className={view === 'visual' ? TOGGLE_ACTIVE : TOGGLE_IDLE}>Visual</button>
-      <button type="button" onClick={onCode} className={view === 'code' ? TOGGLE_ACTIVE : TOGGLE_IDLE}>JSON</button>
-    </div>
-  );
+  const select = (id: string): void => {
+    if (id === 'code') onCode();
+    else onVisual();
+  };
+  return <Tabs items={VIEW_TABS} activeId={view} ariaLabel="Parameter view" className="mb-3" onSelect={select} />;
 }
 
 interface VisualParams {
@@ -216,10 +226,7 @@ export function DatasetTaskTypeParamsEditor({ taskType, params, onParamsChange, 
   const { codeText, setCodeText, isPushed, onCodeChange } = useCodeParams(taskType, target, clearPasteNotice);
   const [view, setView] = useState<View>('visual');
 
-  // Why adjust during render instead of an effect: changing task type or
-  // picking another dataset replaces the params behind the editor, and stale
-  // fields would write the previous type's values back. A list pushed from the
-  // code view skips the rewrite so typing is not reformatted on every keystroke.
+  // Why during render: a new task type or dataset replaces params behind the editor, so stale fields would write the old type back; a code-view push skips the rewrite.
   const signature = signatureOf(taskType, params);
   const [prevSignature, setPrevSignature] = useState(signature);
   if (prevSignature !== signature) {
