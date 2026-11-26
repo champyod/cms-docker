@@ -1,10 +1,17 @@
 'use client';
 
 import { ApplyLimitsButton } from '@/components/limits/ApplyLimitsButton';
+import { Input } from '@/components/core/Input';
 import { LimitField } from '@/components/core/LimitField';
+import { Select, type SelectOption } from '@/components/core/Select';
 import { useDictionary } from '@/hooks/useDictionary';
-import { ErrorText, fieldClasses, LABEL_CLASSES } from './fieldStyles';
 import type { ContestFormData, SetContestForm } from '../types';
+
+const TOKEN_MODES: readonly SelectOption[] = [
+  { value: 'disabled', label: 'Disabled' },
+  { value: 'finite', label: 'Finite' },
+  { value: 'infinite', label: 'Infinite' },
+];
 
 interface TokensTabProps {
   formData: ContestFormData;
@@ -12,19 +19,15 @@ interface TokensTabProps {
   validationErrors: Map<string, string>;
 }
 
-function TokenModeField({ formData, setFormData }: Pick<TokensTabProps, 'formData' | 'setFormData'>) {
+function TokenModeField({ formData, setFormData }: Pick<TokensTabProps, 'formData' | 'setFormData'>): React.JSX.Element {
   return (
     <div className="space-y-2">
-      <label className={LABEL_CLASSES}>Token Mode</label>
-      <select
+      <Select
+        label="Token Mode"
         value={formData.token_mode}
-        onChange={(e) => setFormData({ ...formData, token_mode: e.target.value })}
-        className={fieldClasses(false)}
-      >
-        <option value="disabled">Disabled</option>
-        <option value="finite">Finite</option>
-        <option value="infinite">Infinite</option>
-      </select>
+        onChange={(event) => setFormData({ ...formData, token_mode: event.target.value })}
+        options={TOKEN_MODES}
+      />
       <p className="mt-1 text-xs text-muted-foreground">
           {formData.token_mode === 'disabled' && "Users cannot use tokens."}
           {formData.token_mode === 'finite' && "Users receive tokens periodically."}
@@ -34,7 +37,7 @@ function TokenModeField({ formData, setFormData }: Pick<TokensTabProps, 'formDat
   );
 }
 
-function MaxTotalTokensField(props: TokensTabProps) {
+function MaxTotalTokensField(props: TokensTabProps): React.JSX.Element {
   const { formData, setFormData, validationErrors } = props;
   const limits = useDictionary().limits;
   return (
@@ -56,67 +59,55 @@ function MinIntervalField({
   formData,
   setFormData,
   validationErrors,
-}: TokensTabProps & { field: 'token_min_interval'; label: string }) {
+}: TokensTabProps & { field: 'token_min_interval'; label: string }): React.JSX.Element {
   return (
-    <div className="space-y-2">
-      <label className={LABEL_CLASSES}>{label}</label>
-      <input
-        type="number"
-        value={formData[field]}
-        onChange={(e) => setFormData({ ...formData, [field]: parseInt(e.target.value) || 0 })}
-        className={fieldClasses(validationErrors.has(field))}
-      />
-      <ErrorText errors={validationErrors} field={field} />
-    </div>
+    <Input
+      type="number"
+      label={label}
+      value={formData[field]}
+      onChange={(event) => setFormData({ ...formData, [field]: parseInt(event.target.value) || 0 })}
+      error={validationErrors.get(field)}
+    />
   );
 }
 
-function InitialTokensField({ formData, setFormData, validationErrors }: TokensTabProps) {
+function InitialTokensField({ formData, setFormData, validationErrors }: TokensTabProps): React.JSX.Element {
   return (
-    <div className="space-y-2">
-        <label className={LABEL_CLASSES}>Initial Tokens</label>
-        <input
-          type="number"
-          value={formData.token_gen_initial}
-          onChange={(e) => setFormData({ ...formData, token_gen_initial: parseInt(e.target.value) || 0 })}
-          className={fieldClasses(validationErrors.has('token_gen_initial'))}
-        />
-        <ErrorText errors={validationErrors} field="token_gen_initial" />
-    </div>
+    <Input
+      type="number"
+      label="Initial Tokens"
+      value={formData.token_gen_initial}
+      onChange={(event) => setFormData({ ...formData, token_gen_initial: parseInt(event.target.value) || 0 })}
+      error={validationErrors.get('token_gen_initial')}
+    />
   );
 }
 
-function GenAmountField({ formData, setFormData, validationErrors }: TokensTabProps) {
+function GenAmountField({ formData, setFormData, validationErrors }: TokensTabProps): React.JSX.Element {
   return (
-    <div className="space-y-2">
-        <label className={LABEL_CLASSES}>Gen Amount</label>
-        <input
-          type="number"
-          value={formData.token_gen_number}
-          onChange={(e) => setFormData({ ...formData, token_gen_number: parseInt(e.target.value) || 0 })}
-          className={fieldClasses(validationErrors.has('token_gen_number'))}
-        />
-        <ErrorText errors={validationErrors} field="token_gen_number" />
-    </div>
+    <Input
+      type="number"
+      label="Gen Amount"
+      value={formData.token_gen_number}
+      onChange={(event) => setFormData({ ...formData, token_gen_number: parseInt(event.target.value) || 0 })}
+      error={validationErrors.get('token_gen_number')}
+    />
   );
 }
 
-function GenIntervalField({ formData, setFormData, validationErrors }: TokensTabProps) {
+function GenIntervalField({ formData, setFormData, validationErrors }: TokensTabProps): React.JSX.Element {
   return (
-    <div className="space-y-2">
-        <label className={LABEL_CLASSES}>Gen Interval (min)</label>
-        <input
-          type="number"
-          value={formData.token_gen_interval}
-          onChange={(e) => setFormData({ ...formData, token_gen_interval: parseInt(e.target.value) || 0 })}
-          className={fieldClasses(validationErrors.has('token_gen_interval'))}
-        />
-        <ErrorText errors={validationErrors} field="token_gen_interval" />
-    </div>
+    <Input
+      type="number"
+      label="Gen Interval (min)"
+      value={formData.token_gen_interval}
+      onChange={(event) => setFormData({ ...formData, token_gen_interval: parseInt(event.target.value) || 0 })}
+      error={validationErrors.get('token_gen_interval')}
+    />
   );
 }
 
-function GenMaxCapField({ formData, setFormData, validationErrors }: TokensTabProps) {
+function GenMaxCapField({ formData, setFormData, validationErrors }: TokensTabProps): React.JSX.Element {
   const limits = useDictionary().limits;
   return (
     <LimitField
@@ -131,7 +122,7 @@ function GenMaxCapField({ formData, setFormData, validationErrors }: TokensTabPr
   );
 }
 
-function FiniteOnlyFields(props: TokensTabProps) {
+function FiniteOnlyFields(props: TokensTabProps): React.JSX.Element {
   return (
     <>
         <div className="col-span-full my-2 border-t border-border"></div>
@@ -143,7 +134,7 @@ function FiniteOnlyFields(props: TokensTabProps) {
   );
 }
 
-function TokenConfigFields(props: TokensTabProps) {
+function TokenConfigFields(props: TokensTabProps): React.JSX.Element {
   const { formData } = props;
   return (
     <div className="grid animate-in fade-in grid-cols-1 gap-6 duration-300 md:grid-cols-2">
@@ -157,7 +148,7 @@ function TokenConfigFields(props: TokensTabProps) {
   );
 }
 
-export function TokensTab({ formData, setFormData, validationErrors }: TokensTabProps) {
+export function TokensTab({ formData, setFormData, validationErrors }: TokensTabProps): React.JSX.Element {
   const limits = useDictionary().limits;
   return (
     <div className="animate-in fade-in slide-in-from-right-4 space-y-6 duration-300">
@@ -167,8 +158,7 @@ export function TokensTab({ formData, setFormData, validationErrors }: TokensTab
         <TokenConfigFields formData={formData} setFormData={setFormData} validationErrors={validationErrors} />
       )}
 
-      {/* Why here: the two token caps are the limit fields this tab owns, so this is the button that
-          pushes them to the other kind (tasks). */}
+      {/* Why here: the two token caps are the limit fields this tab owns, so this is the button that pushes them to tasks. */}
       <div className="flex justify-end">
         <ApplyLimitsButton
           kinds={['task']}
