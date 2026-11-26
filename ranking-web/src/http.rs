@@ -33,6 +33,9 @@ pub struct Health {
 #[derive(Serialize)]
 pub struct Diagnostics {
     pub ready: bool,
+    /// Whether every public identity read is currently masked. An operator can
+    /// confirm the anonymous policy without reading a response body.
+    pub identity_masked: bool,
     pub skipped_overrides: usize,
     /// Every row the fold dropped, so the board's missing rows have one number. The three
     /// causes below partition it — the meaning this key already had, so the panel's consumer
@@ -392,9 +395,14 @@ async fn contest_of(state: &AppState, shown: &ShownSet) -> Result<Option<Ranking
 async fn diagnostics(State(state): State<AppState>) -> Response {
     // A refusal, never zeros: "no database" and "nothing was dropped" must not look
     // alike, which is the same reason every other read route refuses here.
+    let identity = match identity_of(&state).await {
+        Ok(identity) => identity,
+        Err(refusal) => return refusal.response(),
+    };
     match state.standings().await {
         Ok(standings) => json_response(&Diagnostics {
             ready: true,
+            identity_masked: identity.masked(),
             skipped_overrides: standings.ledger.skipped_overrides(),
             skipped_subchanges: standings.ledger.skipped_subchanges(),
             hidden_task_subchanges: standings.ledger.hidden_task_subchanges(),
