@@ -21,6 +21,7 @@ import {
   isCurrentlySuperadmin,
   isSelfDemotion,
   removesSuperadminStatusViaGroups,
+  wouldLeaveNoSuperadmin,
   wouldRemoveLastSuperadmin,
   type UpdateAdminInput,
 } from '@/lib/admin-helpers';
@@ -142,11 +143,9 @@ export async function updateAdmin(adminId: number, data: UpdateAdminInput): Prom
     return { success: false, error: 'Cannot change the enabled flag of the system actor' };
   }
 
-  // WHY: prevent the last superadmin from being demoted or disabled
-  if (isCurrentlySuperadmin(target) && removesSuperadminStatusViaGroups(target, data)) {
-    if (await wouldRemoveLastSuperadmin(adminId)) {
-      return { success: false, error: 'Cannot remove the last superadmin' };
-    }
+  // One predicate for both writers, so this path and `setAdminGroups` cannot disagree on the rule.
+  if (await wouldLeaveNoSuperadmin(adminId, target, data)) {
+    return { success: false, error: 'Cannot remove the last superadmin' };
   }
 
   try {

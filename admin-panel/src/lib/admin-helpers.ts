@@ -68,6 +68,23 @@ export async function wouldRemoveLastSuperadmin(adminId: number): Promise<boolea
   return otherSupers === 0;
 }
 
+/**
+ * Whether this write would leave the system with no enabled Superadmin.
+ *
+ * WHY one predicate for both writers: `updateAdmin` edits groups inside a larger field set and
+ * `setAdminGroups` replaces them outright. Two copies of "does this keep a superadmin" is how
+ * one of them came to omit the check entirely; the caller passes whichever view of the change
+ * it holds and the rule is decided here once.
+ */
+export async function wouldLeaveNoSuperadmin(
+  adminId: number,
+  target: AdminTarget,
+  data: UpdateAdminInput,
+): Promise<boolean> {
+  if (!target || !removesSuperadminStatusViaGroups(target, data)) return false;
+  return wouldRemoveLastSuperadmin(adminId);
+}
+
 export async function buildAdminUpdateData(data: UpdateAdminInput): Promise<AdminUpdateData> {
   const updateData: AdminUpdateData = {};
   if (data.name) updateData.name = data.name;
