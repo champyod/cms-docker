@@ -3,6 +3,8 @@
 import { useState, type ReactElement } from 'react';
 import { ChevronDown, ChevronUp, Trash2, Wifi, WifiOff } from 'lucide-react';
 import { Badge } from '@/components/core/Badge';
+import { Button } from '@/components/core/Button';
+import { Input } from '@/components/core/Input';
 import { StatusPill } from '@/components/core/StatusPill';
 import type { WorkerNodeListRow } from '@/lib/worker-nodes';
 
@@ -14,9 +16,6 @@ interface WorkerNodeRowProps {
   onEdit?: (key: string, field: 'host' | 'port', value: string) => void;
 }
 
-const INPUT_CLASS =
-  'bg-background/80 border border-border rounded-md px-2.5 py-1.5 text-sm text-foreground font-mono outline-none focus:border-ring/60';
-
 function workerLabel(row: WorkerNodeListRow): string {
   return row.host || row.key;
 }
@@ -27,21 +26,26 @@ function EndpointField({ row, canManage, onEdit }: WorkerNodeRowProps): ReactEle
   }
   return (
     <>
-      <input
-        value={row.host}
-        onChange={(event) => onEdit(row.key, 'host', event.target.value)}
-        placeholder="Host (e.g., cms-worker-0)"
-        aria-label={`Host for worker ${workerLabel(row)}`}
-        className={`flex-1 min-w-0 ${INPUT_CLASS}`}
-      />
-      <input
-        value={row.port}
-        onChange={(event) => onEdit(row.key, 'port', event.target.value)}
-        type="number"
-        placeholder="26000"
-        aria-label={`Port for worker ${workerLabel(row)}`}
-        className={`w-20 ${INPUT_CLASS}`}
-      />
+      <div className="min-w-0 flex-1">
+        <Input
+          type="text"
+          value={row.host}
+          onChange={(event) => onEdit(row.key, 'host', event.target.value)}
+          placeholder="Host (e.g., cms-worker-0)"
+          aria-label={`Host for worker ${workerLabel(row)}`}
+          className="font-mono"
+        />
+      </div>
+      <div className="w-20">
+        <Input
+          type="number"
+          value={row.port}
+          onChange={(event) => onEdit(row.key, 'port', event.target.value)}
+          placeholder="26000"
+          aria-label={`Port for worker ${workerLabel(row)}`}
+          className="font-mono"
+        />
+      </div>
     </>
   );
 }
@@ -68,13 +72,15 @@ export function WorkerNodeRow(props: WorkerNodeRowProps): ReactElement {
         {live?.lagging && <Badge variant="destructive">{`${live.tasks} queued`}</Badge>}
 
         {editable && onRemove && (
-          <button
-            onClick={() => onRemove(row.key)}
+          <Button
+            variant="ghost"
+            iconOnly
+            icon={Trash2}
+            tooltip={`Remove worker ${row.host}`}
             aria-label={`Remove worker ${row.host}`}
-            className="ml-auto flex size-8 shrink-0 items-center justify-center rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
+            onClick={() => onRemove(row.key)}
+            className="ml-auto size-11 shrink-0 hover:text-destructive"
+          />
         )}
       </div>
 
@@ -90,14 +96,16 @@ export function WorkerNodeRow(props: WorkerNodeRowProps): ReactElement {
           {live.uptime && <span>up {live.uptime}</span>}
           {live.restarts > 0 && <span className="text-warning">restarts: {live.restarts}</span>}
           {live.lastLog && (
-            <button
+            <Button
+              variant="link"
+              size="sm"
+              icon={expanded ? ChevronUp : ChevronDown}
               onClick={() => setExpanded((value) => !value)}
               aria-label="Toggle worker log"
-              className="ml-auto inline-flex items-center gap-1 text-muted-foreground hover:text-foreground underline underline-offset-2"
+              className="ml-auto text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
             >
-              {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
               log
-            </button>
+            </Button>
           )}
         </div>
       )}
