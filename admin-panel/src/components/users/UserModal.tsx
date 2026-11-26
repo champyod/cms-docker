@@ -148,7 +148,6 @@ export function UserModal({ isOpen, onClose, user, contests = [], canReadContest
           formData={formData}
           updateForm={updateForm}
           fieldAccess={fieldAccess}
-          inputClassName={inputClassName}
         />
 
         <RestrictedField
