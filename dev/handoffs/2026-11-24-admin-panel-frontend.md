@@ -95,6 +95,7 @@ DONE WHEN:
 | `9340d972` | contest settings use Input and Checkbox; raw controls 173 to 168 |
 | `76463b88` | contest Tokens tab uses Select and Input; raw controls 168 to 163 |
 | `b27c6b47` | contest Limits tab uses Input and Checkbox; raw controls 163 to 158 |
+| `fa4eb413` | worker node row uses Input and Button; raw controls 158 to 154 |
 
 Backend commits by another writer are interleaved: `947168fc`, `bd6b8ba1`, `11e28781`,
 `52818b79`, `9f4564b5`. Do not touch them.
