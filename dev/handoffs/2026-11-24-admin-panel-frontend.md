@@ -97,6 +97,7 @@ DONE WHEN:
 | `b27c6b47` | contest Limits tab uses Input and Checkbox; raw controls 163 to 158 |
 | `fa4eb413` | worker node row uses Input and Button; raw controls 158 to 154 |
 | `d13045a4` | user identity fields use Input; raw controls 154 to 150 |
+| `aeeb317a` | subtask group card uses Input, Button and Select; raw controls 150 to 146 |
 
 Backend commits by another writer are interleaved: `947168fc`, `bd6b8ba1`, `11e28781`,
 `52818b79`, `9f4564b5`. Do not touch them.
