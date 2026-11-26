@@ -11,7 +11,6 @@ import { QuestionsPanel, type QuestionRow } from './contest-communications/Quest
 
 interface ContestCommunicationsProps {
   contestId: number;
-  adminId: number;
   permissionKeys?: readonly string[];
 }
 
@@ -19,9 +18,9 @@ const TAB_BASE = 'flex flex-none items-center gap-2 whitespace-nowrap px-4 py-3 
 const TAB_ACTIVE = 'border-b-2 border-primary text-primary';
 const TAB_INACTIVE = 'border-b-2 border-transparent text-muted-foreground hover:text-foreground';
 
-export function ContestCommunications({ contestId, adminId, permissionKeys = [] }: ContestCommunicationsProps): React.JSX.Element {
+export function ContestCommunications({ contestId, permissionKeys = [] }: ContestCommunicationsProps): React.JSX.Element {
   const dict = useDictionary();
-  const { activeTab, selectTab, reload, status, announcements, questions, showAnnouncementForm, announcementSubject, announcementText, replyingTo, replySubject, replyText, replySettled, setShowAnnouncementForm, setAnnouncementSubject, setAnnouncementText, setReplyingTo, setReplySubject, setReplyText, setReplySettled, handleCreateAnnouncement, handleDeleteAnnouncement, handleReply, handleIgnore } = useContestCommunications(contestId, adminId);
+  const { activeTab, selectTab, reload, status, announcements, questions, showAnnouncementForm, announcementSubject, announcementText, replyingTo, replySubject, replyText, replySettled, setShowAnnouncementForm, setAnnouncementSubject, setAnnouncementText, setReplyingTo, setReplySubject, setReplyText, setReplySettled, handleCreateAnnouncement, handleDeleteAnnouncement, handleReply, handleIgnore } = useContestCommunications(contestId);
 
   return (
     <Card className="overflow-hidden">

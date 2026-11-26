@@ -8,7 +8,7 @@ import type { PasswordKind } from '@/lib/password-format';
 
 interface ParticipationInput { id: number; hidden: boolean; unrestricted: boolean; password: string | null; users: { username: string; first_name: string; last_name: string }; }
 
-export function useParticipationEditState(isOpen: boolean, participation: ParticipationInput, adminId: number, onClose: () => void) {
+export function useParticipationEditState(isOpen: boolean, participation: ParticipationInput, onClose: () => void) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<'settings' | 'message'>('settings');
   const [formData, setFormData] = useState({ hidden: participation.hidden, unrestricted: participation.unrestricted, extra_time_minutes: 0, delay_time_minutes: 0, password: '', password_kind: 'plaintext' as PasswordKind });
@@ -69,7 +69,7 @@ export function useParticipationEditState(isOpen: boolean, participation: Partic
           failure: 'Send failed',
           description: 'The participant will see it on their contest page.',
         },
-        () => sendMessage(participation.id, adminId, messageData)
+        () => sendMessage(participation.id, messageData)
       );
       if (!result) return;
       if (result.success) {

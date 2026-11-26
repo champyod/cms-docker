@@ -12,7 +12,6 @@ interface ParticipationEditModalProps {
   isOpen: boolean;
   onClose: () => void;
   participation: { id: number; hidden: boolean; unrestricted: boolean; password: string | null; users: { username: string; first_name: string; last_name: string } };
-  adminId: number;
 }
 
 const TAB_BASE = 'flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 sm:py-2 min-h-11 sm:min-h-0 text-sm font-medium transition-colors';
@@ -28,8 +27,8 @@ function EditTabs({ activeTab, onSelect }: { activeTab: 'settings' | 'message'; 
   );
 }
 
-export function ParticipationEditModal({ isOpen, onClose, participation, adminId }: ParticipationEditModalProps) {
-  const s = useParticipationEditState(isOpen, participation, adminId, onClose);
+export function ParticipationEditModal({ isOpen, onClose, participation }: ParticipationEditModalProps) {
+  const s = useParticipationEditState(isOpen, participation, onClose);
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) s.handleClose(); }} title={`Edit: ${participation.users.username}`}>
       <EditTabs activeTab={s.activeTab} onSelect={s.setActiveTab} />

@@ -96,13 +96,13 @@ beforeEach(() => {
  */
 describe('question resolution marker in the panel', () => {
   it('accepts a marker-only answer and records it as settled by the statement', async () => {
-    const { result } = renderHook(() => useContestCommunications(4, 3), { wrapper: DictionaryWrapper });
+    const { result } = renderHook(() => useContestCommunications(4), { wrapper: DictionaryWrapper });
     await waitFor(() => expect(mocks.getAnnouncements).toHaveBeenCalledWith(4));
 
     act(() => result.current.setReplySettled(true));
     await act(async () => { await result.current.handleReply(9); });
 
-    expect(mocks.replyToQuestion).toHaveBeenCalledWith(9, 3, {
+    expect(mocks.replyToQuestion).toHaveBeenCalledWith(9, {
       reply_subject: '',
       reply_text: '',
       resolution_kind: 'settled_by_statement',
@@ -110,7 +110,7 @@ describe('question resolution marker in the panel', () => {
   });
 
   it('still refuses a reply that carries neither a body nor the marker', async () => {
-    const { result } = renderHook(() => useContestCommunications(4, 3), { wrapper: DictionaryWrapper });
+    const { result } = renderHook(() => useContestCommunications(4), { wrapper: DictionaryWrapper });
     await waitFor(() => expect(mocks.getAnnouncements).toHaveBeenCalledWith(4));
 
     await act(async () => { await result.current.handleReply(9); });
@@ -119,7 +119,7 @@ describe('question resolution marker in the panel', () => {
   });
 
   it('clears the marker once the reply lands, so the next answer is not marked by default', async () => {
-    const { result } = renderHook(() => useContestCommunications(4, 3), { wrapper: DictionaryWrapper });
+    const { result } = renderHook(() => useContestCommunications(4), { wrapper: DictionaryWrapper });
     await waitFor(() => expect(mocks.getAnnouncements).toHaveBeenCalledWith(4));
 
     act(() => result.current.setReplySettled(true));
