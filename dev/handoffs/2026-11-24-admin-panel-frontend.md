@@ -87,6 +87,7 @@ DONE WHEN:
 | `4e5807f1` | `ParticipationEditTabs` four fields use `Input` and `Textarea`; raw controls 220 to 216 |
 | `7487eb09` | `ParticipationFormFields` uses Select, Checkbox and Input; raw controls 216 to 209 |
 | `f2c75237` | `task-modal-extra` token fields use Select and Input; raw controls 209 to 204 |
+| `7324fe5b` | bulk edit sections use Select and Input with labels; raw controls 204 to 197 |
 
 Backend commits by another writer are interleaved: `947168fc`, `bd6b8ba1`, `11e28781`,
 `52818b79`, `9f4564b5`. Do not touch them.
@@ -114,13 +115,12 @@ decision, not a blind colour removal.
 - **Pixel-level measurement is blocked.** It needs an authenticated browser session, a
   fixture server, and a new dev dependency. That is an operator decision.
 - **S12 is not zero.** 197 uses in 100 files. The gate holds the line but the debt is real.
-- **Epic S12 record is stale.** It says 325; the measured count is 321.
 - **Epic lives under `docs/`.** `docs/` is end-user only by the workspace rule; this
   maintainer epic belongs under `dev/`. Moving it is a separate file-structure step.
 - **Four unhandled happy-dom errors remain** in `tests/header-palette-focus.test.tsx` and
   `tests/palette-switch-deploy.test.tsx`: `AbortError: The animation was canceled`. They
   pre-date the frontend changes and were not touched. Full suite still reports 398 files /
-  5163 tests passed.
+  5166 tests passed.
 - **Shared index.** Another writer is active in this worktree. Before every commit, run
   `git diff --staged --name-only` and confirm only your paths are present. Prefer
   `git commit -F <msg> -- <explicit paths>` so another writer's staged work cannot ride along.
