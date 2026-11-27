@@ -67,6 +67,7 @@ fn batch(evaluations: Vec<EvaluationRow>) -> ObjectWrite {
         operation: OperationType::Evaluation,
         submission_id: SubmissionId(SUBMISSION),
         dataset_id: DatasetId(DATASET),
+        archive_sandbox: false,
         result: result_row(),
         executables: Vec::new(),
         evaluations,

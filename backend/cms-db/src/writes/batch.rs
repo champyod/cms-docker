@@ -1,11 +1,11 @@
 //! The batch one object is written in, and the audit rows it must carry.
 //!
-//! [`group_by_object`] mirrors `write_results`: results are keyed by object and
-//! operation type, which is what lets the commit read a dataset and a
-//! submission result once per group instead of once per result. A batch is one
-//! object and one operation type, holding every row the statements beside it
-//! need, plus the audit rows that record who made the change and what it
-//! changed.
+//! [`group_by_object`] mirrors `write_results`: results are keyed by object,
+//! operation type and archiving flag, which is what lets the commit read a
+//! dataset and a submission result once per group instead of once per result.
+//! A batch is one object, one operation and one archiving flag, holding every
+//! row the statements beside it need, plus the audit rows that record who made
+//! the change and what it changed.
 //!
 //! Both [`group_by_object`] and [`ObjectWrite::seal`] refuse a batch with no
 //! audit row, so nothing here can be handed to the statements unrecorded.
@@ -103,6 +103,9 @@ pub struct ObjectWrite {
     /// The dataset the object was measured against, which every row in the batch
     /// carries.
     pub dataset_id: DatasetId,
+    /// Whether the operation archived its sandboxes, part of the key the same
+    /// object is grouped by.
+    pub archive_sandbox: bool,
     /// The result row the object's progress is written to.
     pub result: ResultRow,
     /// The executable set one successful compilation produced.
@@ -216,7 +219,7 @@ impl ObjectWrite {
 /// audit row, so no batch reaches the statements without the record of who made
 /// the change and what it changed.
 pub fn group_by_object(writes: &[ObjectWrite]) -> Result<Vec<ObjectWrite>, WriteError> {
-    let mut groups: BTreeMap<(OperationType, SubmissionId, DatasetId), ObjectWrite> =
+    let mut groups: BTreeMap<(OperationType, SubmissionId, DatasetId, bool), ObjectWrite> =
         BTreeMap::new();
     for write in writes {
         if write.audit.is_empty() {
@@ -225,7 +228,12 @@ pub fn group_by_object(writes: &[ObjectWrite]) -> Result<Vec<ObjectWrite>, Write
                 dataset_id: write.dataset_id,
             });
         }
-        let key = (write.operation, write.submission_id, write.dataset_id);
+        let key = (
+            write.operation,
+            write.submission_id,
+            write.dataset_id,
+            write.archive_sandbox,
+        );
         match groups.entry(key) {
             Entry::Occupied(mut found) => found.get_mut().merge(write),
             Entry::Vacant(slot) => {

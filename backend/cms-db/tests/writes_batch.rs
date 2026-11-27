@@ -114,6 +114,7 @@ fn write(operation: OperationType, testcase_id: Option<i32>, audited: bool) -> O
         operation,
         submission_id: SUBMISSION_ID,
         dataset_id: DATASET_ID,
+        archive_sandbox: false,
         result: result_row(),
         executables: if is_compilation {
             vec![executable_row()]
@@ -240,4 +241,21 @@ fn a_scored_batch_writes_its_five_score_fields_and_the_time_they_were_stamped() 
 
     assert_eq!(score.score_details.as_deref(), Some(SCORE_DETAILS));
     assert!(score.scored_at.is_some() && score.ranking_score_details.is_some());
+}
+
+#[test]
+fn writes_differing_only_by_archive_sandbox_stay_separate() {
+    let mut archived = write(OperationType::Evaluation, Some(TESTCASE_ID), true);
+    archived.archive_sandbox = true;
+    let operations = [
+        write(OperationType::Evaluation, Some(TESTCASE_ID), true),
+        archived,
+    ];
+
+    let batches = group_by_object(&operations).expect("both operations carry an audit row");
+
+    assert_eq!(batches.len(), 2);
+    assert!(!batches[0].archive_sandbox);
+    assert!(batches[1].archive_sandbox);
+    assert!(batches.iter().all(|batch| batch.audit.len() == 1));
 }
