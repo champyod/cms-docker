@@ -1410,6 +1410,31 @@ What must change before `src/cms/service/EvaluationService.py` can be removed, r
 The audit-store credentials from S-6d3p-chain belong to this slice's swap: once `cms-evaluation` is
 a binary that consumes `cms-audit`, `CMS_AUDIT_*` keys stop being dead configuration.
 
+### S-6d4 review findings (2026-11-27)
+
+The lane's library half is landed on `feat/rust-S6d4-daemon`. Two findings from the parent review, in
+severity order:
+
+**B1 — a stale worker result can overwrite a fresh invalidation (blocking).** The reference marks
+in-flight operations to ignore when it invalidates: `workerpool.py:329-341` records them per shard,
+`release_worker` hands the list back (`:286-288`), and `EvaluationService.py:582-585` drops a result
+whose operation is on that list instead of caching it. The Rust daemon has no equivalent: the queue
+holds only waiting work (`cms-evaluation/src/queue.rs`), `dequeue` in the invalidation path
+(`service/invalidate.rs:174-187`) can only remove operations that are still queued, and
+`run/work.rs:68-90` commits whatever a dispatch returns with no staleness check. So an
+`invalidate_submission` that lands while a shard is mid-operation lets that operation's write commit
+over the invalidated rows, which is the exact corruption the reference's ignore list prevents.
+
+This is not a patch to make blind: the claim has to live somewhere the dispatcher and the RPC both
+see, and the options differ in what they add (a generation counter on the result row, an in-flight
+set in the queue, or a conditional write keyed on a version the invalidation bumps). It is a design
+decision with a schema-or-code trade-off, so it is recorded here rather than guessed, and the
+compose swap does not happen until it is resolved.
+
+**B2 — `enable_worker` / `disable_worker` are authorised but uncalled.** `rpc_authorization.py:43-44`
+lists both; no Python handler and no panel code calls them. They are dead authorisation rows, so the
+deletion step removes the rows rather than porting methods nothing calls.
+
 ### S-8a: the write surface Decision A needs
 
 The operator chose A on 2026-11-25: the panel keeps its UI and calls a Rust write
