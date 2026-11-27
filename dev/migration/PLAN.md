@@ -1425,11 +1425,18 @@ holds only waiting work (`cms-evaluation/src/queue.rs`), `dequeue` in the invali
 `invalidate_submission` that lands while a shard is mid-operation lets that operation's write commit
 over the invalidated rows, which is the exact corruption the reference's ignore list prevents.
 
-This is not a patch to make blind: the claim has to live somewhere the dispatcher and the RPC both
-see, and the options differ in what they add (a generation counter on the result row, an in-flight
-set in the queue, or a conditional write keyed on a version the invalidation bumps). It is a design
-decision with a schema-or-code trade-off, so it is recorded here rather than guessed, and the
-compose swap does not happen until it is resolved.
+Three candidates, from the reference and this tree. No `submission_results` column carries a version
+or generation today (`grep -n 'version\|revision\|generation' src/cms/db/submission.py` finds only the
+licence header), so the third option needs a schema change:
+
+| Candidate | Security | Efficiency + single source | Final-state code | Future-proofing | Reversibility |
+|---|---|---|---|---|---|
+| A. In-flight set in the queue, checked before commit | parity with the reference's own mechanism | no schema; the check is one set lookup per commit | adds a claim/release pair around `process_one` | ties correctness to the queue being the only dispatcher | one revert, no migration |
+| B. Generation counter on `submission_results`, bumped on invalidation, compared before write | strongest: the database refuses a stale write even if two processes race | one extra column read per commit; the rule lives in SQL once | conditional write, no queue bookkeeping | survives multiple daemons and restarts | needs a migration to add and to drop |
+| C. Conditional commit keyed on `evaluation_tries`/`compilation_tries` already stored | no new surface | reuses existing columns | no new state at all | breaks if a retry bumps the counter for its own reason | one revert |
+
+B1 blocked the compose swap until this is chosen; the daemon's library half is landed and gated either
+way.
 
 **B2 — `enable_worker` / `disable_worker` are authorised but uncalled.** `rpc_authorization.py:43-44`
 lists both; no Python handler and no panel code calls them. They are dead authorisation rows, so the
