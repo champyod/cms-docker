@@ -1806,13 +1806,34 @@ _check_dns() {
   fi
 }
 
-# The apex of a name: the last two labels. CAA is inherited from the closest enclosing
-# set, so one record here covers every subdomain — which is why the check reads the apex
-# rather than each name the deployment serves.
-_caa_apex() {
-  local name="${1:-}"
+# CAA is inherited from the closest enclosing set (RFC 8659 §3): the first name found while
+# walking up from the host owns the policy. The apex therefore cannot be derived from a label
+# count — this deployment serves <host>.<site>.<school>.ac.th, where "the last two labels" is
+# ac.th, a zone that belongs to no one here. WHICH name governs is found by walking up; an
+# earlier version guessed "last two labels" and reported the wrong zone on the real name while
+# passing its own tests, whose fixtures happened to be two labels deep.
+#
+# Prints "<zone>|<values>" for the first level that publishes CAA, or "|<top>" when no level
+# does. Values are newline-joined in "<zone>|<v1>\n<v2>" form only through _caa_policy_state.
+_caa_effective() {
+  local name="${1:-}" labels total i cand values
   [[ -n "$name" ]] || return 1
-  printf '%s' "$name" | awk -F. 'NF >= 2 { print $(NF-1) "." $NF }'
+  total="$(printf '%s' "$name" | awk -F. '{ print NF }')"
+  # Stop at two labels: below that is a TLD, whose CAA nobody here can publish, and the
+  # walk only needs to reach the school zone that actually governs the deployment.
+  for (( i = 0; i <= total - 2; i++ )); do
+    cand="$(printf '%s' "$name" | awk -F. -v i="$i" '{ s = ""; for (j = i + 1; j <= NF; j++) s = s (s == "" ? "" : ".") $j; print s }')"
+    values="$(_caa_published_values "$cand")"
+    if [[ -n "$values" ]]; then
+      printf '%s|%s' "$cand" "$values"
+      return 0
+    fi
+    # The top of the walk is reported back so a MISSING verdict can name where a record
+    # would have to go rather than leaving the operator to guess.
+    labels="$cand"
+  done
+  printf '|%s' "$labels"
+  return 1
 }
 
 # Prints the CAA issue/issuewild values published for a name, one per line, lowercased.
@@ -1833,39 +1854,41 @@ _caa_published_values() {
 # produce no records, and reporting either as a published policy would turn the one check
 # that exists into a false green.
 _caa_policy_state() {
-  local name="$1" apex values
-  apex="$(_caa_apex "$name")"
-  [[ -n "$apex" ]] || { printf 'NOAPEX|no domain configured'; return 1; }
+  local name="$1" found zone values top
+  [[ -n "${name:-}" ]] || { printf 'NOAPEX|no domain configured'; return 1; }
 
   if ! command -v dig >/dev/null 2>&1; then
     printf 'UNKNOWN|dig is not installed, so the CAA record was not read'
     return 1
   fi
-  if ! dig +short CAA "$apex" >/dev/null 2>&1; then
-    printf 'UNKNOWN|the CAA lookup for %s did not complete' "$apex"
+  if ! dig +short CAA "${name}" >/dev/null 2>&1; then
+    printf 'UNKNOWN|the CAA lookup for %s did not complete' "$name"
     return 1
   fi
 
-  values="$(_caa_published_values "$apex")"
-  if [[ -z "$values" ]]; then
-    printf 'MISSING|%s publishes no CAA record, so any public CA may issue for it — publish issue/issuewild for %s at the DNS provider' \
-      "$apex" "${CAA_ISSUER:-letsencrypt.org}"
+  found="$(_caa_effective "$name")" || true
+  zone="${found%%|*}"
+  values="${found#*|}"
+  if [[ -z "$zone" ]]; then
+    top="${found#*|}"
+    printf 'MISSING|no CAA record at %s or above it, so any public CA may issue — publish issue/issuewild for %s there' \
+      "$top" "${CAA_ISSUER:-letsencrypt.org}"
     return 1
   fi
 
   # An empty issue value (";") forbids every CA, which reads as present but blocks renewal.
   if printf '%s\n' "$values" | grep -qx ';'; then
-    printf 'EMPTY|%s publishes an empty issue value, which forbids every CA and blocks renewal' "$apex"
+    printf 'EMPTY|%s publishes an empty issue value, which forbids every CA and blocks renewal' "$zone"
     return 1
   fi
 
   if printf '%s\n' "$values" | grep -qxF "${CAA_ISSUER:-letsencrypt.org}"; then
-    printf 'PASS|%s allows %s' "$apex" "${CAA_ISSUER:-letsencrypt.org}"
+    printf 'PASS|%s allows %s' "$zone" "${CAA_ISSUER:-letsencrypt.org}"
     return 0
   fi
 
   printf 'MISMATCH|%s does not allow %s (published: %s)' \
-    "$apex" "${CAA_ISSUER:-letsencrypt.org}" "$(printf '%s' "$values" | tr '\n' ' ')"
+    "$zone" "${CAA_ISSUER:-letsencrypt.org}" "$(printf '%s' "$values" | tr '\n' ' ')"
   return 1
 }
 
@@ -1876,7 +1899,9 @@ _caa_policy_state() {
 # command it was reporting on would be worse than the gap.
 _log_caa_policy() {
   local name="${1:-$CERT_LINEAGE_DOMAIN}" verdict state detail apex
-  apex="$(_caa_apex "$name")"
+  # The label names where the policy was found, which is the fact an operator acts on.
+  apex="$(_caa_effective "$name" 2>/dev/null | cut -d'|' -f1)" || true
+  [[ -n "$apex" ]] || apex="$name"
   verdict="$(_caa_policy_state "$name")" || true
   state="${verdict%%|*}"
   detail="${verdict#*|}"
