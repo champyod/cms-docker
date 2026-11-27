@@ -1284,20 +1284,18 @@ runs remains untouched; the accepted gate is serial. The daemon still needs the
 `WorkerOutput`-to-`ObjectWrite` mapping, audit receipt handling, service loop,
 user-test inputs/builders, binary and compose entrypoint.
 
-### S-6d3o (planned): invalidate evaluations and score on compilation commit
+### S-6d3o (landed): invalidate evaluations and score on compilation commit
 
-Scope: a compilation commit clears the old evaluations and score together with the executable set,
-as `src/cms/db/submission.py:587-615` does, leaving `scored_at` unchanged. The board's `done` row was
-false — the only branch commit is a claim, not code.
-Likely paths: `backend/cms-db/src/writes/{commit,statements,shapes}.rs`,
-`backend/cms-db/tests/commit_live.rs`, `backend/cms-evaluation/src/service.rs`.
-Done when: a live test on the frozen schema recompiles an object with scored rows and asserts the
-evaluation rows and five score columns are cleared while `scored_at` survives; a control omitting
-the invalidation fails that test, then is restored byte-identically.
-Perspectives touched: P-11 (replay idempotency), P-12 (batch equals single-row path), P-32 `n/a — no audit
-path changes`; P-43 `n/a — deletion belongs to the later daemon/compose-swap slice`.
-Deletion status: capability slice; `src/cms/db/submission.py` stays. The Python EvaluationService
-file is deleted only by the later daemon/compose-swap slice, not by this one.
+A Compilation group now deletes the old executable set and evaluations, then clears all five score
+fields unconditionally while leaving `scored_at` untouched. `CLEAR_SCORE_FOR_COMPILATION` lives in
+`backend/cms-db/src/writes/statements.rs`; the scored()-predicated scoring invalidation helper stays
+separate because it answers a different question. Lane tip `cdbed520`, merged `0a08040c`.
+
+Parent evidence: `cargo fmt --check` and `cargo clippy -p cms-db -- -D warnings` exit 0; the new live
+target passes 2/2, the existing commit target 7/7, and the full serial `cms-db` suite passes. Removing
+the evaluation delete, the score clear, or the `scored_at` preservation each fails a named case; putting
+the scored() predicate back fails the partial-score case. The new test target keeps `commit_live.rs`
+at 249 code lines. Python stays until the daemon/compose-swap slice.
 
 ### S-6d3p-map (planned, unblocked): pure operation-to-write mapping
 
