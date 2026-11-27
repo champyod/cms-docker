@@ -8,6 +8,7 @@
 //! are enforced in `files` and `results`; the columns and their domains are here.
 
 mod files;
+mod inputs;
 mod invalidate;
 mod model;
 mod name;
@@ -17,6 +18,7 @@ mod results;
 mod schema;
 
 pub use files::{UserTestFiles, UserTestManagers};
+pub use inputs::{user_test_inputs, UserTestInputs, UserTestInputsError};
 pub use model::{UserTest, UserTestExecutable, UserTestFile, UserTestManager};
 pub use name::{Filename, FilenameError, FilenameSchema};
 pub use referential::ReferentialError;

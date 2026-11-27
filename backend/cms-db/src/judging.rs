@@ -91,7 +91,7 @@ pub enum JudgingReadError {
 }
 
 /// The `(dataset_id, filename, digest)` rows of one dataset's managers.
-const MANAGERS_BY_DATASET: &str = "\
+pub(crate) const MANAGERS_BY_DATASET: &str = "\
     SELECT filename, digest FROM managers WHERE dataset_id = $1";
 
 /// The `(submission_id, filename, digest)` rows of one submission's files.
@@ -136,7 +136,7 @@ fn digest_map(
 }
 
 /// Runs one column-exact named-file query with its bound keys.
-async fn named_files(
+pub(crate) async fn named_files(
     connection: &mut PgConnection,
     sql: &'static str,
     keys: &[i32],
@@ -151,7 +151,7 @@ async fn named_files(
 }
 
 /// Reads the one contest's languages a participation reaches.
-async fn contest_languages(
+pub async fn contest_languages(
     connection: &mut PgConnection,
     participation_id: i32,
 ) -> Result<Vec<String>, JudgingReadError> {

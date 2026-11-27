@@ -81,7 +81,7 @@ impl From<BuildError> for SubmissionJobError {
 ///
 /// A [`DigestMap`] is a [`std::collections::BTreeMap`], so collecting into one
 /// gives the deterministic filename order the worker body is pinned to.
-fn as_digest_map(files: &std::collections::BTreeMap<String, FileDigest>) -> DigestMap {
+pub(crate) fn as_digest_map(files: &std::collections::BTreeMap<String, FileDigest>) -> DigestMap {
     files
         .iter()
         .map(|(name, digest)| (name.clone(), digest.as_str().to_owned()))
