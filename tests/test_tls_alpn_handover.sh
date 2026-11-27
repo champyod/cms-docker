@@ -72,8 +72,12 @@ case "${1:-}" in
     done
     if [[ -n "$host" && -n "$name" ]]; then
       mkdir -p "${host}/certificates"
-      printf 'CERT\n' > "${host}/certificates/${name}.crt"
-      printf 'KEY\n' > "${host}/certificates/${name}.key"
+      # A real self-signed certificate rather than the word CERT: the install now
+      # normalises the chain it copies, and a placeholder has no certificate block to
+      # keep. The key stays a placeholder — nothing here reads it.
+      openssl req -x509 -newkey rsa:2048 -nodes -days 30 -subj "/CN=example.org" \
+        -keyout "${host}/certificates/${name}.key" \
+        -out "${host}/certificates/${name}.crt" 2>/dev/null
     fi
     ;;
 esac
@@ -181,8 +185,8 @@ if [[ -f "${dest}/fullchain.pem" && -f "${dest}/privkey.pem" ]]; then
 else
   no "the certificate lands in live/<lineage>/"
 fi
-if [[ "$(head -n1 "${dest}/fullchain.pem" 2>/dev/null)" == "CERT" ]] \
-   && [[ "$(head -n1 "${dest}/privkey.pem" 2>/dev/null)" == "KEY" ]]; then
+if [[ "$(head -n1 "${dest}/fullchain.pem" 2>/dev/null)" == "-----BEGIN CERTIFICATE-----" ]] \
+   && [[ "$(head -n1 "${dest}/privkey.pem" 2>/dev/null)" == "-----BEGIN PRIVATE KEY-----" ]]; then
   ok "both files carry what lego produced"
 else
   no "both files carry what lego produced"

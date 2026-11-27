@@ -50,8 +50,12 @@ install_cert() {
   chmod 600 "${dest}/privkey.pem"
   if [[ "$kind" == "lego" ]]; then
     mkdir -p "${dir}/config/letsencrypt/lego/certificates"
-    printf 'LEGO\n' > "${dir}/config/letsencrypt/lego/certificates/example.org.crt"
-    printf 'LEGO KEY\n' > "${dir}/config/letsencrypt/lego/certificates/example.org.key"
+    # A real certificate, not the word LEGO: the install normalises the chain it copies,
+    # and a placeholder holds no certificate block to keep.
+    openssl req -x509 -nodes -days "$days" -newkey rsa:2048 \
+      -keyout "${dir}/config/letsencrypt/lego/certificates/example.org.key" \
+      -out "${dir}/config/letsencrypt/lego/certificates/example.org.crt" \
+      -subj "/CN=example.org" 2>/dev/null
   fi
 }
 

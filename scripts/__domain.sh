@@ -26,6 +26,8 @@ cd "$REPO_ROOT"
 
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/__lib/common.sh"
+# One definition of what a served chain may contain, shared by every writer below.
+source "${SCRIPT_DIR}/__lib/cert_chain.sh"
 # The panel SSE definition, shared with the route table and the funnel-mirror template.
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/__nginx_sse.sh"
@@ -1139,6 +1141,11 @@ _setup_provided_cert() {
   else
     mkdir -p "$dest_dir"
     cp -f "$CERT_PATH" "${dest_dir}/fullchain.pem"
+    # A provided fullchain can repeat an intermediate; the proxy would then send that
+    # certificate twice on every handshake. Normalising here keeps the served chain to one
+    # of each without touching the file the operator supplied.
+    cert_chain_normalise "${dest_dir}/fullchain.pem" \
+      || log_die "provided certificate ${CERT_PATH} holds no certificate" 1
     cp -f "$KEY_PATH" "${dest_dir}/privkey.pem"
     chmod 600 "${dest_dir}/privkey.pem"
     log_info "provided certificates installed to $dest_dir"

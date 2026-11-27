@@ -186,6 +186,11 @@ acme_install_lego_cert() {
   dest_dir="$(_cert_store_dir)/live/${CERT_LINEAGE_DOMAIN}"
   mkdir -p "$dest_dir"
   cp -f "$src_cert" "${dest_dir}/fullchain.pem"
+  # lego's .crt can carry an issuer chain that repeats a CA already in it, and a repeated
+  # CA is sent again on every handshake. Normalising here is what keeps the served chain
+  # to one of each, before the proxy reloads and starts offering it.
+  cert_chain_normalise "${dest_dir}/fullchain.pem" \
+    || log_die "installed ${dest_dir}/fullchain.pem holds no certificate" 1
   cp -f "$src_key" "${dest_dir}/privkey.pem"
   chmod 600 "${dest_dir}/privkey.pem"
   log_info "TLS-ALPN-01 certificate installed into ${dest_dir}"
