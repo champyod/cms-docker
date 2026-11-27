@@ -108,13 +108,22 @@ Multiple `issue` lines mean OR (any listed may issue).
 
 ### 4. Validate
 
-```bash
-dig CAA grader.example.com +short
-# expect: 0 issue "letsencrypt.org"
+`CAA_ENABLED` records intent; it publishes nothing. The record is a fact about the zone, so
+the tooling reads live DNS and names the apex it read:
 
-# Try a dry-run issuance after publishing — LE checks CAA before issuing
-./scripts/__domain.sh renew --dry-run   # will fail fast if CAA mismatch
+```bash
+dig +short CAA example.org            # expect the issue/issuewild lines above
+dig +short CAA example.org @1.1.1.1   # compare a public resolver
+
+scripts/__domain.sh status            # one CAA row: PASS, WARN (missing|mismatch), UNKNOWN
+scripts/__domain.sh preflight         # the same verdict as one numbered check
+
+# a dry-run issuance after publishing — LE checks CAA before issuing
+./scripts/__domain.sh renew --dry-run
 ```
+
+A lookup that does not complete reports `UNKNOWN`, never `PASS`: a missing `dig` or an
+unreachable resolver must not read as a published policy.
 
 ### 5. Reporting
 
@@ -126,7 +135,9 @@ dig CAA grader.example.com +short
 
 - [ ] Confirm who can publish DS at `.ac.th` parent
 - [ ] Agree on ZSK/KSK roll calendar and on-call for emergency DS roll
-- [ ] Confirm CAA is supported at DNS host (some .ac.th hosts strip CAA)
+- [ ] Confirm CAA is supported at DNS host (some .ac.th hosts strip CAA) — measured on the
+      production apex 2026-11-27: authoritative servers answer CAA with `NOERROR` and zero
+      records, so the record is simply absent; that answer is the gap, not a provider limit
 - [ ] Test in staging DNS zone before promoting to `grader.example.com`
 
 ---

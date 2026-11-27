@@ -317,7 +317,7 @@ VAULT_ADDR = "http://vault:8200" # url; Vault server address domain setup reads 
 VAULT_TOKEN = ""                # secret; Vault access token — auto-generated hex32 when empty
 VAULT_PATH = "secret/cms"       # str; Vault KV path the CMS secrets are stored under
 DNSSEC_ENABLED = 0              # enum:0,1; requires DNS control
-CAA_ENABLED = 0                 # enum:0,1; 1 = publish a DNS CAA record restricting issuance to CAA_ISSUER — set at your DNS provider (docs/dnssec-caa-guide.md)
+CAA_ENABLED = 0                 # enum:0,1; 1 = intend to restrict issuance to CAA_ISSUER — records intent only, the record is published at the DNS provider (docs/dnssec-caa-guide.md)
 CAA_ISSUER = "letsencrypt.org"  # str; certificate authority allowed to issue for the domain when CAA_ENABLED=1
 CLOUDFLARE_API_TOKEN = ""       # secret; DNS-01 only — zone:DNS:Edit token, turned into certbot's cloudflare.ini
 WAF_ENABLED = 0                 # enum:0,1; warning: tune WAF_RULE_ENGINE to DetectionOnly for a week first

@@ -471,11 +471,16 @@ _log_optional_features() {
   else
     log_info "Vault disabled (set VAULT_ENABLED=1 in config.toml [infra] to enable; alternative: scripts/__secrets-rotate.sh)"
   fi
-  if [[ "${DNSSEC_ENABLED:-0}" == "1" ]] || [[ "${CAA_ENABLED:-0}" == "1" ]]; then
-    log_info "DNSSEC=${DNSSEC_ENABLED} CAA=${CAA_ENABLED} (issuer=$CAA_ISSUER) — see docs/dnssec-caa-guide.md"
+  # WHY the CAA clause names the live read: this line used to say "CAA disabled", which
+  # read as "no CAA control is claimed" while the status and preflight rows then reported
+  # whether the apex actually carries the record. The flag records intent to publish at the
+  # DNS provider; the record itself is a fact about the zone, so the row reads DNS.
+  if [[ "${DNSSEC_ENABLED:-0}" == "1" ]]; then
+    log_info "DNSSEC=${DNSSEC_ENABLED} — pinned by the computer centre; see docs/dnssec-caa-guide.md"
   else
-    log_info "DNSSEC disabled (set DNSSEC_ENABLED=1 to enable) — CAA disabled (set CAA_ENABLED=1, CAA_ISSUER=letsencrypt.org)"
+    log_info "DNSSEC disabled (set DNSSEC_ENABLED=1 to enable)"
   fi
+  log_info "CAA intent=${CAA_ENABLED} issuer=$CAA_ISSUER — the record itself is read from live DNS"
   if [[ "${MTLS_WORKERS_ENABLED:-0}" == "1" ]]; then
     log_info "mTLS workers enabled (CA=$MTLS_CA_CERT) — firewall should restrict RPC to mTLS only"
   else
@@ -1423,6 +1428,9 @@ cmd_status() {
   _status_cert_expiry
   echo ""
 
+  _log_caa_policy
+  echo ""
+
   _status_renewal_timer
   echo ""
 
@@ -1719,7 +1727,10 @@ cmd_preflight() {
   # 8. Domain paths
   _check_domain_paths && { pass=$((pass + 1)); } || { warn=$((warn + 1)); }
 
-  # 9. Funnel still works
+  # 9. CAA policy published
+  _check_caa && { pass=$((pass + 1)); } || { warn=$((warn + 1)); }
+
+  # 10. Funnel still works
   _check_funnel && { pass=$((pass + 1)); } || { warn=$((warn + 1)); }
 
   echo ""
@@ -1793,6 +1804,99 @@ _check_dns() {
     printf 'WARN (not resolved)\n'
     return 1
   fi
+}
+
+# The apex of a name: the last two labels. CAA is inherited from the closest enclosing
+# set, so one record here covers every subdomain — which is why the check reads the apex
+# rather than each name the deployment serves.
+_caa_apex() {
+  local name="${1:-}"
+  [[ -n "$name" ]] || return 1
+  printf '%s' "$name" | awk -F. 'NF >= 2 { print $(NF-1) "." $NF }'
+}
+
+# Prints the CAA issue/issuewild values published for a name, one per line, lowercased.
+# Empty output means the zone answered with no such record: NOERROR and nothing, which is
+# the state that leaves issuance unrestricted rather than the state of a broken lookup.
+_caa_published_values() {
+  local name="$1"
+  command -v dig >/dev/null 2>&1 || return 1
+  dig +short CAA "$name" 2>/dev/null \
+    | sed -nE 's/^[0-9]+[[:space:]]+(issue|issuewild)[[:space:]]+"?([^"]*)"?[[:space:]]*$/\2/p' \
+    | tr '[:upper:]' '[:lower:]'
+}
+
+# The verdict for one name, printed as "STATE|detail" so status and preflight render the
+# same fact without duplicating the decision.
+#
+# WHY a failed lookup is not a pass: "dig is missing" and "the resolver timed out" both
+# produce no records, and reporting either as a published policy would turn the one check
+# that exists into a false green.
+_caa_policy_state() {
+  local name="$1" apex values
+  apex="$(_caa_apex "$name")"
+  [[ -n "$apex" ]] || { printf 'NOAPEX|no domain configured'; return 1; }
+
+  if ! command -v dig >/dev/null 2>&1; then
+    printf 'UNKNOWN|dig is not installed, so the CAA record was not read'
+    return 1
+  fi
+  if ! dig +short CAA "$apex" >/dev/null 2>&1; then
+    printf 'UNKNOWN|the CAA lookup for %s did not complete' "$apex"
+    return 1
+  fi
+
+  values="$(_caa_published_values "$apex")"
+  if [[ -z "$values" ]]; then
+    printf 'MISSING|%s publishes no CAA record, so any public CA may issue for it — publish issue/issuewild for %s at the DNS provider' \
+      "$apex" "${CAA_ISSUER:-letsencrypt.org}"
+    return 1
+  fi
+
+  # An empty issue value (";") forbids every CA, which reads as present but blocks renewal.
+  if printf '%s\n' "$values" | grep -qx ';'; then
+    printf 'EMPTY|%s publishes an empty issue value, which forbids every CA and blocks renewal' "$apex"
+    return 1
+  fi
+
+  if printf '%s\n' "$values" | grep -qxF "${CAA_ISSUER:-letsencrypt.org}"; then
+    printf 'PASS|%s allows %s' "$apex" "${CAA_ISSUER:-letsencrypt.org}"
+    return 0
+  fi
+
+  printf 'MISMATCH|%s does not allow %s (published: %s)' \
+    "$apex" "${CAA_ISSUER:-letsencrypt.org}" "$(printf '%s' "$values" | tr '\n' ' ')"
+  return 1
+}
+
+# One rendered row, so status and preflight cannot drift in wording or verdict.
+#
+# WHY the `|| true` on the assignment: the verdict returns non-zero for a gap, which is the
+# signal `_check_caa` counts, and callers here run under `set -e`; a reader that aborted the
+# command it was reporting on would be worse than the gap.
+_log_caa_policy() {
+  local name="${1:-$CERT_LINEAGE_DOMAIN}" verdict state detail apex
+  apex="$(_caa_apex "$name")"
+  verdict="$(_caa_policy_state "$name")" || true
+  state="${verdict%%|*}"
+  detail="${verdict#*|}"
+  case "$state" in
+    PASS)     printf '  %-30s' "CAA ($apex):";   printf 'PASS (%s)\n' "$detail" ;;
+    MISSING)  printf '  %-30s' "CAA ($apex):";   printf 'WARN (missing — %s)\n' "$detail" ;;
+    MISMATCH|EMPTY)
+              printf '  %-30s' "CAA ($apex):";   printf 'WARN (mismatch — %s)\n' "$detail" ;;
+    NOAPEX)   printf '  %-30s' "CAA:";           printf 'WARN (no domain configured)\n' ;;
+    *)        printf '  %-30s' "CAA ($apex):";   printf 'UNKNOWN (%s)\n' "$detail" ;;
+  esac
+}
+
+# A published policy is reported; a gap is a warning rather than a failure, because the
+# deployment still serves traffic while issuance is unrestricted.
+_check_caa() {
+  local verdict
+  verdict="$(_caa_policy_state "${CERT_LINEAGE_DOMAIN:-}")"
+  _log_caa_policy "${CERT_LINEAGE_DOMAIN:-}"
+  [[ "${verdict%%|*}" == "PASS" ]]
 }
 
 _check_http80() {
