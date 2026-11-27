@@ -12,8 +12,6 @@ pub const USER_TEST: i32 = 50;
 pub const TESTCASE: i32 = 60;
 
 pub const SCHEMA: &str = "evaluation_operation_live";
-pub const SECRET: &str = "operation test secret";
-
 /// The digest every input and output column carries.
 pub fn digest(byte: u8) -> String {
     format!("{byte:040x}")

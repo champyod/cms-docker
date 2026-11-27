@@ -7,9 +7,11 @@ use sqlx::postgres::PgConnection;
 use sqlx::{AssertSqlSafe, Connection};
 
 pub use crate::schema::{
-    create, digest, CONTEST, DATASET, PARTICIPATION, SCHEMA, SECRET, SUBMISSION, TASK, TESTCASE,
-    USER_TEST,
+    create, digest, CONTEST, DATASET, PARTICIPATION, SCHEMA, SUBMISSION, TASK, TESTCASE, USER_TEST,
 };
+
+/// The secret shared by the scripted worker and the evaluation daemon.
+pub const SECRET: &str = "operation test secret";
 
 const URL_ENV: &str = "CMS_DB_TEST_URL";
 const LIVE_REQUIRED: &str = "CMS_DB_TEST_URL must name a scratch PostgreSQL database";
