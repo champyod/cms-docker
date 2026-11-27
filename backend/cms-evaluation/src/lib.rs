@@ -16,6 +16,7 @@ pub mod operation;
 pub mod plan;
 pub mod queue;
 pub mod result;
+pub mod result_mapping;
 pub mod runner;
 pub mod service;
 pub mod sweep;
@@ -33,6 +34,7 @@ pub use plan::{
 };
 pub use queue::{EvaluationOperation, EvaluationQueue, QueueStatusEntry};
 pub use result::{worker_output, RunStats, WorkerOutput, WorkerOutputError};
+pub use result_mapping::{map_result, MapError};
 pub use runner::{run_submission, RunnerError};
 pub use service::Evaluation;
 pub use sweep::{contest_operations, submission_operations_by_id, user_test_operations_by_id};

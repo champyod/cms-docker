@@ -66,6 +66,8 @@ pub struct WorkerOutput {
     pub executables: DigestMap,
     /// The run's measurements, `None` when `plus` is null or absent.
     pub stats: Option<RunStats>,
+    /// The tombstone flag in `plus`, false when absent or null.
+    pub tombstone: bool,
 }
 
 /// Why a returned worker body could not be read into a [`WorkerOutput`].
@@ -266,6 +268,18 @@ fn read_stats(body: &Map<String, Value>) -> Result<Option<RunStats>, WorkerOutpu
     }
 }
 
+/// `plus.tombstone` is a boolean flag, false when `plus` holds none.
+fn read_tombstone(body: &Map<String, Value>) -> Result<bool, WorkerOutputError> {
+    let Some(Value::Object(plus)) = present(body, JobKey::PLUS.as_str()) else {
+        return Ok(false);
+    };
+    match plus.get("tombstone") {
+        None | Some(Value::Null) => Ok(false),
+        Some(Value::Bool(flag)) => Ok(*flag),
+        Some(_) => Err(wrong("tombstone", "a JSON boolean")),
+    }
+}
+
 /// Reads a returned worker job body into the fields a result writer stores.
 ///
 /// `success` is required. Every other result key defaults to `None` or an empty
@@ -290,5 +304,6 @@ pub fn worker_output(body: &Map<String, Value>) -> Result<WorkerOutput, WorkerOu
         sandbox_digests: digest_map(body, JobKey::SANDBOX_DIGESTS.as_str())?,
         executables: digest_map(body, JobKey::EXECUTABLES.as_str())?,
         stats: read_stats(body)?,
+        tombstone: read_tombstone(body)?,
     })
 }

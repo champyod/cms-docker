@@ -105,6 +105,7 @@ pub fn compilation_batch(executables: Vec<ExecutableRow>) -> ObjectWrite {
         operation: OperationType::Compilation,
         submission_id: SubmissionId(SUBMISSION),
         dataset_id: DatasetId(DATASET),
+        archive_sandbox: false,
         result: result_row(),
         executables,
         evaluations: Vec::new(),
