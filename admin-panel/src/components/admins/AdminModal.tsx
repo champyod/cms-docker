@@ -10,7 +10,6 @@ import {
 import { Dialog } from '@/components/core/Dialog';
 import { InlineAlert } from '@/components/core/InlineAlert';
 import { toast } from 'sonner';
-import type { PasswordKind } from '@/lib/password-format';
 import { ACTION_PERMISSIONS, hasEffectivePermission, resolveEffectivePermissions } from '@/lib/permission-engine';
 import type { AdminWithLogin } from '@/lib/prisma-selects';
 import { getFieldAccess } from '@/lib/field-permissions';
@@ -43,7 +42,6 @@ export function AdminModal({ isOpen, onClose, onSuccess, initialData, callerPerm
   const [formData, setFormData] = useState<AdminFormState>(EMPTY_ADMIN_FORM);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [passwordKind, setPasswordKind] = useState<PasswordKind>('bcrypt');
 
   const [groups, setGroups] = useState<GroupWithPermissions[]>([]);
   const [selectedGroupIds, setSelectedGroupIds] = useState<number[]>([]);
@@ -60,7 +58,6 @@ export function AdminModal({ isOpen, onClose, onSuccess, initialData, callerPerm
     setRenderedSession(sessionKey);
     setFormData(initialData ? formFromAdmin(initialData) : EMPTY_ADMIN_FORM);
     setError('');
-    setPasswordKind('bcrypt');
     setGroups([]);
     setSelectedGroupIds([]);
     setOriginalGroupIds([]);
@@ -169,7 +166,7 @@ export function AdminModal({ isOpen, onClose, onSuccess, initialData, callerPerm
     setLoading(true);
     setError('');
     try {
-      const account = await persistAdminAccount({ initialData, formData, passwordKind, callerPermissionSet });
+      const account = await persistAdminAccount({ initialData, formData, callerPermissionSet });
       if (!account.success || account.adminId === null) {
         setError(account.error || 'Operation failed');
         return;
@@ -212,9 +209,7 @@ export function AdminModal({ isOpen, onClose, onSuccess, initialData, callerPerm
           canCreate={canCreate}
           fieldAccess={fieldAccess}
           canRevealPassword={canRevealPassword}
-          passwordKind={passwordKind}
           updateForm={updateForm}
-          onPasswordKind={setPasswordKind}
         />
 
         <AdminAccessEditor

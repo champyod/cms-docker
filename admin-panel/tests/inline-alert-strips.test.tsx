@@ -157,7 +157,7 @@ const FAILURE_CASES = [
   {
     label: 'participation edit', message: 'Participation rejected', scale: REGULAR_SCALE,
     raise: (): void => {
-      render(<ParticipationEditModal isOpen onClose={NOOP} adminId={2} participation={{ id: 4, hidden: false, unrestricted: false, password: null, users: { username: 'ada', first_name: 'A', last_name: 'B' } }} />);
+      render(<ParticipationEditModal isOpen onClose={NOOP} participation={{ id: 4, hidden: false, unrestricted: false, password: null, users: { username: 'ada', first_name: 'A', last_name: 'B' } }} />);
       fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
     },
   },

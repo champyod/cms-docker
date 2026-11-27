@@ -64,8 +64,11 @@ refresh_restart() {
   flags="$(compose_flags)"
   # The front door is its own profile; requesting it without the contest services
   # would not enable nginx-proxy at all.
+  # WHY recreate, not restart: a compose-file change (a new mount, template or
+  # env) is applied only when the container is recreated; restart reuses the old
+  # container and keeps the missing file.
   # shellcheck disable=SC2086
-  (cd "$REPO_ROOT" && $cmd $flags --profile core --profile contest --profile proxy restart nginx-proxy)
+  (cd "$REPO_ROOT" && $cmd $flags --profile core --profile contest --profile proxy up -d --no-deps --force-recreate nginx-proxy)
 }
 
 refresh_reload() {

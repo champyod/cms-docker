@@ -200,4 +200,24 @@ describe('saving a partial appearance', () => {
     expect(written.update).toHaveProperty('theme');
     expect(written.update.theme).toBe(Prisma.JsonNull);
   });
+
+  it('refuses an access mode that is not one of the two stored values', async () => {
+    mocks.configFindMany.mockResolvedValue([]);
+
+    const result = await updateRankingAppearance({ accessMode: 'weird' } as never);
+
+    expect(result).toEqual({ success: false, error: 'accessMode must be public or protected' });
+    expect(mocks.settingsUpsert).not.toHaveBeenCalled();
+  });
+});
+
+describe('reading an invalid stored access mode', () => {
+  it('treats it as protected rather than public', async () => {
+    mocks.configFindMany.mockResolvedValue([]);
+    mocks.settingsFindUnique.mockResolvedValue(settingsRow({ access_mode: 'Protected' }));
+
+    const appearance = await getRankingAppearance();
+
+    expect(appearance.accessMode).toBe('protected');
+  });
 });

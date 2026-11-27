@@ -6,6 +6,7 @@ import { ensurePermission, getPermissions } from '@/lib/permissions';
 import { ACTION_PERMISSIONS } from '@/lib/permission-engine';
 import { stripDisallowedFields } from '@/lib/field-permissions';
 import { recordAudit } from '@/lib/audit';
+import { NOT_AUTHENTICATED, resolveActingAdminId } from '@/lib/server/acting-admin';
 
 export async function getAnnouncements(contestId: number) {
   await ensurePermission('announcement:list');
@@ -16,12 +17,14 @@ export async function getAnnouncements(contestId: number) {
   });
 }
 
-export async function createAnnouncement(contestId: number, adminId: number, data: {
+export async function createAnnouncement(contestId: number, data: {
   subject: string;
   text: string;
 }) {
   await ensurePermission(ACTION_PERMISSIONS.createAnnouncement);
   await ensurePermission('announcement:publish');
+  const adminId = await resolveActingAdminId();
+  if (adminId === null) return { success: false, error: NOT_AUTHENTICATED };
   const permissions = await getPermissions();
   const allowed = stripDisallowedFields('announcements', {
     subject: data.subject,

@@ -1,0 +1,15 @@
+# admin-panel/prisma/roles/grants.tsv — the admins slice of the WS-75 column grants Columns: role <TAB> table <TAB> privilege <TAB> columns <TAB> sequence privilege SELECT | UPDATE | INSERT | DELETE columns comma-separated, no spaces.
+cms_admin_login	admins	SELECT	id,username,authentication,enabled	-
+cms_admin_read_people	admins	SELECT	id,username,name,enabled,last_login_at	-
+cms_admin_write_people	admins	SELECT	id,username	-
+cms_admin_write_people	admins	UPDATE	name,username	-
+cms_admin_account_security	admins	SELECT	id,username,name,enabled,authentication	-
+cms_admin_account_security	admins	UPDATE	name,username,authentication,enabled	-
+cms_admin_account_security	admins	INSERT	username,authentication,enabled,name	admins_id_seq
+cms_admin_account_security	admins	DELETE	-	-
+# WHY no admin_groups UPDATE: membership is replaced DELETE+INSERT, and PostgreSQL has no column form for DELETE.
+cms_admin_account_security	admin_groups	SELECT	id,admin_id,group_id	-
+cms_admin_account_security	admin_groups	INSERT	admin_id,group_id	admin_groups_id_seq
+cms_admin_account_security	admin_groups	DELETE	-	-
+# WHY all groups columns: the ORM selects the mapped set, so an omitted one fails as a column error.
+cms_admin_account_security	groups	SELECT	id,name,description,is_seeded,created_at	-

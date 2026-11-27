@@ -372,14 +372,9 @@ class LoginHandler(ContestHandler):
         """
         cookie_name = self.contest.name + "_login"
         if cookie is None:
-            self.clear_cookie(cookie_name)
+            self.clear_login_cookie(cookie_name)
             return
-        self.set_secure_cookie(
-            cookie_name,
-            cookie,
-            expires_days=None,
-            max_age=config.contest_web_server.cookie_duration,
-        )
+        self.set_login_cookie(cookie_name, cookie)
 
     def _refuse_locked_out(self, refusal: LoginRefusal) -> None:
         """Answer an attempt from a locked-out account or address.
@@ -423,7 +418,7 @@ class LogoutHandler(ContestHandler):
     """
     @multi_contest
     def post(self):
-        self.clear_cookie(self.contest.name + "_login")
+        self.clear_login_cookie(self.contest.name + "_login")
         self.redirect(self.contest_url())
 
 

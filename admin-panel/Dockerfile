@@ -35,10 +35,11 @@ RUN bun install --frozen-lockfile
 # stage copies into the image, so a transitive dependency it resolves without the
 # app's own overrides ships the version the app deliberately replaced. deepmerge-ts
 # reaches prisma through @prisma/config > c12, where the range resolves to 7.1.5
-# against the 8.0.0 the app pins over it.
+# against the 8.0.0 the app pins over it; effect resolves to 3.21.0 and carries
+# CVE-2026-121707.
 RUN mkdir -p /prisma-cli \
  && cd /prisma-cli \
- && echo '{"private":true,"overrides":{"deepmerge-ts":"8.0.0"}}' > package.json \
+ && echo '{"private":true,"overrides":{"deepmerge-ts":"8.0.0","effect":"3.22.1"}}' > package.json \
 # WHY jose is installed here as well: the tsx-run scripts (the permission seed, the audit-log
 # verifier, the waiver export) resolve their imports with bare node, not through the Next bundler —
 # and the actor chain reaches session-token.ts, which imports `jose`. Without it the seed died at
@@ -87,8 +88,8 @@ FROM node:24-bookworm-slim@sha256:55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b346054f
 # containerd (43 MB), runc and docker-proxy anyway, plus the buildx/model/rootless
 # plugins the previous version of this file deleted afterwards. Installing the CLI
 # alone leaves nothing to delete and no daemon to scan.
-ARG DOCKER_CLI_VERSION=5:29.9.3-1~debian.12~bookworm
-ARG COMPOSE_VERSION=5.7.0-1~debian.12~bookworm
+ARG DOCKER_CLI_VERSION=5:29.10.0-1~debian.12~bookworm
+ARG COMPOSE_VERSION=5.8.0-1~debian.12~bookworm
 ARG DOCKER_GPG_DIGEST=1500c1f56fa9e26b9b8f42452a553675796ade0807cdce11975eb98170b3a570
 RUN apt-get update && \
     apt-get -y dist-upgrade && \

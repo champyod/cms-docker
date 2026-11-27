@@ -38,6 +38,19 @@ fn defaults_to_the_first_shard() {
 }
 
 #[test]
+fn session_cookies_are_secure_by_default() {
+    let config = RankingConfig::from_pairs(pairs(&[])).expect("defaults parse");
+    assert!(config.cookie_secure);
+}
+
+#[test]
+fn local_http_can_explicitly_disable_secure_cookies() {
+    let config = RankingConfig::from_pairs(pairs(&[("COOKIE_SECURE", "false")]))
+        .expect("the local override parses");
+    assert!(!config.cookie_secure);
+}
+
+#[test]
 fn keeps_the_configured_shard() {
     let config =
         RankingConfig::from_pairs(pairs(&[("RANKING_SHARD", "3")])).expect("a valid shard");
@@ -98,4 +111,27 @@ fn a_blank_path_disables_the_route_it_feeds() {
     let config = RankingConfig::from_pairs(pairs(&[("RANKING_STATIC_DIR", "  ")]))
         .expect("blank is tolerated");
     assert_eq!(config.static_dir, None);
+}
+
+#[test]
+fn trusted_proxies_default_to_none() {
+    let config = RankingConfig::from_pairs(pairs(&[])).expect("defaults parse");
+    assert!(config.trusted_proxies.is_empty());
+}
+
+#[test]
+fn trusted_proxies_carry_networks_and_hosts() {
+    let config = RankingConfig::from_pairs(pairs(&[(
+        "RANKING_TRUSTED_PROXIES",
+        "198.51.100.0/24, 2001:db8::1",
+    )]))
+    .expect("a valid list");
+    assert_eq!(config.trusted_proxies.len(), 2);
+}
+
+#[test]
+fn a_trust_all_proxy_is_refused() {
+    let error = RankingConfig::from_pairs(pairs(&[("RANKING_TRUSTED_PROXIES", "0.0.0.0/0")]))
+        .expect_err("a trust-all network is rejected");
+    assert!(matches!(error, ConfigError::InvalidTrustedProxy(_)));
 }

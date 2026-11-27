@@ -1,12 +1,11 @@
 import { revalidatePath } from 'next/cache';
 import { recordAudit } from '@/lib/audit';
 import { invalidateAccessCache } from '@/lib/permissions';
-import { prisma } from '@/lib/prisma';
+import { getAdminSecurityClient } from '@/lib/prisma';
 import { buildAdminUpdateData, type UpdateAdminInput } from '@/lib/admin-helpers';
 
 async function recordPasswordChangeAudit(adminId: number): Promise<void> {
-  // Why: a credential change is its own privilege (admin:password:update), so it gets its own verb;
-  // only the fact that the credential changed is recorded — never the value or its stored hash.
+  // Its own privilege and its own verb; only the fact of the change is recorded, never the value.
   await recordAudit({
     verb: 'admin:password:update',
     entity: 'admin',
@@ -20,12 +19,14 @@ export async function handleAdminUpdateWrite(
   adminId: number,
   allowed: Record<string, unknown>,
 ): Promise<void> {
-  const beforeAdmin = await prisma.admins.findUnique({
+  const security = getAdminSecurityClient();
+  const beforeAdmin = await security.admins.findUnique({
     where: { id: adminId },
     select: { name: true, enabled: true, username: true },
   });
   const updateData = await buildAdminUpdateData(allowed as unknown as UpdateAdminInput);
-  await prisma.admins.update({ where: { id: adminId }, data: updateData });
+  // Explicit select: the role cannot read last_login_at, so a bare update's RETURNING would be refused.
+  await security.admins.update({ where: { id: adminId }, data: updateData, select: { id: true } });
   await recordAudit({
     verb: 'admin:update',
     entity: 'admin',

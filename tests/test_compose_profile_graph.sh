@@ -45,13 +45,15 @@ any_key_re = re.compile(r"^    [A-Za-z0-9_.-]+:")
 services = {}
 name = None
 block = None
+last_dep = None
 for raw in open(sys.argv[1], encoding="utf-8"):
     line = raw.rstrip("\n")
     found = service_re.match(line)
     if found:
         name = found.group(1)
-        services[name] = {"profiles": set(), "depends": set()}
+        services[name] = {"profiles": set(), "depends": set(), "soft": set()}
         block = None
+        last_dep = None
         continue
     if name is None:
         continue
@@ -67,25 +69,39 @@ for raw in open(sys.argv[1], encoding="utf-8"):
         continue
     if item and block == "depends":
         services[name]["depends"].add(item.group(1))
+        last_dep = item.group(1)
         continue
     mapped = mapping_re.match(line)
     if mapped and block == "depends":
         services[name]["depends"].add(mapped.group(1))
+        last_dep = mapped.group(1)
+        continue
+    # WHY this is read: a dependency declared `required: false` is not a hard edge. Compose
+    # omits it from the model instead of rejecting the project, so counting it as hard would
+    # report a broken graph that Compose accepts — and a check whose answer disagrees with
+    # Compose is worse than no check.
+    if "required: false" in line and block == "depends" and last_dep is not None:
+        services[name]["soft"].add(last_dep)
         continue
     if any_key_re.match(line):
         block = None
+        last_dep = None
 
 for name, info in sorted(services.items()):
-    print("{}\t{}\t{}".format(
+    hard = sorted(info["depends"] - info["soft"])
+    print("{}\t{}\t{}\t{}".format(
         name,
         ",".join(sorted(info["profiles"])) or "default",
-        ",".join(sorted(info["depends"])),
+        ",".join(hard),
+        ",".join(sorted(info["soft"])),
     ))
 PY
 
 declare -A SVC_PROFILES=()
 declare -A SVC_DEPS=()
-while IFS=$'\t' read -r svc profs deps; do
+# The parser drops `required: false` edges before printing, so the third column is already
+# the hard set; a fourth column of soft names would be a list nothing reads.
+while IFS=$'\t' read -r svc profs deps _soft; do
   [[ -n "$svc" ]] || continue
   SVC_PROFILES["$svc"]="$profs"
   SVC_DEPS["$svc"]="$deps"
@@ -177,6 +193,48 @@ if grep -qE '\$\(COMPOSE_CMD\).*\$\(MONITOR_UP_PROFILES\)' "$MAKEFILE"; then
 else
   no "the infra target uses MONITOR_UP_PROFILES"
 fi
+
+echo "each stack constant reaches every profile its own service needs"
+# WHY this is a second check and not the same one: the loop above proves that the profile
+# sets spelled in the Makefile validate TODAY. It cannot see the other direction — that a
+# constant still covers what its service requires. `nginx-proxy` depends on
+# `contest-web-server` in the contest profile, so a recreate is valid only when `contest`
+# is enabled beside `proxy`; the host that recreated the container alone got
+# `service "nginx-proxy" depends on undefined service "contest-web-server"`. Add a dependency
+# to a stack front door later and this is what notices the constant went stale.
+constant_closure() {
+  local constant="$1" wanted dep
+  wanted="${STACK_SERVICE[$constant]:-}"
+  [[ -n "$wanted" ]] || return 0
+  for dep in ${SVC_DEPS[$wanted]//,/ }; do
+    [[ -n "$dep" ]] || continue
+    ( in_model "$(profiles_of "$constant")" "$dep" "" ) && continue
+    no "$constant leaves $wanted->$dep outside its profiles"
+    return 1
+  done
+  ok "$constant covers every hard dependency of $wanted"
+  return 0
+}
+
+profiles_of() {
+  local constant="$1" stack out=""
+  for stack in ${CONSTANTS[$constant]//--profile/ }; do
+    [[ -n "$stack" ]] && out="${out:+$out,}$stack"
+  done
+  printf '%s' "$out"
+}
+
+declare -A STACK_SERVICE=(
+  [PROXY_UP_PROFILES]=nginx-proxy
+  [ADMIN_UP_PROFILES]=admin-web-server
+  [CONTEST_UP_PROFILES]=contest-web-server
+  [MONITOR_UP_PROFILES]=monitor
+)
+
+for constant in PROXY_UP_PROFILES ADMIN_UP_PROFILES CONTEST_UP_PROFILES MONITOR_UP_PROFILES; do
+  [[ -n "${CONSTANTS[$constant]:-}" ]] || continue
+  constant_closure "$constant"
+done
 
 rm -f "${TMPDIR:-/tmp}/cms-profile-graph.txt"
 printf '\n%d passed, %d failed\n' "$pass" "$fail"

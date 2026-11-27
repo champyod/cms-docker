@@ -39,7 +39,7 @@ from functools import wraps
 import collections
 import typing
 
-from cms.db.session import Session
+from cms.db.session import AdminSecuritySessionGen, Session
 
 try:
     collections.MutableMapping
@@ -170,7 +170,6 @@ def parse_ip_networks(
 
 
 # In-process cache for effective permission sets, keyed by admin id.
-# Each entry is (expiry_monotonic, frozenset_of_keys).
 _effective_perms_cache: dict[int, tuple[float, frozenset[str]]] = {}
 # WHY: bound staleness from out-of-process writes while still coalescing bursts.
 _CACHE_TTL_SECONDS: float = 5.0
@@ -341,8 +340,7 @@ def require_permission(
     _R = typing.TypeVar("_R")
     _T = typing.TypeVar("_T", bound=BaseHandler)
 
-    # Normalise upfront: a plain string is iterable, so the request path must
-    # never iterate over the raw argument.
+    # Normalise upfront: a plain string is iterable, so the request path must never iterate over the raw argument.
     permissions: tuple[str, ...] = (
         (permission,) if isinstance(permission, str) else tuple(permission)
     )
@@ -353,8 +351,7 @@ def require_permission(
         @wraps(func)
         @tornado.web.authenticated
         def newfunc(self: _T, *args: _P.args, **kwargs: _P.kwargs):
-            # AUTHENTICATED only requires a valid session (handled by
-            # @tornado.web.authenticated above).
+            # AUTHENTICATED only requires a valid session (handled by @tornado.web.authenticated above).
             if BaseHandler.AUTHENTICATED in permissions:
                 return func(self, *args, **kwargs)
 
@@ -389,9 +386,7 @@ class BaseHandler(CommonRequestHandler):
     child of this class.
 
     """
-    # Backward-compat aliases for existing handler code that references
-    # these class attributes. They now map to registry keys checked
-    # against the effective permission set resolved from the DB.
+    # Backward-compat aliases for existing handler code that references these class attributes.
     PERMISSION_ALL = "all:all"
     PERMISSION_MESSAGING = "message:send"
     AUTHENTICATED = "authenticated"
@@ -437,6 +432,25 @@ class BaseHandler(CommonRequestHandler):
                 "Operation successful.", "")
             return True
 
+    def admin_security_session(self) -> AdminSecuritySessionGen:
+        """Open the cms_admin_account_security write session; reads stay on self.sql_session."""
+        return AdminSecuritySessionGen()
+
+    def try_commit_admin_security(self, session: Session) -> bool:
+        """Commit an admin-account write without touching self.sql_session."""
+        try:
+            session.commit()
+        except IntegrityError as error:
+            self.service.add_notification(
+                make_datetime(),
+                "Operation failed.", "%s" % error)
+            return False
+        else:
+            self.service.add_notification(
+                make_datetime(),
+                "Operation successful.", "")
+            return True
+
     def get_current_user(self) -> Admin | None:
         """Gets the current admin from cookies.
 
@@ -457,8 +471,7 @@ class BaseHandler(CommonRequestHandler):
             self.service.auth_handler.clear()
             return None
 
-        # WHY: templates and handlers read capabilities off the admin object,
-        # so resolve the group/override set once per request.
+        # WHY: templates and handlers read capabilities off the admin object, so resolve the group/override set once per request.
         admin.effective_permissions = get_effective_permissions(
             admin.id, self.sql_session
         )
@@ -519,14 +532,9 @@ class BaseHandler(CommonRequestHandler):
         params["contest"] = self.contest
         params["url"] = self.url
         params["xsrf_form_html"] = self.xsrf_form_html()
-        # FIXME These objects provide too broad an access: their usage
-        # should be extracted into with narrower-scoped parameters.
+        # FIXME These objects provide too broad an access: their usage should be extracted into with narrower-scoped parameters.
         params["config"] = config
-        # WHY every AWS page carries the credits: AGPL-13 requires the offer of
-        # the Corresponding Source to reach the users interacting with this
-        # server, so the sidebar needs the deployment's own source URL, which a
-        # self-hosted fork configures, and the licence identity, which must not
-        # be typed into a template where it can drift from the credits file.
+        # WHY every AWS page carries the credits: AGPL-13 requires the source offer to reach users.
         params["credits"] = load_credits()
         params["handler"] = self
         if self.current_user is not None:
@@ -540,7 +548,6 @@ class BaseHandler(CommonRequestHandler):
                 .filter(Question.ignored.is_(False))\
                 .count()
         # TODO: not all pages require all these data.
-        # TODO: use a better sorting method.
         params["contest_list"] = self.sql_session.query(Contest).order_by(Contest.name).all()
         params["task_list"] = self.sql_session.query(Task).order_by(Task.name).all()
         params["user_list"] = self.sql_session.query(User).order_by(User.username).all()
@@ -555,9 +562,7 @@ class BaseHandler(CommonRequestHandler):
                 "Uncaught exception (%r) while processing a request: %s",
                 exc_info[1], ''.join(traceback.format_exception(*exc_info)))
 
-        # Most of the handlers raise a 404 HTTP error before r_params
-        # is defined. If r_params is not defined we try to define it
-        # here, and if it fails we simply return a basic textual error notice.
+        # Most of the handlers raise a 404 HTTP error before r_params is defined.
         if self.r_params is None:
             try:
                 self.r_params = self.render_params()
@@ -571,8 +576,7 @@ class BaseHandler(CommonRequestHandler):
 
     get_string_list = argument_reader(parse_string_list, empty=[])
 
-    # When a checkbox isn't active it's not sent at all, making it
-    # impossible to distinguish between missing and False.
+    # When a checkbox isn't active it's not sent at all, making it impossible to distinguish between missing and False.
     def get_bool(self, dest: dict, name: str):
         """Parse a boolean.
 
@@ -737,16 +741,9 @@ class BaseHandler(CommonRequestHandler):
             which is represented as a value of None in dest.
 
         """
-        # The admin leaving the password field empty could mean one of
-        # two things: they want the password to be unset (this applies
-        # to participations only and it means they inherit the user's
-        # password) or, if a password was set and it was hashed, they
-        # want to keep using that old password. We distinguish between
-        # the two essentially by looking at the method: an empty
-        # plaintext means "unset", an empty hashed means "keep".
+        # An empty password field means either "keep the stored hash" or "unset it"; the branches below decide.
 
-        # Find out whether a password was set and whether it was
-        # plaintext or hashed.
+        # Find out whether a password was set and whether it was plaintext or hashed.
         if old_password is not None:
             try:
                 old_method, _ = parse_authentication(old_password)
@@ -761,25 +758,17 @@ class BaseHandler(CommonRequestHandler):
 
         # If a password is given, we use that.
         if len(password) > 0:
-            # WHY 400 and not a 500 from hash_password: the form no longer offers
-            # a plaintext method, so reaching this with one means a stale page or
-            # a hand-made request. The admin gets told the choice is refused
-            # instead of a traceback, and the refused method is never stored.
+            # WHY 400: a bad method name is the caller's input error, not a server failure.
             try:
                 dest["password"] = hash_password(password, method)
             except ValueError as exc:
                 raise tornado.web.HTTPError(400, str(exc)) from exc
-        # If the password was set and was hashed, and the admin kept
-        # the method unchanged and didn't specify anything, they must
-        # have meant to keep the old password unchanged.
+        # A hashed password with an unchanged method and an empty field means "keep the stored hash".
         elif old_method is not None and old_method != "plaintext" \
                 and method == old_method:
-            # Since the content of dest overwrites the current values
-            # of the participation, by not adding anything to dest we
-            # cause the current values to be kept.
+            # Passing no key leaves the existing authentication untouched.
             pass
-        # Otherwise the fact that the password is empty means that the
-        # admin wants the password to be unset.
+        # Otherwise the fact that the password is empty means that the admin wants the password to be unset.
         elif allow_unset:
             dest["password"] = None
         # Or that they really mean the password to be the empty string.
@@ -811,10 +800,7 @@ class BaseHandler(CommonRequestHandler):
         if self.r_params is None:
             self.r_params = self.render_params()
 
-        # A page showing paginated submissions can use these
-        # parameters: total number of submissions, submissions to
-        # display in this page, index of the current page, total
-        # number of pages.
+        # A page showing paginated submissions can use these parameters
         self.r_params["submission_count"] = count
         self.r_params["submissions"] = \
             query.slice(offset, offset + page_size).all()

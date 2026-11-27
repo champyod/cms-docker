@@ -20,8 +20,10 @@ source "${SCRIPT_DIR}/__lib/common.sh"
 
 EXAMPLE="${REPO_ROOT}/config.toml.example"
 DERIVED_SOURCE="${REPO_ROOT}/config/cms.sample.toml"
+GEN_SYNC="${REPO_ROOT}/scripts/__config_sync.sh"
 [ -f "$EXAMPLE" ] || log_die "missing $EXAMPLE" 1
 [ -f "$DERIVED_SOURCE" ] || log_die "missing $DERIVED_SOURCE" 1
+[ -f "$GEN_SYNC" ] || log_die "missing $GEN_SYNC" 1
 
 # Variables that are intentionally NOT config-driven. Keep this list short and justified.
 ALLOW=(
@@ -38,6 +40,17 @@ derived_source_key() {
     TRUSTED_SANDBOX_MAX_PROCESSES) printf '%s' trusted_sandbox_max_processes ;;
     TRUSTED_SANDBOX_MAX_TIME_S) printf '%s' trusted_sandbox_max_time_s ;;
     TRUSTED_SANDBOX_MAX_MEMORY_KIB) printf '%s' trusted_sandbox_max_memory_kib ;;
+    *) return 1 ;;
+  esac
+}
+
+# Four compose names come from config sync emitters, not config.toml.example.
+generated_env_emitter() {
+  case "$1" in
+    LOG_SERVICE_ADDR) printf '%s' "printf 'LOG_SERVICE_ADDR=%s\\n'" ;;
+    LOG_DIR) printf '%s' "printf 'LOG_DIR=%s\\n'" ;;
+    RESOURCE_SERVICE_ADDR) printf '%s' "printf 'RESOURCE_SERVICE_ADDR=%s\\n'" ;;
+    CMS_SERVICES) printf '%s' "printf 'CMS_SERVICES=%s\\n'" ;;
     *) return 1 ;;
   esac
 }
@@ -63,6 +76,12 @@ rc=0
 while IFS= read -r var; do
   [ -n "$var" ] || continue
   if grep -qx "$var" <<<"$config_keys"; then continue; fi
+  if emitter="$(generated_env_emitter "$var")"; then
+    if grep -Fq -- "$emitter" "$GEN_SYNC"; then continue; fi
+    log_warn "compose uses \${${var}} but scripts/__config_sync.sh has no emitter ${emitter}"
+    rc=1
+    continue
+  fi
   if source_key="$(derived_source_key "$var")"; then
     if sandbox_source_has_key "$source_key"; then continue; fi
     log_warn "compose uses \${${var}} but config/cms.sample.toml has no [sandbox] ${source_key}"

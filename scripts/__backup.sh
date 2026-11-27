@@ -242,7 +242,12 @@ list_backup_timestamps() {
 delete_backup_set() {
   local ts="$1"
   local f
-  local removed=0
+  # Mark before deleting: a failed manifest update must leave the files in place, not a
+  # manifest that names files the rotation removed.
+  manifest_mark_pruned "$MANIFEST_FILE" "$ts" || {
+    log_warn "Rotation: manifest update failed for $ts — files kept"
+    return 1
+  }
   for f in "${BACKUP_DB_DIR}/cmsdb-${ts}.dump" "${BACKUP_DB_DIR}/cmsdb-${ts}.dump.sha256" \
            "${BACKUP_DB_DIR}/audit-log-${ts}.dump" "${BACKUP_DB_DIR}/audit-log-${ts}.dump.sha256"; do
     if [[ -f "$f" ]]; then
@@ -255,15 +260,8 @@ delete_backup_set() {
         return 1
       fi
       log_info "Rotation: removed $f"
-      removed=1
     fi
   done
-  # WHY the mark lives here and not in the caller: all three rotation rules delete through this
-  # function, so a rule added later is marked without being touched, and a set whose files were
-  # already gone is not re-stamped on every later rotation.
-  if (( removed == 1 )); then
-    manifest_mark_pruned "$MANIFEST_FILE" "$ts"
-  fi
 }
 
 apply_rotation() {
@@ -424,7 +422,7 @@ manifest_seed() {
   local seeded
   seeded="$(mktemp "$(dirname -- "$manifest")/.manifest.XXXXXX")"
   printf '[]\n' > "$seeded"
-  mv -- "$seeded" "$manifest"
+  command mv -f -- "$seeded" "$manifest"
 }
 
 # manifest_append <manifest> <ts> <db_sha256> <pg_version> <db_bytes>
@@ -479,7 +477,7 @@ manifest_append() {
   fi
 
   # atomic write: the merged file is renamed over the manifest in the same directory
-  if ! mv -- "$merged" "$manifest"; then
+  if ! command mv -f -- "$merged" "$manifest"; then
     rm -f -- "$prev" "$entry_file" "$merged"
     log_warn "could not replace the manifest at $manifest"
     send_discord "❌ **Backup Failed** — manifest not updated: replace failed at \`${manifest}\` — ts \`${ts}\`" 16711680 "true"
@@ -498,12 +496,10 @@ manifest_mark_pruned() {
   local manifest="$1"
   local ts="$2"
 
-  # WHY a warning instead of a return code: rotation exists to reclaim disk, and a stale record
-  # is not a lost backup — the files it names are already gone, so there is nothing to restore
-  # that the mark would have saved. Rotation continues and the run keeps its dump.
+  # A failure here stops rotation before it deletes anything.
   if ! command -v jq >/dev/null 2>&1; then
     log_warn "jq not found — manifest entry ${ts} stays unmarked as pruned"
-    return 0
+    return 1
   fi
   if [[ ! -f "$manifest" ]]; then
     return 0
@@ -517,7 +513,7 @@ manifest_mark_pruned() {
   # and a rename across filesystems is a copy that a concurrent reader can observe half-written.
   if ! staged="$(mktemp "${dir}/.manifest.pruned.XXXXXX" 2>/dev/null)"; then
     log_warn "could not stage the pruned manifest next to $manifest — entry ${ts} stays unmarked"
-    return 0
+    return 1
   fi
 
   # WHY pruned_at keeps its first value: the fact being recorded is when the files stopped
@@ -536,13 +532,13 @@ manifest_mark_pruned() {
     # this function exists to keep.
     rm -f -- "$staged"
     log_warn "could not mark ${ts} pruned in ${manifest} — manifest left unchanged"
-    return 0
+    return 1
   fi
 
-  if ! mv -- "$staged" "$manifest"; then
+  if ! command mv -f -- "$staged" "$manifest"; then
     rm -f -- "$staged"
     log_warn "could not replace the manifest at ${manifest} — entry ${ts} stays unmarked"
-    return 0
+    return 1
   fi
   log_info "Rotation: manifest entry ${ts} marked pruned"
 }

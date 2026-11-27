@@ -1,6 +1,7 @@
 use std::collections::HashMap;
+use std::net::SocketAddr;
 
-use axum::extract::{Form, State};
+use axum::extract::{ConnectInfo, Form, State};
 use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Redirect, Response};
 
@@ -9,7 +10,8 @@ use crate::auth::{captcha, lockout, password, session};
 use crate::config::CaptchaProvider;
 use crate::http::{refuse, Refusal};
 use crate::store::{
-    load_admin_permissions, load_admin_user, touch_last_login, AdminUser, RANKING_READ_PERMISSION,
+    load_admin_permissions, load_admin_user, sessions, touch_last_login, AdminUser,
+    RANKING_READ_PERMISSION,
 };
 use crate::AppState;
 
@@ -29,6 +31,7 @@ struct AttemptFacts<'a> {
 /// prerequisites for a login that means anything, and neither has a safe fallback.
 pub async fn submit(
     State(state): State<AppState>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
     Form(fields): Form<HashMap<String, String>>,
 ) -> Response {
@@ -43,9 +46,26 @@ pub async fn submit(
     if username.is_empty() || password.is_empty() {
         return Redirect::to("/login?error=empty").into_response();
     }
-    let address = client_address(&headers);
-    let account_key = lockout::account_key(&username, &address);
+    let address = client_address(&headers, peer.ip(), &state.config().trusted_proxies);
     let address_key = lockout::address_key(&address);
+    if !lockout::username_within_limit(&username) {
+        let facts = AttemptFacts {
+            username: &username,
+            address: &address,
+            ua: headers
+                .get(header::USER_AGENT)
+                .and_then(|value| value.to_str().ok()),
+        };
+        if let Some(response) =
+            enforce_throttle(&state, counter, &fields, None, &address_key, &facts).await
+        {
+            return response;
+        }
+        record_failure(counter, None, &address_key, &facts).await;
+        eprintln!("cms-ranking: refused oversized username from {address}");
+        return Redirect::to("/login?error=credentials").into_response();
+    }
+    let account_key = lockout::account_key(&username, &address);
     let facts = AttemptFacts {
         username: &username,
         address: &address,
@@ -53,15 +73,22 @@ pub async fn submit(
             .get(header::USER_AGENT)
             .and_then(|value| value.to_str().ok()),
     };
-    if let Some(response) =
-        enforce_throttle(&state, counter, &fields, &account_key, &address_key, &facts).await
+    if let Some(response) = enforce_throttle(
+        &state,
+        counter,
+        &fields,
+        Some(&account_key),
+        &address_key,
+        &facts,
+    )
+    .await
     {
         return response;
     }
     match authenticate(&state, &username, &password).await {
         Ok(Some(user)) => accept(&state, counter, &secret, user, &account_key, &address_key).await,
         Ok(None) => {
-            record_failure(counter, &account_key, &address_key, &facts).await;
+            record_failure(counter, Some(&account_key), &address_key, &facts).await;
             Redirect::to("/login?error=credentials").into_response()
         }
         Err(refusal) => refusal.response(),
@@ -73,7 +100,7 @@ async fn enforce_throttle(
     state: &AppState,
     counter: &Counter,
     fields: &HashMap<String, String>,
-    account_key: &str,
+    account_key: Option<&str>,
     address_key: &str,
     facts: &AttemptFacts<'_>,
 ) -> Option<Response> {
@@ -139,9 +166,16 @@ async fn authenticate(
     };
     match password::verify(&user.authentication, password) {
         Ok(true) => {}
-        // A malformed stored row is not a wrong password, so it is refused loudly
-        // rather than counted against the operator trying to get in.
-        Err(error) => return Err(Refusal(error.to_string())),
+        // A malformed stored row is not a wrong password, but the caller must not learn
+        // that: it takes the same generic refusal and the same failure counter, while the
+        // reason is kept for the operator in the service log.
+        Err(error) => {
+            eprintln!(
+                "cms-ranking: unusable stored credential for admin {}: {error}",
+                user.id
+            );
+            return Ok(None);
+        }
         Ok(false) => return Ok(None),
     }
     let permissions = load_admin_permissions(db.pool(), user.id)
@@ -166,15 +200,31 @@ async fn accept(
 ) -> Response {
     let keys = vec![account_key.to_string(), address_key.to_string()];
     let _ = counter.clear(&keys).await;
-    if let Some(db) = state.db() {
-        let _ = touch_last_login(db.pool(), user.id).await;
+    let Some(db) = state.db() else {
+        return refuse("no database is configured");
+    };
+    let _ = touch_last_login(db.pool(), user.id).await;
+    let session_id = match session::new_id() {
+        Ok(id) => id,
+        Err(error) => return refuse(&error.to_string()),
+    };
+    if let Err(error) = sessions::insert(
+        db.pool(),
+        &session_id,
+        user.id,
+        &user.username,
+        session::TTL_SECONDS,
+    )
+    .await
+    {
+        return refuse(&error.to_string());
     }
-    let token = match session::issue(secret, &user.username, now()) {
+    let token = match session::issue(secret, &user.username, &session_id, now()) {
         Ok(token) => token,
         Err(error) => return refuse(&error.to_string()),
     };
     let mut response = Redirect::to("/").into_response();
-    if let Ok(value) = session::set_cookie(&token, false).parse() {
+    if let Ok(value) = session::set_cookie(&token, state.config().cookie_secure).parse() {
         response.headers_mut().append(header::SET_COOKIE, value);
     }
     response
@@ -182,13 +232,13 @@ async fn accept(
 
 async fn standing(
     counter: &Counter,
-    account_key: &str,
+    account_key: Option<&str>,
     address_key: &str,
 ) -> Result<(lockout::Verdict, u32), String> {
-    let account = counter
-        .read(account_key)
-        .await
-        .map_err(|error| error.to_string())?;
+    let account = match account_key {
+        Some(key) => counter.read(key).await.map_err(|error| error.to_string())?,
+        None => None,
+    };
     let address = counter
         .read(address_key)
         .await
@@ -203,20 +253,30 @@ async fn standing(
 
 async fn record_failure(
     counter: &Counter,
-    account_key: &str,
+    account_key: Option<&str>,
     address_key: &str,
     facts: &AttemptFacts<'_>,
 ) {
-    let _ = counter.record_failure(account_key, lockout::WINDOW).await;
-    let _ = counter.record_failure(address_key, lockout::WINDOW).await;
     let entry = attempt_entry(facts);
-    let _ = counter
-        .record_attempt(
-            &lockout::attempt_account_key(facts.username, facts.address),
-            &entry,
-            lockout::WINDOW,
-        )
-        .await;
+    if let Some(account_key) = account_key {
+        let _ = counter.record_failure(account_key, lockout::WINDOW).await;
+        let _ = counter
+            .record_identity(
+                &lockout::metadata_key_for(account_key),
+                facts.username,
+                facts.address,
+                lockout::WINDOW,
+            )
+            .await;
+        let _ = counter
+            .record_attempt(
+                &lockout::attempt_account_key(facts.username, facts.address),
+                &entry,
+                lockout::WINDOW,
+            )
+            .await;
+    }
+    let _ = counter.record_failure(address_key, lockout::WINDOW).await;
     let _ = counter
         .record_attempt(
             &lockout::attempt_address_key(facts.address),

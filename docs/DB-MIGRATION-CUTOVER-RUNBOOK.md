@@ -17,7 +17,7 @@ How to take the production database from the pre-RBAC schema onto the Prisma-man
 - **One target schema, two starting points.** A fresh install runs `cmsInitDB` (26 tables, 5 enums, 5 domains, 46 CHECK constraints); an upgrade skips `cmsInitDB` because the `contests` table already exists. Both paths then run the same guarded migrations and converge on the identical schema with identical grants.
 - The 6 RBAC tables — `permissions`, `groups`, `group_permissions`, `admin_groups`, `admin_permission_overrides`, `audit_log` — are created by the migration history only.
 - Every application table ends with ROW LEVEL SECURITY **enabled and forced**. `_prisma_migrations` (Prisma's own ledger) is the only table in `public` without RLS.
-- Exactly two database roles: `cmsuser` (owner, demoted) and `cms_backup` (BYPASSRLS, member of `cmsuser`, used by `pg_dump`). On the current production database `cms_backup` does not exist yet — it is created during this upgrade.
+- Exactly two database roles: `cmsuser` (owner, demoted) and `cms_backup` (BYPASSRLS, SELECT-only, no membership in `cmsuser`, used by `pg_dump`). On the current production database `cms_backup` does not exist yet — it is created during this upgrade.
 - The 5 `permission_*` boolean columns on `admins` are captured to `cms_legacy._legacy_admin_permissions`, backfilled into group memberships, then dropped. **Forward-only:** there is no in-place undo; rollback means restoring the pre-upgrade dump (§6).
 - The old and new admin panels cannot run against the same schema. This is a hard cutover — schedule a maintenance window.
 
@@ -150,7 +150,7 @@ Run from the repo root. `psql` examples use the default names; substitute `POSTG
       JOIN pg_roles r ON r.oid=m.member  AND r.rolname='cms_backup'
       JOIN pg_roles g ON g.oid=m.roleid  AND g.rolname='cmsuser';"
    ```
-   Expected: two rows — `cms_backup | t | f | t` and `cmsuser | t | f | f` — and membership count `1`.
+   Expected: two rows — `cms_backup | t | f | t` and `cmsuser | t | f | f` — and membership count `0`. The role bootstrap revokes the old owner membership (`GRANT cmsuser TO cms_backup`, which made the backup credential owner-equivalent) and refuses to report success while it survives; a `1` here means the one-time superuser revoke has not run.
 
 4. **Migration ledger — 11 finished rows.**
    ```bash
@@ -248,7 +248,7 @@ bash scripts/__restore.sh backups/db/cmsdb-<timestamp>.dump --force  # live rest
 
 Then re-verify row counts against the pre-upgrade values and log in.
 
-**The permission rollback record:** `cms_legacy._legacy_admin_permissions` is deliberately retained after the upgrade — no migration drops it, and the drop migration explicitly preserves it. It holds the pre-migration boolean values for every admin (7 rows on the production dataset) and is the authoritative record of who had what before the group mapping. Backups include it: the backup role reaches the `cms_legacy` schema through its membership in `cmsuser`. A rollback via dump brings the boolean columns back with their original values.
+**The permission rollback record:** `cms_legacy._legacy_admin_permissions` is deliberately retained after the upgrade — no migration drops it, and the drop migration explicitly preserves it. It holds the pre-migration boolean values for every admin (7 rows on the production dataset) and is the authoritative record of who had what before the group mapping. Backups include it: the backup role reads the `cms_legacy` schema through the SELECT granted in `20261120121500_backup_legacy_grants` (WS-76 revoked the owner membership that used to carry that read). A rollback via dump brings the boolean columns back with their original values.
 
 ## 7. Known asymmetries
 

@@ -22,7 +22,7 @@
 -- WHY the RLS guards ride in this file: scripts/__check_rls_coverage.sh fails any model
 -- without an ENABLE ROW LEVEL SECURITY statement in migration history, and both tables are
 -- new. The guards are the generator's verbatim output, appended here so one change is one
--- migration — the shape dev/reference/lanes-wip/prisma-migrations/20260912000600_evaluation_lanes
+-- migration — the shape docs/reference/lanes-wip/prisma-migrations/20260912000600_evaluation_lanes
 -- already records.
 
 -- CreateTable

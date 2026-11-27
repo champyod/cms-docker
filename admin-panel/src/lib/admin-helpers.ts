@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma';
-import { formatStoredPassword, DEFAULT_PASSWORD_KIND, type PasswordKind } from '@/lib/password-format';
+import { formatBcryptPassword } from '@/lib/password-format';
 
 export type AdminTarget = Awaited<ReturnType<typeof findAdminTarget>>;
 
@@ -7,7 +7,6 @@ export interface UpdateAdminInput {
   name?: string;
   enabled?: boolean;
   password?: string;
-  passwordKind?: PasswordKind;
   groupIds?: number[];
   overrides?: { permissionKey: string; effect: 'allow' | 'deny' }[];
 }
@@ -69,14 +68,27 @@ export async function wouldRemoveLastSuperadmin(adminId: number): Promise<boolea
   return otherSupers === 0;
 }
 
+/**
+ * Whether this write would leave the system with no enabled Superadmin.
+ *
+ * WHY one predicate for both writers: `updateAdmin` edits groups inside a larger field set and
+ * `setAdminGroups` replaces them outright. Two copies of "does this keep a superadmin" is how
+ * one of them came to omit the check entirely; the caller passes whichever view of the change
+ * it holds and the rule is decided here once.
+ */
+export async function wouldLeaveNoSuperadmin(
+  adminId: number,
+  target: AdminTarget,
+  data: UpdateAdminInput,
+): Promise<boolean> {
+  if (!target || !removesSuperadminStatusViaGroups(target, data)) return false;
+  return wouldRemoveLastSuperadmin(adminId);
+}
+
 export async function buildAdminUpdateData(data: UpdateAdminInput): Promise<AdminUpdateData> {
   const updateData: AdminUpdateData = {};
   if (data.name) updateData.name = data.name;
   if (data.enabled !== undefined) updateData.enabled = data.enabled;
-  if (data.password)
-    updateData.authentication = await formatStoredPassword(
-      data.passwordKind ?? DEFAULT_PASSWORD_KIND,
-      data.password,
-    );
+  if (data.password) updateData.authentication = await formatBcryptPassword(data.password);
   return updateData;
 }

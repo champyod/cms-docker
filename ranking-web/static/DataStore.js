@@ -634,7 +634,10 @@ var DataStore = new function () {
         self.overrides = new Object();
         for (var idx in rows) {
             var row = rows[idx];
-            self.overrides[row["target_kind"] + "\0" + row["target_key"]] = row;
+            var scope = (row["contest"] !== undefined && row["contest"] !== null)
+                ? row["contest"]
+                : ((row["contest_id"] === undefined) ? "" : row["contest_id"]);
+            self.overrides[row["target_kind"] + "\0" + row["target_key"] + "\0" + scope] = row;
         }
         self.override_events.fire(self.overrides);
     };
@@ -643,13 +646,14 @@ var DataStore = new function () {
         self.init_overrides();
     };
 
-    self.override_for = function (kind, key) {
-        var hit = self.overrides[kind + "\0" + key];
+    self.override_for = function (kind, key, contest_id) {
+        var scope = (contest_id === undefined) ? "" : contest_id;
+        var hit = self.overrides[kind + "\0" + key + "\0" + scope];
         return hit === undefined ? null : hit;
     };
 
-    self.is_hidden = function (key) {
-        var hit = self.override_for("user", key);
+    self.is_hidden = function (key, contest_id) {
+        var hit = self.override_for("user", key, contest_id);
         return hit !== null && hit["action"] === "hide";
     };
 
@@ -662,14 +666,14 @@ var DataStore = new function () {
         return hit !== null && hit["action"] === "hide";
     };
 
-    self.rename_for = function (key) {
-        var hit = self.override_for("user", key);
+    self.rename_for = function (key, contest_id) {
+        var hit = self.override_for("user", key, contest_id);
         if (hit !== null && hit["action"] === "rename" && hit["value"]) return hit["value"];
         return null;
     };
 
-    self.score_for = function (key) {
-        var hit = self.override_for("user", key);
+    self.score_for = function (key, contest_id) {
+        var hit = self.override_for("user", key, contest_id);
         if (hit !== null && hit["action"] === "score" && hit["value"]) {
             var n = parseFloat(hit["value"]);
             if (!isNaN(n)) return n;
@@ -677,8 +681,8 @@ var DataStore = new function () {
         return null;
     };
 
-    self.pin_for = function (key) {
-        var hit = self.override_for("user", key);
+    self.pin_for = function (key, contest_id) {
+        var hit = self.override_for("user", key, contest_id);
         if (hit !== null && hit["action"] === "pin" && hit["value"]) {
             var n = parseInt(hit["value"], 10);
             if (!isNaN(n)) return n;
@@ -686,17 +690,19 @@ var DataStore = new function () {
         return null;
     };
 
-    self.freeze_hit_for = function (key) {
-        var hit = self.override_for("user", key);
+    self.freeze_hit_for = function (key, contest_id) {
+        var hit = self.override_for("user", key, contest_id);
         if (hit !== null && hit["action"] === "freeze") return hit;
         return null;
     };
 
-    self.guest_rows = function () {
+    self.guest_rows = function (contest_id) {
         var out = new Array();
         for (var mapkey in self.overrides) {
             var row = self.overrides[mapkey];
-            if (row["action"] === "guest" && !(row["target_key"] in self.users)) out.push(row);
+            if (row["action"] !== "guest" || (row["target_key"] in self.users)) continue;
+            if (contest_id !== undefined && String(row["contest_id"]) !== String(contest_id)) continue;
+            out.push(row);
         }
         return out;
     };

@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::time::Duration;
 
 use serde::Serialize;
-use sqlx::postgres::PgPool;
+use sqlx::postgres::{PgConnection, PgPool};
 
 use crate::binding::ServedContest;
 use crate::board::{self, BoardEntry, TeamEntry, UserNames};
@@ -14,11 +14,13 @@ use crate::scoring::{
 };
 
 mod admin;
+pub mod session_store;
 
 pub use admin::{
     load_admin_permissions, load_admin_user, touch_last_login, AdminPermissions, AdminUser,
     RANKING_READ_PERMISSION,
 };
+pub use session_store as sessions;
 
 #[derive(Debug, thiserror::Error)]
 pub enum StoreError {
@@ -112,10 +114,17 @@ struct ConfigRow {
 /// board and the binding are two statements about one fact, and the operator has to make them
 /// agree.
 pub async fn load_shown_set(pool: &PgPool, served: ServedContest) -> Result<ShownSet, StoreError> {
+    let mut conn = pool.acquire().await?;
+    shown_set(&mut conn, served).await
+}
+
+/// The same read on a connection a caller already holds, so a build can run it inside its
+/// snapshot rather than on a connection of its own.
+async fn shown_set(conn: &mut PgConnection, served: ServedContest) -> Result<ShownSet, StoreError> {
     let rows = sqlx::query_as::<_, ConfigRow>(
         "SELECT target_kind, target_key FROM ranking_config WHERE active ORDER BY id",
     )
-    .fetch_all(pool)
+    .fetch_all(&mut *conn)
     .await?;
     let mut contest_ids: Vec<i32> = Vec::new();
     for row in rows {
@@ -285,6 +294,22 @@ pub struct Standings {
     pub overrides: Overrides,
 }
 
+/// One build's read of the board, from one point in time.
+///
+/// WHY repeatable read rather than five plain statements: a submission that lands between
+/// the projection read and the score read used to be scored against a projection that did not
+/// hold it yet, and the board served a total that never existed in the database for as long as
+/// the cache held it. One snapshot makes the five reads agree, and the commit is the boundary
+/// that publishes the result.
+const SNAPSHOT_OPEN: &str = "BEGIN ISOLATION LEVEL REPEATABLE READ";
+
+/// How long a build may hold its snapshot open before Postgres ends the statement.
+///
+/// WHY a bound: a repeatable-read snapshot keeps the rows it read against vacuum, so a build
+/// whose connection dies mid-read must not leave the snapshot open. The ceiling clears a large
+/// contest on a slow disk and still ends a build that has stopped making progress.
+const SNAPSHOT_STATEMENT_TIMEOUT: &str = "SET LOCAL statement_timeout = '20s'";
+
 /// How long a built board is served before a rebuild is forced, even with no notification.
 ///
 /// WHY a belt beside the trigger's notification: NOTIFY has no replay, so a change that lands
@@ -353,11 +378,17 @@ impl StandingsCache {
 }
 
 pub async fn load_standings(pool: &PgPool, served: ServedContest) -> Result<Standings, StoreError> {
-    let shown = load_shown_set(pool, served).await?;
-    let users = load_users(pool).await?;
-    let team_names = load_team_names(pool).await?;
-    let overrides = load_overrides(pool, &shown).await?;
-    let ledger = assemble_ledger(pool, &shown, &users, &overrides).await?;
+    let mut tx = pool.begin_with(SNAPSHOT_OPEN).await?;
+    sqlx::query(SNAPSHOT_STATEMENT_TIMEOUT)
+        .execute(&mut *tx)
+        .await?;
+    let shown = shown_set(&mut tx, served).await?;
+    let users = users(&mut tx).await?;
+    let team_names = team_names(&mut tx).await?;
+    let overrides = overrides_for(&mut tx, &shown).await?;
+    let ledger = assemble_ledger(&mut tx, &shown, &users, &overrides).await?;
+    tx.commit().await?;
+    announce_per_contest_board(&ledger, &overrides);
     Ok(Standings {
         ledger,
         users,
@@ -366,10 +397,31 @@ pub async fn load_standings(pool: &PgPool, served: ServedContest) -> Result<Stan
     })
 }
 
+/// Says once, in the service log, that the board is drawing per-contest rows with
+/// per-contest override scopes — the line an operator greps when a board looks wrong
+/// after a multi-contest change. WHY once: the board is rebuilt on every notification and
+/// on the 60 s belt, so a line per build would bury the log; the fact does not change
+/// between builds because it is a property of the shipped code, not of the data.
+fn announce_per_contest_board(ledger: &Ledger, overrides: &Overrides) {
+    static ANNOUNCED: std::sync::Once = std::sync::Once::new();
+    let contests = ledger.contests_on_board();
+    let scopes = overrides.scoped_contests();
+    if contests < 2 || scopes < 2 {
+        return;
+    }
+    ANNOUNCED.call_once(|| {
+        eprintln!(
+            "cms-ranking: per-contest board active: contests_on_board={contests} \
+             contests_with_overrides={scopes}"
+        );
+    });
+}
+
 /// One row of the projection snapshot `SNAPSHOT_SQL` reads: a task of a contest, or a contest
 /// with no task of it, which is the only row a withheld task's contest leaves behind.
 #[derive(sqlx::FromRow)]
 struct SnapshotRow {
+    contest_id: i32,
     contest: String,
     task: Option<String>,
     score_mode: Option<String>,
@@ -386,12 +438,13 @@ struct SnapshotRow {
 /// WHY the two arms are one statement: the causes are a question about these same rows, so a
 /// query of their own would be the reader asking itself something it already knows.
 const SNAPSHOT_SQL: &str = "\
-SELECT contest, task, score_mode FROM (\
-    SELECT t.contest AS contest, t.key AS task, t.score_mode AS score_mode, \
-           t.display_order AS display_order \
+SELECT contest_id, contest, task, score_mode FROM (\
+    SELECT t.contest_id AS contest_id, t.contest AS contest, t.key AS task, \
+           t.score_mode AS score_mode, t.display_order AS display_order \
     FROM ranking_tasks AS t WHERE t.contest_id = ANY($1) \
     UNION ALL \
-    SELECT c.key AS contest, NULL AS task, NULL AS score_mode, NULL AS display_order \
+    SELECT c.contest_id AS contest_id, c.key AS contest, NULL AS task, \
+           NULL AS score_mode, NULL AS display_order \
     FROM ranking_contests AS c WHERE c.contest_id = ANY($1)\
 ) AS snapshot ORDER BY display_order, task";
 
@@ -447,6 +500,11 @@ pub struct Wording {
 }
 
 impl Appearance {
+    /// The closed access mode; an unknown stored value is protected.
+    pub fn access_mode(&self) -> crate::access_mode::AccessMode {
+        crate::access_mode::AccessMode::from_stored(&self.access_mode)
+    }
+
     /// The scoreboard only learns whether to show the id column from this flag,
     /// so it is derived here rather than stored twice.
     pub fn show_id_column(&self) -> bool {
@@ -603,10 +661,18 @@ pub async fn load_contest(
 }
 
 pub async fn load_ledger(pool: &PgPool, served: ServedContest) -> Result<Ledger, StoreError> {
-    let shown = load_shown_set(pool, served).await?;
-    let users = load_users(pool).await?;
-    let overrides = load_overrides(pool, &shown).await?;
-    assemble_ledger(pool, &shown, &users, &overrides).await
+    // The ledger alone needs the same snapshot a full build takes: its own reads tear the
+    // same way, and a caller that only wants scores must not read a total that never existed.
+    let mut tx = pool.begin_with(SNAPSHOT_OPEN).await?;
+    sqlx::query(SNAPSHOT_STATEMENT_TIMEOUT)
+        .execute(&mut *tx)
+        .await?;
+    let shown = shown_set(&mut tx, served).await?;
+    let users = users(&mut tx).await?;
+    let overrides = overrides_for(&mut tx, &shown).await?;
+    let ledger = assemble_ledger(&mut tx, &shown, &users, &overrides).await?;
+    tx.commit().await?;
+    Ok(ledger)
 }
 
 /// The board the page draws: the ledger's override-shaped rows joined with the names
@@ -639,14 +705,14 @@ pub async fn load_team_board(
 }
 
 async fn assemble_ledger(
-    pool: &PgPool,
+    conn: &mut PgConnection,
     shown: &ShownSet,
     users: &BTreeMap<String, UserNames>,
     overrides: &Overrides,
 ) -> Result<Ledger, StoreError> {
-    let (tasks, snapshot) = load_tasks(pool, shown, overrides).await?;
-    let submissions = load_submissions(pool).await?;
-    let subchanges = load_subchanges(pool).await?;
+    let (tasks, snapshot) = load_tasks(conn, shown, overrides).await?;
+    let submissions = load_submissions(conn).await?;
+    let subchanges = load_subchanges(conn).await?;
     let teams: BTreeMap<String, String> = users
         .iter()
         .filter_map(|(key, user)| user.team.clone().map(|team| (key.clone(), team)))
@@ -689,13 +755,13 @@ pub async fn load_appearance(pool: &PgPool) -> Result<Option<Appearance>, StoreE
 /// WHY the contest is selected with the key: a task hide is scoped to the contest it is filed
 /// under, so the predicate needs both halves of the composite key the override carries.
 async fn load_tasks(
-    pool: &PgPool,
+    conn: &mut PgConnection,
     shown: &ShownSet,
     overrides: &Overrides,
 ) -> Result<(Vec<TaskMode>, TaskSnapshot), StoreError> {
     let rows = sqlx::query_as::<_, SnapshotRow>(SNAPSHOT_SQL)
         .bind(shown.contest_ids())
-        .fetch_all(pool)
+        .fetch_all(&mut *conn)
         .await?;
     Ok(project_tasks(rows, overrides)?)
 }
@@ -730,16 +796,21 @@ fn project_tasks(
                 mode: wire,
             });
         };
-        modes.push(TaskMode { key, mode });
+        modes.push(TaskMode {
+            key,
+            contest_id: row.contest_id,
+            contest: row.contest,
+            mode,
+        });
     }
     Ok((modes, snapshot))
 }
 
-async fn load_submissions(pool: &PgPool) -> Result<Vec<Submission>, StoreError> {
+async fn load_submissions(conn: &mut PgConnection) -> Result<Vec<Submission>, StoreError> {
     let rows = sqlx::query_as::<_, SubmissionRow>(
         "SELECT key, \"user\", task, time FROM ranking_submissions ORDER BY time, key",
     )
-    .fetch_all(pool)
+    .fetch_all(&mut *conn)
     .await?;
     Ok(rows
         .into_iter()
@@ -752,11 +823,11 @@ async fn load_submissions(pool: &PgPool) -> Result<Vec<Submission>, StoreError> 
         .collect())
 }
 
-async fn load_subchanges(pool: &PgPool) -> Result<Vec<Subchange>, StoreError> {
+async fn load_subchanges(conn: &mut PgConnection) -> Result<Vec<Subchange>, StoreError> {
     let rows = sqlx::query_as::<_, SubchangeRow>(
         "SELECT key, submission, time, score, token, extra FROM ranking_subchanges ORDER BY time, key",
     )
-    .fetch_all(pool)
+    .fetch_all(&mut *conn)
     .await?;
     Ok(rows
         .into_iter()
@@ -777,6 +848,7 @@ struct OverrideRowRecord {
     target_key: String,
     action: String,
     payload: Option<serde_json::Value>,
+    contest_id: i32,
 }
 
 /// The active overrides that reach the shown board, in one query, folded for the board assembly.
@@ -792,19 +864,16 @@ struct OverrideRowRecord {
 /// every board path already reads, and `board::is_hidden` governs the ledger and the
 /// team view without a second filter.
 ///
-/// WHY it is visible to the rest of the crate: the entity list reads the same fold, so a
-/// task hide drops the board column and the ledger's scores from one interpretation of
-/// the override rows rather than two.
-pub(crate) async fn load_overrides(
-    pool: &PgPool,
-    shown: &ShownSet,
-) -> Result<Overrides, StoreError> {
+/// Takes the connection rather than the pool, so the fold runs inside the build's snapshot:
+/// an override that lands between two reads would otherwise be applied to a projection that
+/// does not hold its target.
+async fn overrides_for(conn: &mut PgConnection, shown: &ShownSet) -> Result<Overrides, StoreError> {
     let rows = sqlx::query_as::<_, OverrideRowRecord>(
-        "SELECT target_kind, target_key, action, payload FROM ranking_overrides \
+        "SELECT target_kind, target_key, action, payload, contest_id FROM ranking_overrides \
          WHERE active AND contest_id = ANY($1) ORDER BY id",
     )
     .bind(shown.contest_ids())
-    .fetch_all(pool)
+    .fetch_all(&mut *conn)
     .await?;
     let mut rows: Vec<OverrideRow> = rows
         .into_iter()
@@ -813,13 +882,14 @@ pub(crate) async fn load_overrides(
             target_key: row.target_key,
             action: row.action,
             payload: row.payload,
+            contest_id: row.contest_id,
         })
         .collect();
     rows.extend(
-        load_hidden(pool, shown)
+        load_hidden(&mut *conn, shown)
             .await?
             .into_iter()
-            .map(hidden_as_hide_row),
+            .map(|row| hidden_as_hide_row(row.key, row.contest_id)),
     );
     Ok(Overrides::fold(&rows))
 }
@@ -832,9 +902,9 @@ struct TeamRow {
 
 /// The team keys and their display names, so the team board names a team without a
 /// query per row.
-async fn load_team_names(pool: &PgPool) -> Result<BTreeMap<String, String>, StoreError> {
+async fn team_names(conn: &mut PgConnection) -> Result<BTreeMap<String, String>, StoreError> {
     let rows = sqlx::query_as::<_, TeamRow>("SELECT key, name FROM ranking_teams")
-        .fetch_all(pool)
+        .fetch_all(&mut *conn)
         .await?;
     Ok(rows.into_iter().map(|row| (row.key, row.name)).collect())
 }
@@ -849,7 +919,7 @@ struct UserRow {
 
 /// Who each projected user is, so the board can name a row and a team override can
 /// reach its members without a query per row.
-async fn load_users(pool: &PgPool) -> Result<BTreeMap<String, UserNames>, StoreError> {
+async fn users(conn: &mut PgConnection) -> Result<BTreeMap<String, UserNames>, StoreError> {
     // A participant added after the last proxy reinitialize has submissions but no
     // projection row, so the score payload would name a key with no user entity and
     // the page would fail to initialise. Take the union so every ranked user is
@@ -860,7 +930,7 @@ async fn load_users(pool: &PgPool) -> Result<BTreeMap<String, UserNames>, StoreE
          FROM (SELECT DISTINCT \"user\" FROM ranking_submissions) AS s \
          WHERE NOT EXISTS (SELECT 1 FROM ranking_users AS u WHERE u.key = s.\"user\")",
     )
-    .fetch_all(pool)
+    .fetch_all(&mut *conn)
     .await?;
     Ok(rows
         .into_iter()
@@ -880,32 +950,37 @@ async fn load_users(pool: &PgPool) -> Result<BTreeMap<String, UserNames>, StoreE
 #[derive(sqlx::FromRow)]
 struct HiddenRow {
     key: String,
+    contest_id: i32,
 }
 
 /// A hidden participation behaves as the `hide` override it is, so the board's one hide
 /// rule covers it and no filter site needs a second predicate. WHY it reuses the fold's
 /// own spellings: the tombstone enters the one fold that already hides a user, so a
 /// rename of either spelling cannot silently unhide everyone.
-fn hidden_as_hide_row(key: String) -> OverrideRow {
+fn hidden_as_hide_row(key: String, contest_id: i32) -> OverrideRow {
     OverrideRow {
         target_kind: TARGET_USER.to_string(),
         target_key: key,
         action: ACTION_HIDE.to_string(),
         payload: None,
+        contest_id,
     }
 }
 
 /// The keys the panel hid in a shown contest. WHY the shown set bounds it: a tombstone is scoped
 /// to the contest it was filed in, so one filed under a contest the board does not draw changes
 /// nothing here, and an empty shown set hides nobody.
-async fn load_hidden(pool: &PgPool, shown: &ShownSet) -> Result<Vec<String>, StoreError> {
+async fn load_hidden(
+    conn: &mut PgConnection,
+    shown: &ShownSet,
+) -> Result<Vec<HiddenRow>, StoreError> {
     let rows = sqlx::query_as::<_, HiddenRow>(
-        "SELECT key FROM ranking_hidden WHERE contest_id = ANY($1) ORDER BY key",
+        "SELECT key, contest_id FROM ranking_hidden WHERE contest_id = ANY($1) ORDER BY key",
     )
     .bind(shown.contest_ids())
-    .fetch_all(pool)
+    .fetch_all(&mut *conn)
     .await?;
-    Ok(rows.into_iter().map(|row| row.key).collect())
+    Ok(rows)
 }
 
 #[cfg(test)]
@@ -935,6 +1010,7 @@ mod tests {
             target_key: key.to_string(),
             action: "hide".to_string(),
             payload: None,
+            contest_id: 1,
         }
     }
 
@@ -947,11 +1023,13 @@ mod tests {
     fn a_contest_row_with_no_task_is_a_snapshot_contest_and_not_a_column() {
         let rows = vec![
             SnapshotRow {
+                contest_id: 0,
                 contest: "c0".to_string(),
                 task: None,
                 score_mode: None,
             },
             SnapshotRow {
+                contest_id: 1,
                 contest: "c1".to_string(),
                 task: Some("t0".to_string()),
                 score_mode: Some("max".to_string()),
@@ -974,6 +1052,7 @@ mod tests {
     #[test]
     fn a_task_row_with_an_unreadable_mode_still_refuses() {
         let rows = vec![SnapshotRow {
+            contest_id: 0,
             contest: "c0".to_string(),
             task: Some("t0".to_string()),
             score_mode: Some("nonsense".to_string()),
@@ -1094,13 +1173,13 @@ mod tests {
     /// applies, so no board path needs a second filter for it.
     #[test]
     fn a_hidden_row_folds_into_the_hide_rule() {
-        let overrides = Overrides::fold(&[hidden_as_hide_row("u0".to_string())]);
+        let overrides = Overrides::fold(&[hidden_as_hide_row("u0".to_string(), 1)]);
         assert!(
-            board::is_hidden(&overrides, "u0", None),
+            board::is_hidden(overrides.scope(1), "u0", None),
             "the tombstoned key is hidden"
         );
         assert!(
-            !board::is_hidden(&overrides, "u1", None),
+            !board::is_hidden(overrides.scope(1), "u1", None),
             "a key with no tombstone stays"
         );
     }

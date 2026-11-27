@@ -458,6 +458,19 @@ abbr {
     display: none;
 }
 
+#Scoreboard_cols col.contest {
+    /* The contest name, only drawn when more than one contest is shown. */
+    width: 9em;
+}
+
+#Scoreboard_body tr td.contest,
+#Scoreboard_head tr th.contest {
+    text-align: left;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
 #Scoreboard_head tr {
     height: 2.5em;
 }
@@ -1313,6 +1326,11 @@ abbr {
     font-size: 0.9em;
     color: #444444;
     white-space: nowrap;
+}
+
+/* A server-masked board shows this label instead of a checkbox. */
+#Views_anon.anon-locked {
+    opacity: 0.65;
 }
 
 .persp-view {

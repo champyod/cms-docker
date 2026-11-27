@@ -111,5 +111,36 @@ else
   no "docker-compose.yml: the shared SSE definition mounted into nginx-proxy"
 fi
 
+# The forwarded-address marker: every location that forwards a request to an origin must
+# stamp it, or the origin reads that request as direct and refuses to believe the address it
+# claims. A branch that forwards without the stamp fails the origin's gate closed.
+# nginx does not merge proxy_set_header: a location that declares even one of them drops
+# every inherited header, including the marker the server block sets. So the rule is per
+# location — a forwarding location that sets headers of its own must restate the marker.
+vhosts="$(render false)"
+marker_gaps="$(printf '%s\n' "$vhosts" | awk '
+  /^[ \t]*location/ { in_loc = 1; name = $0; sets = 0; marker = 0; forwards = 0; next }
+  in_loc && /^[ \t]*}/ {
+    if (forwards && sets && !marker) print name
+    in_loc = 0; next
+  }
+  in_loc && /proxy_set_header/ { sets = 1 }
+  in_loc && /X-CMS-Trusted-Proxy/ { marker = 1 }
+  # Scoped to the origins that read this marker. The ranking service is not one of them:
+  # it runs its own allowlist over the peer address (ranking-web/src/trusted_proxy.rs) and
+  # refuses trust-all, so a forwarded header is never what it believes.
+  in_loc && /proxy_pass http:\/\/(cms_contest|admin_panel_next)/ { forwards = 1 }
+')"
+if [[ -z "$marker_gaps" ]]; then
+  ok "every forwarding location keeps the trust marker it inherits"
+else
+  no "forwarding locations drop the trust marker: $(printf '%s' "$marker_gaps" | tr '\n' ' ')"
+fi
+if grep -qF 'proxy_set_header X-CMS-Trusted-Proxy "@FORWARDED_TRUST_MARKER@";' "$RENDER"; then
+  ok "the renderer stamps the marker from the configured value"
+else
+  no "the renderer stamps the marker from the configured value"
+fi
+
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [[ "$fail" -eq 0 ]]

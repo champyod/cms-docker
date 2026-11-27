@@ -56,6 +56,10 @@ else
     warn "Not a git repository; skipping code pull."
 fi
 
+# Role bootstrap is checkout-only; without it the new code cannot create the roles it connects as.
+APPLY_SQL_SCRIPT="scripts/__apply_sql.sh"
+[[ -x "$APPLY_SQL_SCRIPT" ]] || log_die "$APPLY_SQL_SCRIPT missing or not executable — refused before env/restart; check the checkout is on the branch that carries the role bootstrap."
+
 # ---------------------------------------------------------------------------
 # (b) Regenerate environment files so new variables land
 # ---------------------------------------------------------------------------
@@ -65,21 +69,15 @@ make env || log_die "make env failed."
 # ---------------------------------------------------------------------------
 # (b2) Ensure DB roles exist BEFORE services restart with them
 # WHY: cms_backup must exist with its password before the restart so backups
-# succeed; RLS and owner-hardening are deferred to the post-restart
-# prisma-sync so they land after the new code is running.
-# Tolerant on a fresh install where the database container is not up yet —
-# prisma-sync re-applies the roles afterwards.
+# succeed; RLS and owner-hardening are deferred to the post-restart prisma-sync
+# so they land after the new code is running. The bootstrap is fail-closed: a
+# database that still carries the backup owner membership stops the update here.
 # ---------------------------------------------------------------------------
-APPLY_SQL_SCRIPT="scripts/__apply_sql.sh"
 if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "cms-database"; then
-    if [ -x "$APPLY_SQL_SCRIPT" ]; then
-        log "Bootstrapping database roles (idempotent)..."
-        "$APPLY_SQL_SCRIPT" --bootstrap-roles || warn "Role bootstrap failed — prisma-sync will retry after the restart."
-    else
-        warn "$APPLY_SQL_SCRIPT missing — roles will be created during prisma-sync."
-    fi
+    log "Bootstrapping database roles (idempotent)..."
+    "$APPLY_SQL_SCRIPT" --bootstrap-roles || log_die "Role bootstrap failed; refusing to restart with roles the new code cannot use."
 else
-    log "Database container not running yet; roles will be created during prisma-sync."
+    log "Database container not running yet; prisma-sync runs the role bootstrap and refuses to migrate without it."
 fi
 
 # Deployment type must be detected AFTER env regeneration (branch switch may change it)

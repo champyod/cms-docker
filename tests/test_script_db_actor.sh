@@ -308,10 +308,10 @@ else
 
   # The role the policies are written for, and the two attributes this suite turns on.
   run_strict "DO \$\$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'cmsuser') THEN CREATE ROLE cmsuser NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB LOGIN; END IF; END \$\$;" >/dev/null
-  # The restore's role, defined as admin-panel/prisma/sql/20260820125000_backup_role.sql defines it:
-  # BYPASSRLS, and a member of the owner so it inherits the DML a restore needs.
+  # The backup role as WS-76 defines it, taken from admin-panel/prisma/sql/20260820125000_backup_role.sql:
+  # BYPASSRLS, SELECT-only, and NOT a member of the owner. The live restore connects as cmsuser with RLS
+  # suspended (scripts/__restore.sh), so cms_backup needs no DML and no membership.
   run_strict "DO \$\$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'cms_backup') THEN CREATE ROLE cms_backup LOGIN NOSUPERUSER BYPASSRLS NOCREATEROLE NOCREATEDB; END IF; END \$\$;" >/dev/null
-  run_strict "GRANT cmsuser TO cms_backup;" >/dev/null 2>&1
   attrs="$(run "SELECT rolsuper || '|' || rolbypassrls FROM pg_roles WHERE rolname = 'cmsuser';")"
   if [[ "$attrs" == "false|false" ]]; then
     ok "cmsuser is NOSUPERUSER and NOBYPASSRLS, so the policies apply to it"
@@ -329,6 +329,9 @@ else
   for t in contests services contest_exposures submissions users; do
     run_strict "ALTER TABLE public.${t} OWNER TO cmsuser; ALTER TABLE public.${t} ENABLE ROW LEVEL SECURITY; ALTER TABLE public.${t} FORCE ROW LEVEL SECURITY;" >/dev/null
   done
+  # The read grant 20260912000150_backup_grants gives the backup role; without the owner membership this is
+  # the whole of what pg_dump may see.
+  run_strict "GRANT USAGE ON SCHEMA public TO cms_backup; GRANT SELECT ON ALL TABLES IN SCHEMA public TO cms_backup;" >/dev/null
   run_strict "INSERT INTO public.contests VALUES (1,'c1',false),(2,'c2',false),(3,'c3',false);" >/dev/null
   run_strict "INSERT INTO public.contest_exposures (hostname, tls, tailnet) VALUES ('a.example', true, 'tn'), ('b.example', false, NULL);" >/dev/null
   run_strict "INSERT INTO public.services (name, role, shard, enabled) VALUES ('web','ContestWebServer',0,true);" >/dev/null
@@ -412,17 +415,34 @@ ${block}"
 
   backup_attrs="$(run "SELECT rolbypassrls FROM pg_roles WHERE rolname = 'cms_backup';" | tr -d '[:space:]')"
   if [[ "$backup_attrs" == "t" ]]; then
-    ok "restore: cms_backup is BYPASSRLS — the role __restore.sh now connects as for a live restore"
+    ok "restore: cms_backup is BYPASSRLS and SELECT-only — the dump role, not the restore's writer"
   else
-    no "restore: cms_backup is not a BYPASSRLS role (rolbypassrls='${backup_attrs}'), so it cannot restore either"
+    no "restore: cms_backup is not a BYPASSRLS role (rolbypassrls='${backup_attrs}'), so __backup.sh cannot dump"
   fi
 
+  # WS-76: the backup role must have no write path at all. A restore that still ran as cms_backup would need
+  # the owner membership back; the shipped restore connects as cmsuser and suspends RLS instead.
   copy_backup="$(printf '902\tpayload\n\\.\n' | $PSQL "$URL" -X -tA -v ON_ERROR_STOP=0 -c 'SET ROLE cms_backup' -c 'COPY public.submissions (id, payload) FROM stdin' 2>&1)"
-  landed="$(run "SELECT count(*) FROM public.submissions;" | scalar)"
-  if grep -q '^COPY 1' <<<"$copy_backup" && [[ "$landed" == "1" ]]; then
-    ok "restore: the same COPY lands a row through the bypassing role, and the count matches"
+  if grep -q 'permission denied for table submissions' <<<"$copy_backup"; then
+    ok "restore: cms_backup cannot COPY — no DML and no membership, which is why the restore is the owner's"
   else
-    no "restore: COPY through cms_backup reported '${copy_backup}' with ${landed} row(s) present — expected COPY 1"
+    no "restore: COPY through cms_backup reported '${copy_backup}' — the backup role must not be able to write"
+  fi
+
+  # The shipped mechanism, in the same statements scripts/__restore.sh runs: the owner may COPY while the
+  # window has RLS suspended, and ENABLE+FORCE is back afterwards.
+  copy_owner="$(printf '903\tpayload\n\\.\n' | $PSQL "$URL" -X -tA -v ON_ERROR_STOP=0 \
+    -c 'SET ROLE cmsuser' \
+    -c 'ALTER TABLE public.submissions DISABLE ROW LEVEL SECURITY' \
+    -c 'COPY public.submissions (id, payload) FROM stdin' \
+    -c 'ALTER TABLE public.submissions ENABLE ROW LEVEL SECURITY' \
+    -c 'ALTER TABLE public.submissions FORCE ROW LEVEL SECURITY' 2>&1)"
+  landed="$(run "SELECT count(*) FROM public.submissions WHERE id = 903;" | scalar)"
+  force_back="$(run "SELECT relrowsecurity AND relforcerowsecurity FROM pg_class WHERE oid = 'public.submissions'::regclass;" | tr -d '[:space:]')"
+  if grep -q '^COPY 1' <<<"$copy_owner" && [[ "$landed" == "1" && "$force_back" == "t" ]]; then
+    ok "restore: the owner's COPY lands with RLS suspended, and ENABLE+FORCE is back"
+  else
+    no "restore: the owner's COPY reported '${copy_owner}', ${landed} row(s), FORCE='${force_back}' — expected COPY 1, 1, t"
   fi
 
   # ── The scripts that were measured not to need an actor: their statements, run as cmsuser ──

@@ -5,7 +5,7 @@ use axum::routing::{get, MethodRouter};
 use axum::Router;
 
 use crate::entities::{self, Kind};
-use crate::http::{not_found, refuse};
+use crate::http::{identity_of, not_found, refuse};
 use crate::json::{bytes_response, stamped};
 use crate::AppState;
 
@@ -76,7 +76,11 @@ async fn list(state: AppState, kind: Kind) -> Response {
         Ok(shown) => shown,
         Err(error) => return refuse(&error.to_string()),
     };
-    match entities::list_body(db.pool(), kind, &shown).await {
+    let identity = match identity_of(&state).await {
+        Ok(identity) => identity,
+        Err(refusal) => return refusal.response(),
+    };
+    match entities::list_body(db.pool(), kind, &shown, identity).await {
         Ok(body) => stamped(bytes_response(body)),
         Err(error) => refuse(&error.to_string()),
     }
@@ -97,7 +101,11 @@ async fn one(state: AppState, kind: Kind, key: &str) -> Response {
         Ok(shown) => shown,
         Err(error) => return refuse(&error.to_string()),
     };
-    match entities::one_body(db.pool(), kind, key, &shown).await {
+    let identity = match identity_of(&state).await {
+        Ok(identity) => identity,
+        Err(refusal) => return refusal.response(),
+    };
+    match entities::one_body(db.pool(), kind, key, &shown, identity).await {
         Ok(Some(body)) => stamped(bytes_response(body)),
         Ok(None) => not_found(),
         Err(error) => refuse(&error.to_string()),
@@ -109,7 +117,22 @@ async fn sublist(State(state): State<AppState>, Path(user): Path<String>) -> Res
         Ok(standings) => standings,
         Err(error) => return refuse(&error.to_string()),
     };
-    match entities::sublist_body(&standings.ledger, &user) {
+    let identity = match identity_of(&state).await {
+        Ok(identity) => identity,
+        Err(refusal) => return refusal.response(),
+    };
+    // A masked board names a user by a surrogate, so the submission list has to
+    // resolve it back before it can read the ledger; a surrogate naming nobody is
+    // the same empty list an unknown key already gets.
+    let real = if identity.masked() {
+        identity.resolve(&user, standings.users.keys())
+    } else {
+        Some(user.clone())
+    };
+    let Some(real) = real else {
+        return bytes_response(b"[]".to_vec());
+    };
+    match entities::sublist_body(&standings.ledger, &real, identity) {
         Ok(body) => bytes_response(body),
         Err(error) => refuse(&error.to_string()),
     }
@@ -124,6 +147,16 @@ async fn sublist(State(state): State<AppState>, Path(user): Path<String>) -> Res
 /// request, so replacing a file is the whole update — no restart and no cache to
 /// invalidate, the same no-downtime swap the logo already has.
 async fn image(state: AppState, key: &str, fallback: Fallback) -> Response {
+    // A masked board never serves an uploaded face: the picture identifies its owner
+    // even when every name field is blank, so the bundled dummy is the only honest
+    // answer. Team flags are not person identity and keep their real image.
+    if matches!(fallback, Fallback::Face) {
+        match identity_of(&state).await {
+            Ok(identity) if identity.masked() => return bundled(&state, fallback).await,
+            Ok(_) => {}
+            Err(refusal) => return refusal.response(),
+        }
+    }
     match uploaded(&state, key).await {
         Some(response) => response,
         None => bundled(&state, fallback).await,

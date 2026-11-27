@@ -124,7 +124,7 @@ count=$(wc -l < "$tmp_models" | tr -d ' ')
 #   attributed to the seeded root admin; it announces itself as system:ingest and may only INSERT
 #   and UPDATE here.
 PUBLIC_BOARD_READ=" admin_groups admin_permission_overrides admins group_permissions permissions ranking_config ranking_contests ranking_hidden ranking_overrides ranking_settings ranking_subchanges ranking_submissions ranking_tasks ranking_teams ranking_users services "
-AUTH_BOOTSTRAP=" admin_groups admin_permission_overrides admins group_permissions groups login_surfaces permissions "
+AUTH_BOOTSTRAP=" admin_groups admin_permission_overrides admins group_permissions groups login_surfaces permissions ranking_sessions "
 AUTH_LEDGER=" security_blocks "
 # The flip row is written by the same push that judges a finding, so it needs the same reach.
 INGEST_WRITE=" security_findings security_finding_flips "
@@ -147,6 +147,8 @@ CONSOLE_LOGIN_UPDATE=" admins "
 # window, and nothing else. The trigger in 20261026120100_audit_log_durable enforces the window
 # even for this identity, so the grant is a shape, not a licence.
 AUDIT_RETENTION="system:audit-retention"
+# The admin-change trigger writes under this identity so it can append without impersonating staff.
+AUDIT_SECURITY="system:admin-audit"
 
 in_list() {
   case " $2 " in
@@ -291,7 +293,7 @@ emit_policy_set() {
         "  OR public.cms_actor_any(ARRAY['system:ingest'])" \
         ");" \
         "CREATE POLICY cms_actor_append ON public.$tbl FOR INSERT TO cmsuser WITH CHECK (" \
-        "  ($(read_predicate "$tbl") OR public.cms_actor_any(ARRAY['system:ingest']))" \
+        "  ($(read_predicate "$tbl") OR public.cms_actor_any(ARRAY['system:ingest', '$AUDIT_SECURITY']))" \
         "  AND (" \
         "    public.cms_actor_admin_id() IS NULL" \
         "    OR actor_id IS NULL" \

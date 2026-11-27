@@ -1,0 +1,46 @@
+# admin-panel/prisma/roles/catalog.tsv — the platform and admin role catalog (WS-75)
+#
+# GENERATED SOURCE: this file is the input of scripts/__generate_role_sql.sh, not a record of
+# what a database happens to contain. Edit it, then run the generator; never edit the rendered
+# SQL. The emitted migration is admin-panel/prisma/sql/20260820110000_generated_roles.sql.
+#
+# Columns: role <TAB> login <TAB> bypassrls <TAB> comment
+#   login      yes = the role connects (created LOGIN with PASSWORD NULL; a later secret step
+#              sets the credential, so no secret ever enters the repository)
+#              no  = the role exists to own objects and is never a connection
+#   bypassrls  the catalogued intent, NOT a rendered attribute: the generated file never grants
+#              BYPASSRLS (that needs superuser and the running backup path is still cms_backup).
+#              Recorded here so the intent is not lost, and so the later step can see the gap.
+#   comment    carried into the generated SQL as the reason the role exists
+#
+# Role-name contract (validated by the generator; a name outside it is fatal):
+#   cms_platform_<capability>
+#   cms_admin_login                    the pre-session credential read; the one admin role
+#                                      without a domain, because it runs before a session exists
+#   cms_admin_<capability>_<domain>    capability is read | write | operate | account
+# `all:all` is an application permission, never a database role. Contest roles
+# (cms_contest_<id>_<mode>_<capability>) are a later slice: they are per-contest credentials and
+# do not belong in a static catalog.
+# role	login	bypassrls	comment
+cms_platform_owner	no	no	owns tables and policies; used only by migrations
+cms_platform_migrator	yes	no	runs migrations as the owner; deploy host only
+cms_platform_backup	yes	yes	pg_dump and restore, SELECT-only; cms_backup keeps serving until the swap
+cms_platform_breakglass	yes	no	emergency DDL and repair, audited, never a web pool
+cms_platform_monitor	yes	no	metrics and health only, read-only, no customer data
+cms_admin_login	yes	no	pre-session login read: username, authentication, enabled
+cms_admin_read_contest	yes	no	SELECT on contest content: contest, task, dataset, testcase, statement, attachment, group, manager
+cms_admin_write_contest	yes	no	create, update, delete and switch contest content
+cms_admin_read_people	yes	no	SELECT on people tables, never a password or hash column
+cms_admin_write_people	yes	no	create, update, delete, set and policy on people tables
+cms_admin_read_submission	yes	no	SELECT on submission, result, evaluation, executable, file and token tables
+cms_admin_operate_submission	yes	no	rejudge, recompute, delete, lane and token actions
+cms_admin_read_ops	yes	no	SELECT on monitor, container, service, deployment and maintenance tables
+cms_admin_operate_ops	yes	no	restart, deploy, control, test, enable and disable operational actions
+cms_admin_read_comms	yes	no	SELECT on questions, messages and announcements
+cms_admin_write_comms	yes	no	answer, ignore, send and publish communications
+cms_admin_read_security	yes	no	SELECT on audit, bans, lockouts, WAF, TLS and patching
+cms_admin_write_security	yes	no	unban, unlock, exempt, WAF, TLS and patch-waive; never admin credentials
+cms_admin_read_settings	yes	no	SELECT on settings, env, appearance and ranking configuration
+cms_admin_write_settings	yes	no	update settings and ranking overrides
+cms_admin_account_security	yes	no	admin accounts, groups, permissions and overrides; the only role that touches password columns
+cms_admin_operate_backup	yes	no	backup metadata and restore actions, separate pool

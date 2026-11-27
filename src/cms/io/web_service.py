@@ -30,12 +30,12 @@ except:
 
 import tornado.wsgi
 from gevent.pywsgi import WSGIServer
-from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.middleware.dispatcher import DispatcherMiddleware
 from werkzeug.middleware.shared_data import SharedDataMiddleware
 
 from cms.db.filecacher import FileCacher
 from cms.server.file_middleware import FileServerMiddleware
+from .proxy_trust import TrustedProxyFix
 from .service import Service
 from .web_rpc import RPCMiddleware
 
@@ -66,6 +66,7 @@ class WebService(Service):
         rpc_auth = parameters.pop('rpc_auth', None)
         auth_middleware = parameters.pop('auth_middleware', None)
         num_proxies_used = parameters.pop('num_proxies_used', None)
+        forwarded_trust_marker = parameters.pop('forwarded_trust_marker', None)
 
         self.wsgi_app = tornado.wsgi.WSGIApplication(handlers, **parameters)
         self.wsgi_app.service = self
@@ -99,11 +100,15 @@ class WebService(Service):
         # only if all requests come from a trusted source (if clients
         # were allowed to directlty communicate with the server they
         # could fake their IP and compromise the security of IP lock).
+        # TrustedProxyFix enforces that precondition rather than trusting the caller to
+        # honour it: the chain is adopted only from a request the front proxy stamped with
+        # the configured marker, so a direct request keeps its own peer address.
         if num_proxies_used is None:
             num_proxies_used = 0
 
         if num_proxies_used > 0:
-            self.wsgi_app = ProxyFix(self.wsgi_app, num_proxies_used)
+            self.wsgi_app = TrustedProxyFix(
+                self.wsgi_app, num_proxies_used, forwarded_trust_marker)
 
         self.web_server = WSGIServer((listen_address, listen_port), self)
 

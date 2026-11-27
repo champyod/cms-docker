@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   getPermissions: vi.fn(),
   recordAudit: vi.fn(),
   revalidatePath: vi.fn(),
+  resolveActingAdminId: vi.fn(),
 }));
 
 vi.mock('@/lib/prisma', () => ({ prisma: { questions: { update: mocks.update } } }));
@@ -15,6 +16,10 @@ vi.mock('@/lib/permissions', () => ({
 }));
 vi.mock('@/lib/audit', () => ({ recordAudit: mocks.recordAudit }));
 vi.mock('next/cache', () => ({ revalidatePath: mocks.revalidatePath }));
+vi.mock('@/lib/server/acting-admin', () => ({
+  resolveActingAdminId: mocks.resolveActingAdminId,
+  NOT_AUTHENTICATED: 'Not authenticated',
+}));
 
 import { replyToQuestion } from '@/app/actions/questions';
 import { stripDisallowedFields } from '@/lib/field-permissions';
@@ -35,10 +40,11 @@ describe('question resolution marker', () => {
     mocks.getPermissions.mockResolvedValue(new Set(['question:read', 'question:answer']));
     mocks.update.mockResolvedValue({});
     mocks.recordAudit.mockResolvedValue(undefined);
+    mocks.resolveActingAdminId.mockResolvedValue(3);
   });
 
   it('carries the marker the grader chose into the reply', async () => {
-    const result = await replyToQuestion(11, 3, { ...ANSWER, resolution_kind: 'settled_by_statement' });
+    const result = await replyToQuestion(11, { ...ANSWER, resolution_kind: 'settled_by_statement' });
 
     expect(result).toEqual({ success: true });
     expect(mocks.update).toHaveBeenCalledWith({
@@ -55,7 +61,7 @@ describe('question resolution marker', () => {
   });
 
   it('writes no marker when the caller sends none', async () => {
-    await replyToQuestion(11, 3, { ...ANSWER, resolution_kind: undefined });
+    await replyToQuestion(11, { ...ANSWER, resolution_kind: undefined });
 
     expect(mocks.update.mock.calls[0][0].data.resolution_kind).toBeUndefined();
   });
@@ -63,7 +69,7 @@ describe('question resolution marker', () => {
   it('refuses the reply when the marker is not an updatable field', async () => {
     mocks.getPermissions.mockResolvedValue(new Set(['question:read']));
 
-    const result = await replyToQuestion(11, 3, { ...ANSWER, resolution_kind: 'settled_by_statement' });
+    const result = await replyToQuestion(11, { ...ANSWER, resolution_kind: 'settled_by_statement' });
 
     expect(result).toEqual({ success: false, error: 'Insufficient field permissions' });
     expect(mocks.update).not.toHaveBeenCalled();

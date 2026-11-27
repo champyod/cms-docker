@@ -13,6 +13,7 @@ import {
   effectiveAfterOverride,
 } from '@/lib/admin-permission-guards';
 import { ensurePermission, getPermissions, invalidateAccessCache } from '@/lib/permissions';
+import { findAdminTarget, wouldLeaveNoSuperadmin } from '@/lib/admin-helpers';
 import { prisma } from '@/lib/prisma';
 import type { OverrideEffect } from '@/lib/permission-engine';
 import type { ListSortInput } from '@/lib/list-sorting';
@@ -73,12 +74,26 @@ export async function setAdminGroups(
     const denied = await assertGroupChangeAllowed(adminId, groupIds);
     if (denied) return { success: false, error: denied };
 
+    // Replaces the whole set, so the last-superadmin rule the sibling update path applies runs here too.
+    const target = await findAdminTarget(adminId);
+    const targetIds = Array.from(new Set(groupIds)).sort((a, b) => a - b);
+    if (await wouldLeaveNoSuperadmin(adminId, target, { groupIds: targetIds })) {
+      await recordAudit({
+        verb: 'admin_groups:set',
+        entity: 'admin',
+        entityId: String(adminId),
+        afterValues: { groupIds: targetIds },
+        reason,
+        result: 'failure',
+      });
+      return { success: false, error: 'Cannot remove the last superadmin' };
+    }
+
     const before = await prisma.admin_groups.findMany({
       where: { admin_id: adminId },
       select: { group_id: true },
     });
     const beforeIds = before.map((row) => row.group_id).sort((a, b) => a - b);
-    const targetIds = Array.from(new Set(groupIds)).sort((a, b) => a - b);
 
     await applyGroupChange(adminId, targetIds);
 
@@ -108,8 +123,7 @@ async function assertOverrideAllowed(
   return assertResultIsGrantable(adminId, permissionKey, effect, 'Cannot grant permissions you do not hold');
 }
 
-// Removing a deny re-grants what it held back, so the same "you cannot grant what you do not hold"
-// test applies; the read is treated as a refusal when it cannot be verified, never as a pass.
+// Removing a deny re-grants what it held back, so it is grant-checked; an unverifiable read is a refusal.
 async function assertClearAllowed(adminId: number, permissionKey: string): Promise<string | null> {
   return assertResultIsGrantable(adminId, permissionKey, 'clear', 'Cannot restore permissions you do not hold');
 }

@@ -1,14 +1,18 @@
+pub mod access_mode;
 pub mod auth;
 pub mod binding;
 pub mod board;
 pub mod config;
+pub mod contest_scope;
 pub mod db;
 pub mod entities;
 pub mod entity_routes;
 pub mod events;
 pub mod feed;
 pub mod http;
+pub mod identity;
 pub mod json;
+pub mod ledger;
 pub mod login;
 pub mod overrides;
 pub mod perspectives;
@@ -18,6 +22,8 @@ pub mod score_events;
 pub mod scoring;
 pub mod store;
 pub mod surface;
+pub mod team_board;
+pub mod trusted_proxy;
 
 use std::sync::Arc;
 
@@ -189,8 +195,7 @@ pub async fn run() -> Result<(), StartupError> {
         None => None,
     };
     let state = AppState::new(db, config.clone(), counter);
-    // The listener runs for the process lifetime: without it the board only changes
-    // when a browser reloads, which is the behaviour Slice 4 exists to remove.
+    // The listener runs for the process lifetime: otherwise the board only changes on reload.
     if state.db().is_some() {
         let listener_state = state.clone();
         tokio::spawn(async move { feed::listen(listener_state).await });
@@ -201,10 +206,13 @@ pub async fn run() -> Result<(), StartupError> {
             address: config.bind,
             source,
         })?;
-    axum::serve(listener, router(state))
-        .await
-        .map_err(|source| StartupError::Listen {
-            address: config.bind,
-            source,
-        })
+    axum::serve(
+        listener,
+        router(state).into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    )
+    .await
+    .map_err(|source| StartupError::Listen {
+        address: config.bind,
+        source,
+    })
 }

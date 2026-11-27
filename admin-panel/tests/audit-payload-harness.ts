@@ -1,11 +1,6 @@
 import { expect, vi } from 'vitest';
 
-/**
- * Shared harness for the audit-payload tests: it loads the audited action modules with every
- * secret they can reach replaced by a canary, and with the audit writer captured instead of the
- * database. The canaries are what the leak assertions look for, so a row that grows a value field
- * starts failing on the string it grew.
- */
+// Canaries stand in for every secret the actions can reach, so a grown value field fails on the string it grew.
 
 export const ENV_SECRET = 'canary-env-secret-9f3a';
 export const TOML_SECRET = 'canary-toml-secret-7b2c';
@@ -26,12 +21,10 @@ const TOML_CONTENT = [
   `POSTGRES_PASSWORD = "${TOML_SECRET}"`,
   '[admin]',
   'DEPLOYMENT_TYPE = "img"',
-  // Why the webhook sits in config.toml: the panel resolves it there and never from the .env
-  // render, so the canary has to be reachable through the file the action actually reads.
+  // config.toml, not the .env render: the panel resolves the webhook there.
   '[infra]',
   `DISCORD_WEBHOOK_URL = "${WEBHOOK_URL}"`,
-  // Why the fleet sits in config.toml: the panel reads worker endpoints from there, and not from
-  // cms.toml, so the canary host has to be reachable through the reader the action actually uses.
+  // config.toml, not cms.toml: the panel reads worker endpoints from there.
   '[worker]',
   `WORKER_0 = "${WORKER_HOST}:9000"`,
   '',
@@ -77,10 +70,9 @@ function readContentFor(filePath: string): string {
 
 export async function loadAuditedActions(options?: { userRow?: unknown; adminRow?: unknown }): Promise<AuditHarness> {
   const entries: AuditCall[] = [];
-  // Why the `in` check and not `??`: a test passing null is asking for a row that is not there,
-  // and `null ?? default` would hand it the default row instead.
+  // An `in` check, not `??`: a test passing null asks for a missing row, not the default.
   const userRow = options && 'userRow' in options ? options.userRow : { password: PASSWORD_SECRET };
-  const adminRow = options && 'adminRow' in options ? options.adminRow : { authentication: PASSWORD_SECRET };
+  const adminRow = options && 'adminRow' in options ? options.adminRow : { authentication: 'bcrypt:$2b$10$not-a-real-hash-for-the-audit-shape' };
   const users = { findUnique: vi.fn(async () => userRow) };
   const admins = { findUnique: vi.fn(async () => adminRow) };
 
@@ -106,8 +98,7 @@ export async function loadAuditedActions(options?: { userRow?: unknown; adminRow
     exec: (_command: string, callback: (error: null, result: { stdout: string; stderr: string }) => void): void => {
       callback(null, { stdout: `LOGSTREAM ${LOG_SECRET}`, stderr: '' });
     },
-    // Why present but unused: the fleet reader promisifies execFile at module load, and a mock
-    // that omits it makes the module throw before any action under test can be loaded.
+    // Present but unused: the fleet reader promisifies execFile at module load.
     execFile: vi.fn(),
   }));
   vi.doMock('@/lib/container-restart-store', () => ({
@@ -131,7 +122,11 @@ export async function loadAuditedActions(options?: { userRow?: unknown; adminRow
       toasts: { discord: { noWebhookUrl: 'no webhook', testAlertTitle: 't', testAlertDescription: 'd', deliveryFailed: 'failed' } },
     })),
   }));
-  vi.doMock('@/lib/prisma', () => ({ prisma: { users, admins } }));
+  vi.doMock('@/lib/prisma', () => ({
+    // Same delegate on both clients, so a rejected read shows up whichever connection the action chose.
+    getAdminSecurityClient: () => ({ admins }),
+    prisma: { users, admins },
+  }));
 
   return { entries, users, admins };
 }

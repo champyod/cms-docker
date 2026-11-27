@@ -14,6 +14,13 @@ const BCRYPT_PREFIX = 'bcrypt:';
 const PLAINTEXT_PREFIX = 'plaintext:';
 const BCRYPT_SALT_ROUNDS = 10;
 
+/** Admin credentials are bcrypt-only; participant credentials keep the explicit storage-kind contract. */
+export async function formatBcryptPassword(raw: string): Promise<string> {
+  const salt = await bcrypt.genSalt(BCRYPT_SALT_ROUNDS);
+  const hash = await bcrypt.hash(raw, salt);
+  return `${BCRYPT_PREFIX}${hash}`;
+}
+
 /**
  * Runtime guard for untrusted `passwordKind` input (API bodies, action payloads).
  * Narrows `unknown` to `PasswordKind`; callers fall back to {@link DEFAULT_PASSWORD_KIND}.
@@ -34,9 +41,7 @@ export async function formatStoredPassword(kind: PasswordKind, raw: string): Pro
   if (kind === 'plaintext') {
     return `${PLAINTEXT_PREFIX}${raw}`;
   }
-  const salt = await bcrypt.genSalt(BCRYPT_SALT_ROUNDS);
-  const hash = await bcrypt.hash(raw, salt);
-  return `${BCRYPT_PREFIX}${hash}`;
+  return formatBcryptPassword(raw);
 }
 
 /**

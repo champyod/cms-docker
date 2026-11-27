@@ -3,6 +3,9 @@
 pub const BCRYPT_PREFIX: &str = "bcrypt:";
 pub const PLAINTEXT_PREFIX: &str = "plaintext:";
 
+/// bcrypt reads at most 72 UTF-8 bytes; the core refuses a longer candidate, so the console does too.
+const MAX_PASSWORD_BYTES: usize = 72;
+
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum PasswordError {
     #[error("the stored password has no supported prefix")]
@@ -21,7 +24,12 @@ pub fn verify(stored: &str, candidate: &str) -> Result<bool, PasswordError> {
         return Err(PasswordError::UnknownFormat);
     };
     match prefix {
-        "bcrypt" => bcrypt::verify(candidate, value).map_err(|_| PasswordError::InvalidHash),
+        "bcrypt" => {
+            if candidate.len() > MAX_PASSWORD_BYTES {
+                return Ok(false);
+            }
+            bcrypt::verify(candidate, value).map_err(|_| PasswordError::InvalidHash)
+        }
         // The core refuses these rows for the reason it states: honouring one hands the account
         // to anyone who can read the database, so the console fails closed with it.
         "plaintext" => Err(PasswordError::PlaintextRefused),
@@ -39,6 +47,30 @@ mod tests {
         let stored = format!("bcrypt:{hash}");
         assert_eq!(verify(&stored, "correct horse"), Ok(true));
         assert_eq!(verify(&stored, "wrong horse"), Ok(false));
+    }
+
+    #[test]
+    fn a_72_byte_password_still_verifies() {
+        let password = "x".repeat(72);
+        let hash = bcrypt::hash(&password, 4).expect("the hash is produced");
+        let stored = format!("bcrypt:{hash}");
+        assert_eq!(verify(&stored, &password), Ok(true));
+    }
+
+    #[test]
+    fn a_longer_candidate_does_not_extend_a_72_byte_password() {
+        let password = "x".repeat(72);
+        let hash = bcrypt::hash(&password, 4).expect("the hash is produced");
+        let stored = format!("bcrypt:{hash}");
+        assert_eq!(verify(&stored, &format!("{password}x")), Ok(false));
+    }
+
+    #[test]
+    fn a_64_byte_password_remains_usable() {
+        let password = "a".repeat(64);
+        let hash = bcrypt::hash(&password, 4).expect("the hash is produced");
+        let stored = format!("bcrypt:{hash}");
+        assert_eq!(verify(&stored, &password), Ok(true));
     }
 
     #[test]

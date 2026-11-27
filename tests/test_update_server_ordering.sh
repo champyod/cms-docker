@@ -52,6 +52,7 @@ printf '#!/usr/bin/env bash\nexit 0\n' > "${SB}/scripts/__backup.sh"
 # The real sync renders from the registry and would fail without a config; the ordering
 # between the schema sync and the stack restart is what this suite reads.
 printf '#!/usr/bin/env bash\nexit 0\n' > "${SB}/scripts/__config_sync.sh"
+printf '#!/usr/bin/env bash\nexit 0\n' > "${SB}/scripts/__apply_sql.sh"
 chmod +x "${SB}/bin/"* "${SB}/scripts/"*.sh
 
 first_line() { # <file> <ere>

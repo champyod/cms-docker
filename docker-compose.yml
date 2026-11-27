@@ -22,12 +22,19 @@ x-admin-panel: &admin-panel
     PUBLIC_IP: ${PUBLIC_IP:-0.0.0.0}
     # WHY: single owner role cmsuser owns large objects, so admin panel connects as owner (PostgreSQL restricts large-object access to owner).
     DATABASE_URL: postgresql://${POSTGRES_USER:-cmsuser}:${POSTGRES_PASSWORD:-cmspassword}@database:5432/${POSTGRES_DB:-cmsdb}
+    # WHY: each admin role authenticates with its own generated credential, never a literal here.
+    ADMIN_LOGIN_DATABASE_URL: postgresql://cms_admin_login:${ADMIN_LOGIN_PASSWORD}@database:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-cmsdb}
+    ADMIN_READ_DATABASE_URL: postgresql://cms_admin_read_people:${ADMIN_READ_PASSWORD}@database:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-cmsdb}
+    ADMIN_SECURITY_DATABASE_URL: postgresql://cms_admin_account_security:${ADMIN_SECURITY_PASSWORD}@database:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-cmsdb}
     # The console counts login failures in Redis; the panel reads and clears those keys.
     REDIS_URL: redis://${REDIS_HOST:-redis-rate-limit}:${REDIS_PORT:-6379}
     AUTH_SECRET: ${AUTH_SECRET}
     # WHY: the panel speaks the authenticated CMS RPC protocol (cms/io/rpc.py fails closed without it)
     RPC_SECRET: ${RPC_SECRET}
-    COOKIE_SECURE: ${COOKIE_SECURE:-false}
+    COOKIE_SECURE: ${COOKIE_SECURE:-true}
+    # The marker the front proxy stamps; without a matching value the panel reads a request
+    # as unproxied and refuses to believe the address it claims.
+    FORWARDED_TRUST_MARKER: ${FORWARDED_TRUST_MARKER:-}
 
     # Adaptive login CAPTCHA
     CAPTCHA_ENABLED: ${CAPTCHA_ENABLED:-0}
@@ -38,52 +45,35 @@ x-admin-panel: &admin-panel
     CAPTCHA_THRESHOLD: ${CAPTCHA_THRESHOLD:-3}
     CAPTCHA_BAN_THRESHOLD: ${CAPTCHA_BAN_THRESHOLD:-5}
 
-    # WHY this is here and not only in config.toml: the panel reads its limits from
-    # process.env, and compose is what puts them in the container. Without this line
-    # the value reaches .env and stops there, and the panel keeps its built-in
-    # default no matter what the operator configures.
+    # WHY this is here and not only in config.toml: the panel reads its limits from process.env, and compose is what puts them in the container.
     MAX_TESTCASE_UPLOAD_BYTES: ${MAX_TESTCASE_UPLOAD_BYTES:-52428800}
-    # The per-file half of the testcase cap, plus the cap for every other upload the
-    # panel accepts. All of them are read from process.env, so compose is what puts
-    # them in the container — without these lines the value reaches .env and stops.
+    # The per-file half of the testcase cap, plus the cap for every other upload the panel accepts.
     MAX_TESTCASE_FILE_BYTES: ${MAX_TESTCASE_FILE_BYTES:-2097152}
     MAX_LOGO_UPLOAD_BYTES: ${MAX_LOGO_UPLOAD_BYTES:-5242880}
     MAX_AVATAR_UPLOAD_BYTES: ${MAX_AVATAR_UPLOAD_BYTES:-2097152}
     MAX_STATEMENT_UPLOAD_BYTES: ${MAX_STATEMENT_UPLOAD_BYTES:-10485760}
     MAX_ATTACHMENT_UPLOAD_BYTES: ${MAX_ATTACHMENT_UPLOAD_BYTES:-10485760}
 
-    # WHY the feed token lives on the panel and not only in the security overlay: the panel is
-    # the endpoint the producers authenticate to (docs/SECURITY-FEED.md), so the secret has to
-    # reach the container that verifies it. Left empty the route refuses every push, which is
-    # the correct default — the overlay that produces them is profile-gated and off.
+    # WHY the feed token lives on the panel and not only in the security overlay: the panel is the endpoint the producers authenticate to (docs/SECURITY-FEED.md), so the secret has to reach the container that verifies it.
     SECURITY_FEED_TOKEN: ${SECURITY_FEED_TOKEN:-}
-    # WHY: the digest renders a backup/offsite reading on every patching page. The reading costs a
-    # scrape with a timeout, so the panel caches it for this window; a value compose never passed
-    # would make the config.toml key an advertisement rather than a setting.
+    # WHY: the digest renders a backup/offsite reading on every patching page.
     SECURITY_STALENESS_CACHE_MS: ${SECURITY_STALENESS_CACHE_MS:-15000}
 
     # WHY: the panel reads BACKUP_DIR as the archive root and gets the monitor's identical mount, so one path means one directory in both containers, not two spellings that drift.
     BACKUP_DIR: ${BACKUP_DIR:-/app/backups}
 
-    # WHY the panel receives these: discord-webhook.ts reads them for the alerts the
-    # panel sends itself, and compose was the only thing that could have delivered them.
-    # They are already [infra] keys, so this needs no new configuration surface.
+    # WHY the panel receives these: discord-webhook.ts reads them for the alerts the panel sends itself, and compose was the only thing that could have delivered them.
     DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
     DISCORD_ROLE_ID: ${DISCORD_ROLE_ID:-}
 
     MONITOR_ENHANCED: ${MONITOR_ENHANCED:-0}
 
-    # WHY: the panel reads these from process.env (its evaluation RPC target, its
-    # public base path and its session cookie name), so compose is what puts them in
-    # the container. Without them the value reaches .env and stops there.
+    # WHY: the panel reads these from process.env (its evaluation RPC target, its public base path and its session cookie name), so compose is what puts them in the container.
     EVALUATION_RPC_TARGET: ${EVALUATION_RPC_TARGET:-}
     NEXT_PUBLIC_BASE_PATH: ${NEXT_PUBLIC_BASE_PATH:-}
     SESSION_COOKIE_NAME: ${SESSION_COOKIE_NAME:-session}
 
-    # WHY the panel receives this: it writes every ranking asset into this directory and its
-    # host mirror, and both hang off the [admin] CMS_RANKING_LIB_DIR key. Without this line the
-    # value reaches .env and stops there, and the route keeps a literal that drifts from the
-    # directory the volume and the ranking service are built from.
+    # WHY the panel receives this: it writes every ranking asset into this directory and its host mirror, and both hang off the [admin] CMS_RANKING_LIB_DIR key.
     CMS_RANKING_LIB_DIR: ${CMS_RANKING_LIB_DIR:-/var/local/lib/cms/ranking}
 
     REPO_ROOT: /repo-root
@@ -96,22 +86,15 @@ x-admin-panel: &admin-panel
     - /proc:/host/proc:ro
     # WHY a distinct bind: /host/proc/net follows the panel's own netns, so host aggregate counters need docker to resolve /proc/1/net/dev on the host.
     - /proc/1/net/dev:/host/proc-net/dev:ro
-    # WHY this mount exists for BACKUP_DIR to mean one thing: the monitor mounts the
-    # archive tree at /app/backups and the panel reads the same BACKUP_DIR. Without the
-    # panel holding it too, the value resolves to a directory that is not there and every
-    # archive lookup reports an empty tree rather than failing.
+    # WHY this mount exists for BACKUP_DIR to mean one thing: the monitor mounts the archive tree at /app/backups and the panel reads the same BACKUP_DIR.
     - ./backups:/app/backups
     - cms-logs:/var/local/log/cms
     - cms-ranking-data:/var/local/lib/cms/ranking:rw
-    # Read-only: the security surface parses grader-waf's ModSecurity audit log
-    # from this shared volume (docker-compose.waf.yml mounts the same one at
-    # /var/log inside the WAF). Never mounted read-write, so the panel cannot
-    # rewrite the evidence it reports.
+    # Read-only: the security surface parses grader-waf's ModSecurity audit log from this shared volume (docker-compose.waf.yml mounts the same one at /var/log inside the WAF).
     - waf-logs:/var/log/waf:ro
   networks:
     - cms-network
-  # WHY: the image runs as the unprivileged node user; this supplementary
-  # group (host docker socket gid) is what keeps docker CLI access working.
+  # WHY: the image runs as the unprivileged node user; this supplementary group (host docker socket gid) is what keeps docker CLI access working.
   group_add:
     - "${DOCKER_GID:-999}"
   labels:
@@ -140,7 +123,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cmspassword}
       POSTGRES_HOST_AUTH_METHOD: ${POSTGRES_HOST_AUTH_METHOD:-md5}
     ports:
-      - "${DB_BIND_IP:-127.0.0.1}:${POSTGRES_PORT_EXTERNAL:-5432}:5432"
+      - "127.0.0.1:${POSTGRES_PORT_EXTERNAL:-5432}:5432"
     volumes:
       - cms-database-data:/var/lib/postgresql/data
     networks:
@@ -177,6 +160,8 @@ services:
       LOG_SERVICE_ADDR: ${LOG_SERVICE_ADDR}
       LOG_DIR: ${LOG_DIR}
       RPC_SECRET: ${RPC_SECRET}
+      # WHY: make admin-create writes admins as the security role, not the owner.
+      ADMIN_SECURITY_DATABASE_URL: postgresql://cms_admin_account_security:***@database:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-cmsdb}
     ports:
       - "${INNER_IP:-127.0.0.1}:29000:29000"
     volumes:
@@ -431,8 +416,7 @@ services:
         APT_MIRROR: ${APT_MIRROR:-archive.ubuntu.com}
     image: ghcr.io/champyod/cms-docker-core:${IMG_TAG:-major-admin-panel}
     container_name: cms-contest-web-server
-    # survive daemon/host restarts like every other service; admin-panel
-    # lifecycle actions still work (stop/start overrides policy at runtime)
+    # survive daemon/host restarts like every other service; admin-panel lifecycle actions still work (stop/start overrides policy at runtime)
     restart: unless-stopped
     profiles:
       - contest
@@ -449,13 +433,13 @@ services:
       CONTEST_LISTEN_PORT: ${CONTEST_LISTEN_PORT:-8888}
       SECRET_KEY: ${SECRET_KEY}
       COOKIE_DURATION: ${COOKIE_DURATION:-10800}
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      FORWARDED_TRUST_MARKER: ${FORWARDED_TRUST_MARKER:-}
       MAX_SUBMISSION_LENGTH: ${MAX_SUBMISSION_LENGTH:-100000}
       MAX_INPUT_LENGTH: ${MAX_INPUT_LENGTH:-5000000}
       SUBMIT_LOCAL_COPY: ${SUBMIT_LOCAL_COPY:-true}
       NUM_PROXIES_USED: ${NUM_PROXIES_USED:-1}
-      # Adaptive login CAPTCHA for /login, /register and /api/login.
-      # __inject_config.sh copies these into [contest_web_server.captcha] of the
-      # mounted cms.toml, which is the only config this process can read.
+      # Adaptive login CAPTCHA for /login, /register and /api/login. __inject_config.sh copies these into [contest_web_server.captcha] of the mounted cms.toml, which is the only config this process can read.
       CAPTCHA_ENABLED: ${CAPTCHA_ENABLED:-0}
       CAPTCHA_PROVIDER: ${CAPTCHA_PROVIDER:-turnstile}
       CAPTCHA_SITE_KEY: ${CAPTCHA_SITE_KEY:-}
@@ -471,7 +455,7 @@ services:
     networks:
       - cms-network
     ports:
-      - "0.0.0.0:${CONTEST_PORT_EXTERNAL:-8888}:${CONTEST_LISTEN_PORT:-8888}"
+      - "127.0.0.1:${CONTEST_PORT_EXTERNAL:-8888}:${CONTEST_LISTEN_PORT:-8888}"
     privileged: true
     command: >
       sh -c "sudo mkdir -p /var/local/log/cms/ContestWebServer-${CONTEST_WEB_SERVER_SHARD:-0} /var/local/cache/cms /var/local/lib/cms &&
@@ -500,14 +484,6 @@ services:
       start_period: 40s
 
   # Shared store for the login failure counters (LOGIN_RATE_LIMIT_REDIS_*).
-  # WHY declared here as well as in docker-compose.domain.yml: `make contest`
-  # merges only the base file, so a definition living solely in the domain stack
-  # is invisible to it and the contest server counts in process — a lockout then
-  # dies with the web server and is per replica. Profiles make the two entries
-  # mutually exclusive rather than competing: compose unions profile lists
-  # across merged files, so the domain stack (which activates no profile) keeps
-  # its own copy and starts exactly one container.
-  # WHY `contest` and not every profile: `make core` must not start it.
   redis-rate-limit:
     image: redis:7-alpine@sha256:7f7d30b7fdd09467bac58198a1f166dd69789d348d4fe859cccb20e0cf287fbe
     container_name: grader-redis-rate-limit
@@ -527,12 +503,7 @@ services:
       retries: 5
       start_period: 10s
 
-  # Optional contest front door (TLS via ENABLE_TLS=true). On its own profile so
-  # `make contest` never publishes host 80/443 — start it with `make proxy`, and
-  # expose it only by setting NGINX_BIND_IP (the bind model below rebinds 80/443).
-  # WHY the plain name: a same-named key as the domain stack's
-  # `grader-nginx-proxy` (docker-compose.domain.yml) would merge the two blocks
-  # and drop one proxy from the project.
+  # Optional contest front door (TLS via ENABLE_TLS=true).
   nginx-proxy:
     image: nginx:alpine@sha256:713fc2ebfd92e8217db451477182ee91944b123d2b1ee9fd5a8c6e91ca6c3a11
     container_name: cms-nginx-contest
@@ -559,17 +530,18 @@ services:
       ENABLE_TLS: ${ENABLE_TLS:-false}
       FUNNEL_ENABLED: ${FUNNEL_ENABLED:-false}
       FUNNEL_REALM: ${FUNNEL_REALM:-CMS restricted}
-      # WHY the colour reaches this renderer: the contest and funnel vhosts dial the panel by
-      # colour, and this proxy renders its config from that one value at start.
+      # WHY the colour reaches this renderer: the contest and funnel vhosts dial the panel by colour, and this proxy renders its config from that one value at start.
       ADMIN_PANEL_COLOUR: ${ADMIN_PANEL_COLOUR:-a}
       ADMIN_NEXT_LISTEN_PORT: ${ADMIN_NEXT_LISTEN_PORT:-3000}
+      # The value this proxy stamps so the origins believe the forwarded address;
+      # empty means they believe nothing, which is the safe default.
+      FORWARDED_TRUST_MARKER: ${FORWARDED_TRUST_MARKER:-}
     volumes:
       - ./config/nginx-contest.conf:/etc/nginx/templates/default.conf.template:ro
       - ./scripts/__nginx-proxy-render.sh:/usr/local/bin/render.sh:ro
       # WHY: render.sh sources this for the panel's SSE location, one definition shared with the domain proxy.
       - ./scripts/__nginx_sse.sh:/usr/local/bin/nginx-sse.sh:ro
-      # WHY: render.sh sources this for the panel's container name, one naming rule shared
-      # with the domain route table and the swap script.
+      # WHY: render.sh sources this for the panel's container name, one naming rule shared with the domain route table and the swap script.
       - ./scripts/__admin_panel_target.sh:/usr/local/bin/admin-panel-target.sh:ro
       - ./config/funnel.htpasswd:/etc/nginx/funnel.htpasswd:ro
       # Shared webroot so this proxy can answer the HTTP-01 challenge when it owns :80.
@@ -579,9 +551,7 @@ services:
     networks:
       - cms-network
     ports:
-      # Funnel gateways only, loopback by default. Host 80/443 are deliberately not
-      # published: exposing this proxy means setting NGINX_BIND_IP, or using the
-      # service's own *_PORT_EXTERNAL. The domain stack owns 80/443 for domain users.
+      # Funnel gateways only, loopback by default.
       - "${FUNNEL_BIND_IP:-127.0.0.1}:${FUNNEL_PANEL_LISTEN:-8892}:8892"
       - "${FUNNEL_BIND_IP:-127.0.0.1}:${FUNNEL_RANKING_LISTEN:-8893}:8893"
     command: ["/usr/local/bin/render.sh"]
@@ -594,27 +564,16 @@ services:
       - admin
     ports:
       # WHY loopback, not the 0.0.0.0 the other front-door UIs publish on: the panel
-      # names the caller from a header only a proxy asserts (x-real-ip, or the rightmost
-      # x-forwarded-for hop — src/lib/request-identity.ts), so an address that reaches
-      # :8891 without passing a proxy lets the caller pick its own login bucket and the
-      # address its audit rows carry. Every proxy in this stack — the grader vhost and the
-      # funnel gateway — dials cms-admin-panel-next:3000 over cms-network and never needs
-      # the host port; the host publish exists for the operator's browser and for
-      # `tailscale serve`, both of which are on the box. ADMIN_NEXT_BIND_IP widens this
-      # through the generated expose override, one published entry per address.
       - "127.0.0.1:${ADMIN_NEXT_PORT_EXTERNAL:-8891}:3000"
 
-  # The standby colour. Same image, environment and healthcheck as the active one (one
-  # anchor, not a copy), so a swap proves the build it is about to route to.
+  # The standby colour.
   admin-panel-next-b:
     <<: *admin-panel
     container_name: cms-admin-panel-b
-    # WHY its own profile: a routine `--profile admin` deploy must never start the standby,
-    # or the box runs two panels for no reason. The swap enables this profile explicitly.
+    # WHY its own profile: a routine `--profile admin` deploy must never start the standby, or the box runs two panels for no reason.
     profiles:
       - admin-standby
-    # WHY no ports: the standby answers on cms-network only. Nothing outside the compose
-    # network may reach it before the swap routes traffic there.
+    # WHY no ports: the standby answers on cms-network only.
 
   # CMS Admin Web Server (Legacy Python Version)
   admin-web-server:
@@ -636,6 +595,10 @@ services:
     environment:
       CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.toml}
       ADMIN_LISTEN_PORT: ${ADMIN_LISTEN_PORT:-8889}
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      FORWARDED_TRUST_MARKER: ${FORWARDED_TRUST_MARKER:-}
+      # WHY: admin writes use cms_admin_account_security with the generated secret, never the owner role.
+      ADMIN_SECURITY_DATABASE_URL: postgresql://cms_admin_account_security:${ADMIN_SECURITY_PASSWORD}@database:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-cmsdb}
     volumes:
       - ./config/cms.toml:/usr/local/etc/cms.toml:ro
       - cms-logs:/var/local/log/cms
@@ -643,7 +606,7 @@ services:
     networks:
       - cms-network
     ports:
-      - "0.0.0.0:${ADMIN_PORT_EXTERNAL:-8889}:${ADMIN_LISTEN_PORT:-8889}"
+      - "127.0.0.1:${ADMIN_PORT_EXTERNAL:-8889}:${ADMIN_LISTEN_PORT:-8889}"
     command: ["cmsAdminWebServer"]
     labels:
       - "traefik.enable=true"
@@ -674,29 +637,22 @@ services:
       log-service:
         condition: service_healthy
     environment:
-      # The Rust service reads the projection tables, so it takes the same database
-      # URL every other service takes rather than a ranking config file.
+      # The Rust service reads the projection tables, so it takes the same database URL every other service takes rather than a ranking config file.
       DATABASE_URL: postgresql://${POSTGRES_USER:-cmsuser}:${POSTGRES_PASSWORD:-cmspassword}@database:5432/${POSTGRES_DB:-cmsdb}
       RANKING_BIND_ADDRESS: ${RANKING_BIND_ADDRESS:-0.0.0.0}:${RANKING_LISTEN_PORT:-8890}
-      # Which contest this board serves is not here either: the service reads the `services`
-      # row that names this (role, shard) on every board read, so re-pointing that row in the
-      # panel moves the board within seconds instead of a container recreate. The shard is
-      # this instance's identity in the registry — the second half of that key — and the only
-      # static value in the binding. `ranking_config` stays what the board draws: the row must
-      # name a contest the config shows, and a contradiction is refused, never picked between.
+      # Which contest this board serves is not here either: the service reads the `services` row that names this (role, shard) on every board read, so re-pointing that row in the panel moves the board within seconds instead of a container recreate.
       RANKING_SHARD: ${RANKING_SHARD:-0}
-      # Where the image keeps the vendored page and the licence offer; both are image
-      # layout, so they are not operator configuration.
+      # Comma-separated proxy IPs or CIDRs whose forwarded headers the login may trust.
+      RANKING_TRUSTED_PROXIES: ${RANKING_TRUSTED_PROXIES:-}
+      # Where the image keeps the vendored page and the licence offer; both are image layout, so they are not operator configuration.
       RANKING_STATIC_DIR: /home/cmsuser/src/ranking-web/static
       CMS_CREDITS_FILE: /home/cmsuser/cms/credits.json
-      # The panel writes the logo into this volume; the service only reads it, and a
-      # path with no extension makes it probe the known image extensions. It is the
-      # [admin] CMS_RANKING_LIB_DIR key plus the stem, so the reader and the writer
-      # cannot drift onto two spellings of the same directory.
+      # The panel writes the logo into this volume; the service only reads it, and a path with no extension makes it probe the known image extensions.
       RANKING_LOGO_PATH: ${CMS_RANKING_LIB_DIR:-/var/local/lib/cms/ranking}/logo
-      # Signs the console cookie. Empty means the console refuses every login, which
-      # is why ./cms config sync generates one.
+      # Signs the console cookie.
       RANKING_SESSION_SECRET: ${RANKING_SESSION_SECRET:-}
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      FORWARDED_TRUST_MARKER: ${FORWARDED_TRUST_MARKER:-}
       # The same Redis the contest login counters use, under a ranking namespace.
       RANKING_REDIS_URL: redis://${LOGIN_RATE_LIMIT_REDIS_HOST:-redis-rate-limit}:${LOGIN_RATE_LIMIT_REDIS_PORT:-6379}
       # Every CAPTCHA key stays in config.toml, as decided; the service only reads them.
@@ -712,15 +668,14 @@ services:
     networks:
       - cms-network
     ports:
-      - "0.0.0.0:${RANKING_PORT_EXTERNAL:-8890}:${RANKING_LISTEN_PORT:-8890}"
+      - "127.0.0.1:${RANKING_PORT_EXTERNAL:-8890}:${RANKING_LISTEN_PORT:-8890}"
     command: ["cms-ranking"]
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.cms-ranking.rule=Host(`${RANKING_DOMAIN:-ranking.cms.local}`)"
       - "traefik.http.services.cms-ranking.loadbalancer.server.port=${RANKING_LISTEN_PORT:-8890}"
     healthcheck:
-      # /healthz, not /: the scoreboard route refuses without a database, and a
-      # healthcheck that fails while the service is up is a restart loop.
+      # /healthz, not /: the scoreboard route refuses without a database, and a healthcheck that fails while the service is up is a restart loop.
       test: ["CMD", "curl", "-f", "http://localhost:${RANKING_LISTEN_PORT:-8890}/healthz"]
       interval: 10s
       timeout: 5s
@@ -777,13 +732,8 @@ services:
       - worker-tmp:/tmp
       - /sys/fs/cgroup:/sys/fs/cgroup:rw
       # mTLS certs (optional, disabled by default — MTLS_WORKERS_ENABLED=0)
-      # When MTLS_WORKERS_ENABLED=1, mount CA + worker cert/key; see docs/optional-features.md
-      # Paths at MTLS_CA_CERT etc. are optional mounts — container starts without them when disabled.
-      # Uncomment to enforce presence: - ${MTLS_CA_CERT:-config/mtls/ca.pem}:/etc/cms/mtls/ca.pem:ro
-      # - ${MTLS_WORKER_CERT:-config/mtls/worker.pem}:/etc/cms/mtls/worker.pem:ro
-      # - ${MTLS_WORKER_KEY:-config/mtls/worker-key.pem}:/etc/cms/mtls/worker-key.pem:ro
     ports:
-      - "${WORKER_BIND_ADDR:-0.0.0.0}:${WORKER_PORT:-26000}:${WORKER_PORT:-26000}"
+      - "127.0.0.1:${WORKER_PORT:-26000}:${WORKER_PORT:-26000}"
     networks:
       - cms-network
     privileged: true
@@ -872,9 +822,7 @@ services:
     build:
       context: .
       dockerfile: docker/monitor/Dockerfile
-      # WHY: the monitor writes backups through the ./backups bind mount, so the
-      # image's runtime uid must match that directory's owner on this host
-      # (stat -c %u backups). The default keeps hosts owning uid 1000 unchanged.
+      # WHY: the monitor writes backups through the ./backups bind mount, so the image's runtime uid must match that directory's owner on this host (stat -c %u backups).
       args:
         DOCKER_UID: ${DOCKER_UID:-1000}
     image: ghcr.io/champyod/cms-docker-monitor:${IMG_TAG:-major-admin-panel}
@@ -888,21 +836,14 @@ services:
     environment:
       - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
       - DISCORD_ROLE_ID=${DISCORD_ROLE_ID}
-      # WHY: __monitor.sh resolves config/container-restart.json against REPO_ROOT; without
-      # it the mounted file below is never found and per-container policy silently no-ops.
+      # WHY: __monitor.sh resolves config/container-restart.json against REPO_ROOT; without it the mounted file below is never found and per-container policy silently no-ops.
       - REPO_ROOT=/repo-root
       - MONITOR_INTERVAL=5
       - DISK_PATH=/host
       # WHY: the backup path does need database credentials — __monitor.sh itself runs
-      # no psql/pg_dump, so there is no DATABASE_URL, but the bind-mounted __backup.sh
-      # dumps as cms_backup (BYPASSRLS, the only role that survives FORCE RLS) with
-      # PGPASSWORD and then retries as the owner, reading both passwords from the
-      # environment. Empty defaults keep the service bootable when they are unset;
-      # __backup.sh warns each cycle when a dump credential is missing.
       - POSTGRES_BACKUP_PASSWORD=${POSTGRES_BACKUP_PASSWORD:-}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-}
-      # WHY: __backup.sh dumps "${POSTGRES_DB:-cmsdb}"; without the active profile's
-      # database name here the scheduled backup targets a non-existent "cmsdb".
+      # WHY: __backup.sh dumps "${POSTGRES_DB:-cmsdb}"; without the active profile's database name here the scheduled backup targets a non-existent "cmsdb".
       - POSTGRES_DB=${POSTGRES_DB:-cmsdb}
       - POSTGRES_USER=${POSTGRES_USER:-cmsuser}
       - BACKUP_INTERVAL_MINS=${BACKUP_INTERVAL_MINS:-1440}
@@ -910,9 +851,7 @@ services:
       - BACKUP_MAX_AGE_DAYS=${BACKUP_MAX_AGE_DAYS:-10}
       - BACKUP_MAX_SIZE_GB=${BACKUP_MAX_SIZE_GB:-5}
       - BACKUP_DIR=/app/backups
-      # Rotation of the cms-logs volume: the CMS services write <epoch>.log files
-      # there with no rotation of their own, so the monitor prunes them (age, then
-      # oldest-first to the size cap).
+      # Rotation of the cms-logs volume: the CMS services write <epoch>.log files there with no rotation of their own, so the monitor prunes them (age, then oldest-first to the size cap).
       - CMS_LOG_DIR=${CMS_LOG_DIR:-/var/local/log/cms}
       - CMS_LOG_MAX_AGE_DAYS=${CMS_LOG_MAX_AGE_DAYS:-7}
       - CMS_LOG_MAX_SIZE_GB=${CMS_LOG_MAX_SIZE_GB:-5}
@@ -921,14 +860,10 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - /:/host:ro # Mount host root to /host to check disk usage
       - ./backups:/app/backups
-      # WHY both scripts are bind-mounted: they are host-side maintenance code that
-      # changes between releases, so the running monitor must not lag the checkout
-      # (the image copy stays as the fallback).
+      # WHY both scripts are bind-mounted: they are host-side maintenance code that changes between releases, so the running monitor must not lag the checkout (the image copy stays as the fallback).
       - ./scripts/__backup.sh:/usr/local/bin/cms-backup.sh:ro
       - ./scripts/__monitor.sh:/usr/local/bin/monitor.sh:ro
-      # WHY the lib is mounted too: cms-backup.sh sources ${SCRIPT_DIR}/__lib/common.sh and
-      # SCRIPT_DIR is /usr/local/bin in the container, so the lib has to sit beside the
-      # scripts — without this mount the source fails and every backup cycle aborts.
+      # WHY the lib is mounted too: cms-backup.sh sources ${SCRIPT_DIR}/__lib/common.sh and SCRIPT_DIR is /usr/local/bin in the container, so the lib has to sit beside the scripts — without this mount the source fails and every backup cycle aborts.
       - ./scripts/__lib:/usr/local/bin/__lib:ro
       - ./config:/repo-root/config:ro # Mount config to read container restart settings
     networks:
@@ -958,27 +893,12 @@ services:
       - BACKUP_MAX_AGE_DAYS=${BACKUP_MAX_AGE_DAYS:-10}
       - BACKUP_MAX_SIZE_GB=${BACKUP_MAX_SIZE_GB:-5}
     volumes:
-      # Read-write, unlike cms-monitor: docker exec creates an exec instance in
-      # the target container, which the socket refuses when mounted read-only.
+      # Read-write, unlike cms-monitor: docker exec creates an exec instance in the target container, which the socket refuses when mounted read-only.
       - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - cms-network
 
   # Audit-log retention — the ONE thing allowed to delete an audit row, on its own profile.
-  #
-  # WHY a service and not a host cron entry: a scheduled deletion path that lives outside the stack
-  # is invisible to `docker ps`, is not covered by the health checks, and its absence looks exactly
-  # like "retention has not come due". Here its absence is a missing container, and `make
-  # audit-status` still reports the backlog either way.
-  #
-  # WHY the admin image: the prune has to write a hash-chained anchor, and the digest lives in
-  # admin-panel/src/lib/audit-chain.ts — one implementation shared with the verifier and with the
-  # panel's writer, not a psql re-statement of it. The command is the same script an operator runs by
-  # hand, so `make audit-retention` and the service cannot diverge.
-  #
-  # NOT in the `core`, `admin` or `monitor` profile on purpose: pruning is a decision with a window,
-  # and starting it should be a deliberate act (--profile core --profile audit), never a side effect
-  # of bringing the panel up.
   audit-retention:
     image: ghcr.io/champyod/cms-docker-admin-panel:${IMG_TAG:-major-admin-panel}
     container_name: cms-audit-retention
@@ -986,16 +906,13 @@ services:
     profiles:
       - audit
     depends_on:
-      # WHY optional: the database lives in the `core` profile, so a bare `--profile audit` would
-      # otherwise be an invalid project ("depends on undefined service"). The condition still holds
-      # when both profiles are up, which is how the service is meant to be started.
+      # WHY optional: the database lives in the `core` profile, so a bare `--profile audit` would otherwise be an invalid project ("depends on undefined service").
       database:
         condition: service_healthy
         required: false
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-cmsuser}:${POSTGRES_PASSWORD}@database:5432/${POSTGRES_DB:-cmsdb}
-      # The script never reads a session, but @/lib/prisma pulls the auth module in; without a
-      # secret it warns and rotates one on every boot, which fills the log of a job that runs daily.
+      # The script never reads a session, but @/lib/prisma pulls the auth module in; without a secret it warns and rotates one on every boot, which fills the log of a job that runs daily.
       AUTH_SECRET: ${AUTH_SECRET:-audit-retention-no-session}
       AUDIT_RETENTION_INTERVAL_SECS: ${AUDIT_RETENTION_INTERVAL_SECS:-86400}
     command:
@@ -1009,10 +926,7 @@ services:
     networks:
       - cms-network
 
-  # The exposure reconciler: a row written outside the panel (a migration, a seed, another agent, a raw
-  # SQL fix) reaches the front through this loop, which re-renders from the database and reloads only
-  # when the rendered set differs. WHY it sits in the admin profile: it needs the same database, the
-  # same repository mount and the same docker socket the panel does, and nothing at all without them.
+  # The exposure reconciler: a row written outside the panel (a migration, a seed, another agent, a raw SQL fix) reaches the front through this loop, which re-renders from the database and reloads only when the rendered set differs.
   exposure-reconciler:
     image: ghcr.io/champyod/cms-docker-admin-panel:${IMG_TAG:-major-admin-panel}
     container_name: cms-exposure-reconciler
@@ -1020,22 +934,18 @@ services:
     profiles:
       - admin
     depends_on:
-      # WHY optional: the database lives in the `core` profile, so a bare `--profile admin` would
-      # otherwise be an invalid project ("depends on undefined service"). The condition still holds
-      # when both profiles are up, which is how the service is meant to be started.
+      # WHY optional: the database lives in the `core` profile, so a bare `--profile admin` would otherwise be an invalid project ("depends on undefined service").
       database:
         condition: service_healthy
         required: false
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-cmsuser}:${POSTGRES_PASSWORD:-cmspassword}@database:5432/${POSTGRES_DB:-cmsdb}
-      # The script never reads a session, but @/lib/prisma pulls the auth module in; without a
-      # secret it warns and rotates one on every boot.
+      # The script never reads a session, but @/lib/prisma pulls the auth module in; without a secret it warns and rotates one on every boot.
       AUTH_SECRET: ${AUTH_SECRET:-exposure-reconciler-no-session}
       IS_DOCKER: "true"
       EXPOSURE_RECONCILE_INTERVAL_SECS: ${EXPOSURE_RECONCILE_INTERVAL_SECS:-60}
     volumes:
-      # WHY both: the render writes the host's config/generated through /repo-root, and the front is
-      # reloaded through the socket the panel also uses.
+      # WHY both: the render writes the host's config/generated through /repo-root, and the front is reloaded through the socket the panel also uses.
       - /var/run/docker.sock:/var/run/docker.sock
       - ./:/repo-root
     command:
@@ -1061,8 +971,6 @@ volumes:
   cms-data:
     name: cms-data
   # Holds the ranking logo the panel writes, and the host mirror the config sync copies.
-  # The JSON store this volume was created for is retired: the proxy writes the projection
-  # tables and the service reads them, so nothing here is ranking data any more.
   cms-ranking-data:
     name: cms-ranking-data
   cms-submissions:
@@ -1073,11 +981,9 @@ volumes:
     name: cms-nginx-logs-contest
   worker-tmp:
     name: cms-worker-tmp-${WORKER_SHARD:-0}
-  # Shared with docker-compose.domain.yml's same-named service: both stacks run
-  # the one container, so the appendonly data must survive whichever is up.
+  # Shared with docker-compose.domain.yml's same-named service: both stacks run the one container, so the appendonly data must survive whichever is up.
   redis-rate-limit-data:
     name: cms-redis-rate-limit-data
-  # Same key and name as docker-compose.waf.yml's volume, so a merged WAF project
-  # sees one volume rather than two that name the same directory.
+  # Same key and name as docker-compose.waf.yml's volume, so a merged WAF project sees one volume rather than two that name the same directory.
   waf-logs:
     name: cms-waf-logs

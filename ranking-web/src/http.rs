@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use axum::extract::State;
 use axum::http::{header, StatusCode};
 use axum::response::{IntoResponse, Json, Response};
@@ -7,6 +9,7 @@ use serde::Serialize;
 use tower_http::services::ServeDir;
 
 use crate::board;
+use crate::identity::Identity;
 use crate::json::{json_response, stamped_json};
 use crate::public_config::{public_config, source_url_from_credits};
 use crate::store::{
@@ -30,6 +33,9 @@ pub struct Health {
 #[derive(Serialize)]
 pub struct Diagnostics {
     pub ready: bool,
+    /// Whether every public identity read is currently masked. An operator can
+    /// confirm the anonymous policy without reading a response body.
+    pub identity_masked: bool,
     pub skipped_overrides: usize,
     /// Every row the fold dropped, so the board's missing rows have one number. The three
     /// causes below partition it — the meaning this key already had, so the panel's consumer
@@ -59,6 +65,13 @@ pub struct Diagnostics {
     /// The task hides naming neither a projected contest nor a projected task: nothing in the
     /// snapshot explains the key.
     pub unmatched_task_hides: usize,
+    /// How many contests the board draws a row for. Beside `contests_with_overrides` it is
+    /// the cheap proof that rows are per contest rather than folded into one board.
+    pub contests_on_board: usize,
+    /// How many contests hold at least one active override. A row override filed under one
+    /// contest must raise this only for its own contest; two contests with one override each
+    /// report 2, and a fold that lost the contest reports 1.
+    pub contests_with_overrides: usize,
 }
 
 /// Why the reason is a value and not a Response: clippy::result_large_err is right
@@ -88,15 +101,13 @@ pub fn router(state: AppState) -> Router {
         .route("/credits", get(credits))
         .route("/events", get(crate::events::events));
     let router = crate::entity_routes::routes(router);
-    // One gate rather than the same check in five handlers, and it reads access_mode
-    // from the row /config serves, so a panel change applies on the next request.
+    // One gate for five handlers, reading the row /config serves so a panel change applies next request.
     let router = router.layer(axum::middleware::from_fn_with_state(
         state.clone(),
         crate::login::gate,
     ));
     match state.config().static_dir.clone() {
-        // The vendored page asks for its stylesheet, scripts and images by name at
-        // the root, so the directory is the fallback rather than one route.
+        // The page asks for its files at the root, so the directory is the fallback, not one route.
         Some(directory) => router
             .fallback_service(ServeDir::new(directory).fallback(any(unavailable)))
             .with_state(state),
@@ -118,9 +129,7 @@ async fn health(State(state): State<AppState>) -> (StatusCode, Json<Health>) {
 }
 
 async fn root(State(state): State<AppState>) -> Response {
-    // The page itself is a template now, but its stylesheet and scripts still come
-    // from this directory, so a deployment with none refuses rather than serving a
-    // bare document nothing can draw with.
+    // The template renders without this directory but cannot draw, so a deployment with none refuses.
     if state.config().static_dir.is_none() {
         return refuse("no RANKING_STATIC_DIR is configured");
     }
@@ -143,10 +152,21 @@ async fn root(State(state): State<AppState>) -> Response {
 }
 
 async fn scores(State(state): State<AppState>) -> Response {
-    // A refusal, never a partial or empty board: a page that renders an empty
-    // scoreboard during a contest is worse than one that renders an error.
+    // A refusal, never an empty board: a blank scoreboard mid-contest is worse than an error.
+    let identity = match identity_of(&state).await {
+        Ok(identity) => identity,
+        Err(refusal) => return refusal.response(),
+    };
     match state.standings().await {
-        Ok(standings) => stamped_json(standings.ledger.scores()),
+        Ok(standings) => {
+            let scored: BTreeMap<String, BTreeMap<String, f64>> = standings
+                .ledger
+                .scores()
+                .iter()
+                .map(|(user, tasks)| (identity.public_key(user), tasks.clone()))
+                .collect();
+            stamped_json(&scored)
+        }
         Err(error) => refuse(&error.to_string()),
     }
 }
@@ -155,11 +175,34 @@ async fn scores(State(state): State<AppState>) -> Response {
 /// by the server, so a rename, a hide, a guest, a score or a pin reaches the reader
 /// without the client recomputing anything.
 async fn board(State(state): State<AppState>) -> Response {
+    let identity = match identity_of(&state).await {
+        Ok(identity) => identity,
+        Err(refusal) => return refusal.response(),
+    };
     match state.standings().await {
-        Ok(standings) => stamped_json(&board::board_view(
-            standings.ledger.board(),
-            &standings.users,
-        )),
+        Ok(standings) => {
+            let view: BTreeMap<String, board::BoardEntry> =
+                board::board_view(standings.ledger.board(), &standings.users)
+                    .into_iter()
+                    .map(|(key, mut entry)| {
+                        let user = entry.user.clone();
+                        let public = identity.public_key(&user);
+                        if identity.masked() {
+                            let (first, last) = identity.name("", "");
+                            entry.f_name = first;
+                            entry.l_name = last;
+                            entry.user = public.clone();
+                        }
+                        let id = if key == user {
+                            entry.user.clone()
+                        } else {
+                            format!("{}{}{}", entry.user, '\u{1f}', entry.contest_id)
+                        };
+                        (id, entry)
+                    })
+                    .collect();
+            stamped_json(&view)
+        }
         Err(error) => refuse(&error.to_string()),
     }
 }
@@ -167,20 +210,51 @@ async fn board(State(state): State<AppState>) -> Response {
 /// The team board: each team's visible members summed, with the team-level overrides
 /// applied to the aggregate rather than to each member.
 async fn board_teams(State(state): State<AppState>) -> Response {
+    let identity = match identity_of(&state).await {
+        Ok(identity) => identity,
+        Err(refusal) => return refusal.response(),
+    };
     match state.standings().await {
-        Ok(standings) => stamped_json(&board::team_board_view(
-            standings.ledger.board(),
-            &standings.users,
-            &standings.team_names,
-            &standings.overrides,
-        )),
+        Ok(standings) => {
+            let view = board::team_board_view(
+                standings.ledger.board(),
+                &standings.users,
+                &standings.team_names,
+                &standings.overrides,
+            )
+            .into_iter()
+            .map(|(team, mut entry)| {
+                entry.members = entry
+                    .members
+                    .iter()
+                    .map(|member| identity.public_key(member))
+                    .collect();
+                (team, entry)
+            })
+            .collect::<BTreeMap<_, _>>();
+            stamped_json(&view)
+        }
         Err(error) => refuse(&error.to_string()),
     }
 }
 
 async fn history(State(state): State<AppState>) -> Response {
+    let identity = match identity_of(&state).await {
+        Ok(identity) => identity,
+        Err(refusal) => return refusal.response(),
+    };
     match state.standings().await {
-        Ok(standings) => json_response(&standings.ledger.history().to_vec()),
+        Ok(standings) => {
+            let rows: Vec<(String, String, i64, f64)> = standings
+                .ledger
+                .history()
+                .iter()
+                .map(|(user, task, time, delta)| {
+                    (identity.public_key(user), task.clone(), *time, *delta)
+                })
+                .collect();
+            json_response(&rows)
+        }
         Err(error) => refuse(&error.to_string()),
     }
 }
@@ -193,8 +267,27 @@ async fn overrides(State(state): State<AppState>) -> Response {
         Ok(shown) => shown,
         Err(refusal) => return refusal.response(),
     };
+    let identity = match identity_of(&state).await {
+        Ok(identity) => identity,
+        Err(refusal) => return refusal.response(),
+    };
     match crate::overrides::load_overrides(db.pool(), shown.contest_ids()).await {
-        Ok(rows) => json_response(&rows),
+        Ok(rows) => {
+            let rows: Vec<_> = rows
+                .into_iter()
+                .map(|mut row| {
+                    if row.target_kind == "user" {
+                        row.target_key = identity.public_key(&row.target_key);
+                        if matches!(row.action.as_str(), "rename" | "guest") && row.value.is_some()
+                        {
+                            row.value = Some("—".to_string());
+                        }
+                    }
+                    row
+                })
+                .collect();
+            json_response(&rows)
+        }
         Err(error) => refuse(&error.to_string()),
     }
 }
@@ -254,6 +347,26 @@ async fn appearance_of(state: &AppState) -> Result<Option<Appearance>, Refusal> 
         .map_err(|error| Refusal(error.to_string()))
 }
 
+/// The identity rule every public response obeys. The panel's anonymous flag is
+/// the only input; a missing appearance row is not anonymous.
+pub(crate) async fn identity_of(state: &AppState) -> Result<Identity, Refusal> {
+    // No database means no appearance row; the face route has no policy to apply anyway.
+    let Some(db) = state.db() else {
+        return Ok(Identity::new(false));
+    };
+    let appearance = load_appearance(db.pool())
+        .await
+        .map_err(|error| Refusal(error.to_string()))?;
+    let identity = Identity::new(appearance.as_ref().is_some_and(Appearance::anonymous));
+    if identity.masked() {
+        static ANNOUNCED: std::sync::OnceLock<()> = std::sync::OnceLock::new();
+        if ANNOUNCED.set(()).is_ok() {
+            eprintln!("cms-ranking: anonymous board identity masking is active");
+        }
+    }
+    Ok(identity)
+}
+
 /// What the board is told to show, or the refusal the caller must return.
 ///
 /// WHY the database is required: the shown set is the board's whole answer for its contents, so a
@@ -290,11 +403,15 @@ async fn contest_of(state: &AppState, shown: &ShownSet) -> Result<Option<Ranking
 }
 
 async fn diagnostics(State(state): State<AppState>) -> Response {
-    // A refusal, never zeros: "no database" and "nothing was dropped" must not look
-    // alike, which is the same reason every other read route refuses here.
+    // A refusal, never zeros: "no database" and "nothing dropped" must not look alike.
+    let identity = match identity_of(&state).await {
+        Ok(identity) => identity,
+        Err(refusal) => return refusal.response(),
+    };
     match state.standings().await {
         Ok(standings) => json_response(&Diagnostics {
             ready: true,
+            identity_masked: identity.masked(),
             skipped_overrides: standings.ledger.skipped_overrides(),
             skipped_subchanges: standings.ledger.skipped_subchanges(),
             hidden_task_subchanges: standings.ledger.hidden_task_subchanges(),
@@ -304,6 +421,8 @@ async fn diagnostics(State(state): State<AppState>) -> Response {
             withheld_task_hides: standings.ledger.withheld_task_hides(),
             renamed_task_hides: standings.ledger.renamed_task_hides(),
             unmatched_task_hides: standings.ledger.unmatched_task_hides(),
+            contests_on_board: standings.ledger.contests_on_board(),
+            contests_with_overrides: standings.overrides.scoped_contests(),
         }),
         Err(error) => refuse(&error.to_string()),
     }

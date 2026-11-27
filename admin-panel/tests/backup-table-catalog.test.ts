@@ -54,6 +54,10 @@ const SCHEMA_SOURCE = readFileSync(fileURLToPath(new URL('../prisma/schema.prism
  * it would either point at nothing or — worse — at different rows, and the verifier would report a
  * gap that the restore created rather than one an operator caused. It travels with the log instead,
  * in `backups/db/audit-log-<ts>.dump`, which carries both tables together.
+ *
+ * `ranking_sessions` is excluded because a session is live authority, not data: restoring a dump
+ * would resurrect a logged-out or disabled console session, which is the opposite of the revocation
+ * the table exists to enforce.
  */
 const MODELS_OUTSIDE_CATALOG: ReadonlySet<string> = new Set([
   'audit_log',
@@ -63,6 +67,7 @@ const MODELS_OUTSIDE_CATALOG: ReadonlySet<string> = new Set([
   'security_host_modules',
   'contest_usernames_history',
   'login_surfaces',
+  'ranking_sessions',
   'ranking_contests',
   'ranking_tasks',
   'ranking_teams',

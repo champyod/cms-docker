@@ -56,7 +56,7 @@ var Scoreboard = new function () {
     self.frozen = new Object();
 
     self.display_name = function (user) {
-        var renamed = DataStore.rename_for(user["key"]);
+        var renamed = DataStore.rename_for(user["key"], user["contest"]);
         if (renamed !== null) return { first: renamed, last: "" };
         return { first: user["f_name"], last: user["l_name"] };
     };
@@ -70,17 +70,17 @@ var Scoreboard = new function () {
     };
 
     self.display_global = function (user) {
-        var snap = self.frozen[user["key"]];
+        var snap = self.frozen[user["row_id"] || user["key"]];
         if (snap !== undefined) return snap["global"];
-        var replaced = DataStore.score_for(user["key"]);
+        var replaced = DataStore.score_for(user["key"], user["contest"]);
         if (replaced !== null) return replaced;
         return user["global"];
     };
 
     self.display_rank = function (user) {
-        var pinned = DataStore.pin_for(user["key"]);
+        var pinned = DataStore.pin_for(user["key"], user["contest"]);
         if (pinned !== null) return pinned;
-        var snap = self.frozen[user["key"]];
+        var snap = self.frozen[user["row_id"] || user["key"]];
         if (snap !== undefined) return snap["rank"];
         if (typeof user["rank"] !== "number") return user["rank"];
         var mine = self.display_global(user);
@@ -92,13 +92,16 @@ var Scoreboard = new function () {
     };
 
     self.display_task = function (user, t_id) {
-        var snap = self.frozen[user["key"]];
+        if (user["contest"] !== undefined && DataStore.tasks[t_id] !== undefined &&
+            DataStore.tasks[t_id]["contest"] !== user["contest"]) return 0;
+        var snap = self.frozen[user["row_id"] || user["key"]];
         if (snap !== undefined && snap["tasks"][t_id] !== undefined) return snap["tasks"][t_id];
         return user["t_" + t_id];
     };
 
     self.display_contest = function (user, c_id) {
-        var snap = self.frozen[user["key"]];
+        if (user["contest"] !== undefined && String(c_id) !== String(user["contest"])) return 0;
+        var snap = self.frozen[user["row_id"] || user["key"]];
         if (snap !== undefined && snap["contests"][c_id] !== undefined) return snap["contests"][c_id];
         return user["c_" + c_id];
     };
@@ -174,19 +177,98 @@ var Scoreboard = new function () {
     self.visible_users = function () {
         var out = new Array();
         if (DataStore.is_board_hidden()) return out;
+        var contests = DataStore.contest_list;
         for (var u_id in DataStore.users) {
-            if (!DataStore.is_hidden(u_id)) out.push(DataStore.users[u_id]);
+            var user = DataStore.users[u_id];
+            if (contests.length === 0) {
+                if (!DataStore.is_hidden(u_id)) out.push(user);
+                continue;
+            }
+            for (var i = 0; i < contests.length; i += 1) {
+                var c_id = contests[i]["key"];
+                if (DataStore.is_hidden(u_id, c_id)) continue;
+                out.push(self.split_user(user, c_id));
+            }
         }
-        var guests = DataStore.guest_rows();
-        for (var idx in guests) {
-            var row = guests[idx];
-            var user = { key: row["target_key"], f_name: row["value"] || row["target_key"], l_name: "", team: null, global: 0, rank: "–", selected: 0 };
-            for (var t_id in DataStore.tasks) user["t_" + t_id] = 0;
-            out.push(user);
+        for (var j = 0; j < contests.length; j += 1) {
+            var guest_contest = contests[j]["key"];
+            var guests = DataStore.guest_rows(guest_contest);
+            for (var idx in guests) {
+                var row = guests[idx];
+                var guest = {
+                    key: row["target_key"],
+                    row_id: row["target_key"] + "|" + guest_contest,
+                    f_name: row["value"] || row["target_key"],
+                    l_name: "",
+                    team: null,
+                    contest: guest_contest,
+                    global: 0,
+                    rank: "–",
+                    selected: 0
+                };
+                for (var t_id in DataStore.tasks) {
+                    guest["t_" + t_id] = (DataStore.tasks[t_id]["contest"] === guest_contest)
+                        ? 0 : 0;
+                }
+                out.push(guest);
+            }
         }
+        self.rank_contest_rows(out);
         return out;
     };
 
+    self.split_user = function (user, contest) {
+        var row = {
+            key: user["key"],
+            row_id: user["key"] + "|" + contest,
+            f_name: user["f_name"],
+            l_name: user["l_name"],
+            team: user["team"],
+            contest: contest,
+            global: user["c_" + contest] || 0,
+            rank: "–",
+            selected: user["selected"] || 0
+        };
+        for (var t_id in DataStore.tasks) {
+            row["t_" + t_id] = (DataStore.tasks[t_id]["contest"] === contest)
+                ? user["t_" + t_id] : 0;
+        }
+        for (var c_id in DataStore.contests) {
+            row["c_" + c_id] = (String(c_id) === String(contest)) ? (user["c_" + c_id] || 0) : 0;
+        }
+        return row;
+    };
+
+    self.rank_contest_rows = function (rows) {
+        var by_contest = new Object();
+        for (var i = 0; i < rows.length; i += 1) {
+            var c_id = rows[i]["contest"];
+            if (by_contest[c_id] === undefined) by_contest[c_id] = new Array();
+            by_contest[c_id].push(rows[i]);
+        }
+        for (var c_id in by_contest) {
+            var group = by_contest[c_id];
+            group.sort(function (a, b) {
+                var pinned_a = DataStore.pin_for(a["key"], a["contest"]);
+                var pinned_b = DataStore.pin_for(b["key"], b["contest"]);
+                if (pinned_a !== null || pinned_b !== null) {
+                    var ra = (pinned_a !== null) ? pinned_a : Number.MAX_SAFE_INTEGER;
+                    var rb = (pinned_b !== null) ? pinned_b : Number.MAX_SAFE_INTEGER;
+                    if (ra !== rb) return ra < rb ? -1 : 1;
+                }
+                return (b["global"] - a["global"]) || (a["key"] < b["key"] ? -1 : 1);
+            });
+            var previous = null;
+            var rank = 0;
+            for (var j = 0; j < group.length; j += 1) {
+                if (previous !== group[j]["global"]) {
+                    rank = j + 1;
+                    previous = group[j]["global"];
+                }
+                group[j]["rank"] = rank;
+            }
+        }
+    };
 
     self.generate = function () {
         // Create callbacks for sorting
@@ -286,6 +368,10 @@ var Scoreboard = new function () {
 <col class=\"team\"/>";
 
         var contests = DataStore.contest_list;
+        if (contests.length > 1) {
+            result += " \
+<col class=\"contest\"/>";
+        }
         for (var i in contests) {
             var contest = contests[i];
             var c_id = contest["key"];
@@ -323,7 +409,9 @@ var Scoreboard = new function () {
     <th class=\"f_name\">First Name</th> \
     <th class=\"l_name\">Last Name</th>" +
             (PublicConfig.show_id_column ? "<th class=\"user_id\">ID</th>" : "") +
-            "<th class=\"team\">Team</th>";
+            "<th class=\"team\">Team</th>" +
+            (DataStore.contest_list.length > 1 ? " \
+    <th class=\"contest\">Contest</th>" : "");
 
         var contests = DataStore.contest_list;
         for (var i in contests) {
@@ -368,7 +456,7 @@ var Scoreboard = new function () {
     self.make_row = function (user) {
         var name = self.display_name(user);
         var result = " \
-<tr class=\"user" + (user["selected"] > 0 ? " selected color" + user["selected"] : "") + "\" data-user=\"" + user["key"] + "\"> \
+<tr class=\"user" + (user["selected"] > 0 ? " selected color" + user["selected"] : "") + "\" data-user=\"" + user["key"] + "\" data-row=\"" + (user["row_id"] || user["key"]) + "\"> \
     <td class=\"sel\"></td> \
     <td class=\"rank\">" + self.display_rank(user) + "</td> \
     <td class=\"f_name\">" + escapeHTML(name["first"]) + "</td> \
@@ -381,6 +469,12 @@ var Scoreboard = new function () {
         } else {
             result += " \
     <td class=\"team\"></td>";
+        }
+        if (DataStore.contest_list.length > 1) {
+            var contest_name = (user["contest"] !== undefined && DataStore.contests[user["contest"]] !== undefined)
+                ? DataStore.contests[user["contest"]]["name"] : (user["contest"] || "");
+            result += " \
+    <td class=\"contest\">" + escapeHTML(contest_name) + "</td>";
         }
 
         var contests = DataStore.contest_list;
@@ -439,8 +533,8 @@ var Scoreboard = new function () {
     // Compare two users. Returns -1 if "a < b" or +1 if "a >= b"
     // (where a < b means that a shoud go above b in the scoreboard)
     self.compare_users = function (a, b) {
-        var a_pin = DataStore.pin_for(a["key"]);
-        var b_pin = DataStore.pin_for(b["key"]);
+        var a_pin = DataStore.pin_for(a["key"], a["contest"]);
+        var b_pin = DataStore.pin_for(b["key"], b["contest"]);
         if (a_pin !== null || b_pin !== null) {
             var a_rank = (a_pin !== null) ? a_pin : Number.MAX_SAFE_INTEGER;
             var b_rank = (b_pin !== null) ? b_pin : Number.MAX_SAFE_INTEGER;
@@ -455,7 +549,7 @@ var Scoreboard = new function () {
            ((a_global > b_global) || ((a_global == b_global) &&
            ((a["l_name"] < b["l_name"]) || ((a["l_name"] == b["l_name"]) &&
            ((a["f_name"] < b["f_name"]) || ((a["f_name"] == b["f_name"]) &&
-           (a["key"] <= b["key"]))))))))) {
+           ((a["row_id"] || a["key"]) <= (b["row_id"] || b["key"])))))))))) {
             return -1;
         } else {
             return +1;
@@ -486,7 +580,7 @@ var Scoreboard = new function () {
             if (i == 0) {
                 self.tbody_el.prepend(user["row"]);
             } else {
-                self.tbody_el.children("tr.user[data-user=" + list[i-1]["key"] + "]").after(user["row"]);
+                self.tbody_el.children("tr.user[data-row=" + (list[i-1]["row_id"] || list[i-1]["key"]) + "]").after(user["row"]);
             }
         } else if (i < list_l-1 && compare(list[i+1], user) == -1) {
             // Move down

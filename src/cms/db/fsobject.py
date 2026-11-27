@@ -107,6 +107,16 @@ class LargeObject(io.RawIOBase, typing.BinaryIO):
                                       "Couldn't create large object.", cursor)
             if self.loid == 0:
                 raise OSError("Couldn't create large object.")
+            # WHY: large-object ACLs are per object; the read-only backup role cannot see a new file
+            # without this grant, and it must never regain the application-owner membership.
+            self._execute(
+                "DO $$ BEGIN "
+                "IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'cms_backup') THEN "
+                "EXECUTE format('GRANT SELECT ON LARGE OBJECT %%s TO cms_backup', %(loid)s); "
+                "END IF; END $$;",
+                {'loid': self.loid},
+                "Couldn't grant backup read on large object %s." % self.loid,
+                cursor)
 
         # Open the large object.
         open_mode = (LargeObject.INV_READ if self._readable else 0) | \

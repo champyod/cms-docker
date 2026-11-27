@@ -18,6 +18,7 @@ setup_test_root() {
   mkdir -p "$TEST_ROOT/scripts/__lib" "$TEST_ROOT/config"
   cp "$REPO_ROOT/scripts/__check_var_coverage.sh" "$TEST_ROOT/scripts/"
   cp "$REPO_ROOT/scripts/__lib/common.sh" "$TEST_ROOT/scripts/__lib/"
+  cp "$REPO_ROOT/scripts/__config_sync.sh" "$TEST_ROOT/scripts/"
   cp "$REPO_ROOT/config.toml.example" "$TEST_ROOT/"
   cp "$REPO_ROOT/config/cms.sample.toml" "$TEST_ROOT/config/"
   cat > "$TEST_ROOT/docker-compose.yml" <<'YAML'
@@ -30,6 +31,10 @@ services:
       TRUSTED_SANDBOX_MAX_PROCESSES: ${TRUSTED_SANDBOX_MAX_PROCESSES:-1000}
       TRUSTED_SANDBOX_MAX_TIME_S: ${TRUSTED_SANDBOX_MAX_TIME_S:-10.0}
       TRUSTED_SANDBOX_MAX_MEMORY_KIB: ${TRUSTED_SANDBOX_MAX_MEMORY_KIB:-4194304}
+      CMS_SERVICES: ${CMS_SERVICES}
+      LOG_SERVICE_ADDR: ${LOG_SERVICE_ADDR}
+      LOG_DIR: ${LOG_DIR}
+      RESOURCE_SERVICE_ADDR: ${RESOURCE_SERVICE_ADDR}
 YAML
 }
 
@@ -92,6 +97,56 @@ if grep -Fq 'compose uses ${TRUSTED_SANDBOX_MAX_TIME_S} but config/cms.sample.to
 else
   fail "the mapping accepted a key outside [sandbox]"
 fi
+
+echo ""
+echo "=== Test 4: generated env vars pass with their emitters ==="
+setup_test_root
+if run_gate; then gate_code=0; else gate_code=$?; fi
+if [[ "$gate_code" -eq 0 ]]; then
+  pass "generated variables pass with their config sync emitters"
+else
+  fail "generated variables failed with their emitters present (exit $gate_code)"
+fi
+if [[ "$(grep -c '^\[WARN\]' "$TEST_ROOT/gate.log")" -eq 0 ]]; then
+  pass "generated variables produced no warning"
+else
+  fail "generated variables produced a warning"
+fi
+for var in LOG_SERVICE_ADDR LOG_DIR RESOURCE_SERVICE_ADDR CMS_SERVICES; do
+  if grep -Fq "printf '${var}=%s\\n'" "$TEST_ROOT/scripts/__config_sync.sh"; then
+    pass "${var} emitter present in config sync"
+  else
+    fail "${var} emitter missing from config sync"
+  fi
+done
+
+echo ""
+echo "=== Test 5: a missing generated emitter fails and names its variable ==="
+for var in LOG_SERVICE_ADDR LOG_DIR RESOURCE_SERVICE_ADDR CMS_SERVICES; do
+  setup_test_root
+  grep -vF "printf '${var}=%s\\n'" "$TEST_ROOT/scripts/__config_sync.sh" > "$TEST_ROOT/config_sync.new" || true
+  mv "$TEST_ROOT/config_sync.new" "$TEST_ROOT/scripts/__config_sync.sh"
+  if grep -Fq "printf '${var}=%s\\n'" "$TEST_ROOT/scripts/__config_sync.sh"; then
+    fail "${var} emitter was not removed from the fixture"
+    continue
+  fi
+  if run_gate; then gate_code=0; else gate_code=$?; fi
+  if [[ "$gate_code" -eq 1 ]]; then
+    pass "removing the ${var} emitter fails coverage"
+  else
+    fail "removing the ${var} emitter must exit 1, got $gate_code"
+  fi
+  if grep -Fq "compose uses \${${var}} but scripts/__config_sync.sh has no emitter" "$TEST_ROOT/gate.log"; then
+    pass "warning names ${var} and the missing emitter"
+  else
+    fail "warning did not name ${var} and its missing emitter"
+  fi
+  if [[ "$(grep -c '^\[WARN\]' "$TEST_ROOT/gate.log")" -eq 1 ]]; then
+    pass "only ${var} warns when its emitter disappears"
+  else
+    fail "removing the ${var} emitter warned for more than its own variable"
+  fi
+done
 
 echo ""
 echo "=== Results: $PASS passed, $FAIL failed ==="

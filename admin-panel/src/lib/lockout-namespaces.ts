@@ -15,6 +15,18 @@ export const LOCKOUT_NAMESPACES: readonly LockoutNamespace[] = [
   { namespace: 'cms:ranking:login:', surface: 'ranking' },
 ];
 
+/** The ranking console keeps display facts beside a hashed account counter. */
+export const RANKING_LOCKOUT_METADATA_NAMESPACE = 'cms:ranking:login-meta:';
+
+/** The metadata key paired with a ranking account counter, or null for an IP key. */
+export function rankingMetadataKeyFor(counterKey: string): string | null {
+  const entry = lockoutNamespaceFor(counterKey);
+  if (entry?.surface !== 'ranking') return null;
+  const raw = counterKey.slice(entry.namespace.length);
+  if (raw.startsWith('ip#')) return null;
+  return `${RANKING_LOCKOUT_METADATA_NAMESPACE}${raw}`;
+}
+
 /** The entry a key belongs to, or null when it matches no known namespace. */
 export function lockoutNamespaceFor(key: string): LockoutNamespace | null {
   return LOCKOUT_NAMESPACES.find((entry) => isLockoutKey(entry.namespace, key)) ?? null;

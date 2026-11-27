@@ -31,6 +31,7 @@
 import logging
 
 from sqlalchemy import create_engine, MetaData
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import configure_mappers, joinedload, subqueryload
 
 from cms import config
@@ -42,9 +43,11 @@ logger = logging.getLogger(__name__)
 # Define what this package will provide.
 
 __all__ = [
-    "version", "engine",
+    "version", "engine", "admin_security_engine",
     # session
-    "Session", "ScopedSession", "SessionGen", "custom_psycopg2_connection",
+    "Session", "ScopedSession", "SessionGen",
+    "AdminSecuritySession", "AdminSecuritySessionGen",
+    "AdminSecurityDatabaseNotConfigured", "custom_psycopg2_connection",
     # actor
     "db_actor", "CORE_ACTOR", "KNOWN_SYSTEM_ACTORS", "ACTOR_ENV",
     "InvalidActorError", "default_actor", "validate_actor",
@@ -96,13 +99,25 @@ __all__ = [
 
 version = 50
 
-engine = create_engine(config.database.url, echo=config.database.debug,
-                       pool_timeout=60, pool_recycle=120)
+
+def _create_engine(url: str) -> Engine:
+    """Build an engine with the pool settings every CMS engine shares."""
+    return create_engine(url, echo=config.database.debug,
+                         pool_timeout=60, pool_recycle=120)
+
+
+engine = _create_engine(config.database.url)
+
+# WHY a second engine with no fallback: admin writes use cms_admin_account_security, and an absent URL raises.
+_admin_security_url = (config.database.admin_security_url or "").strip()
+admin_security_engine = (
+    _create_engine(_admin_security_url) if _admin_security_url else None)
 
 metadata = MetaData(engine)
 
 from .session import Session, ScopedSession, SessionGen, \
-    custom_psycopg2_connection
+    AdminSecuritySession, AdminSecuritySessionGen, \
+    AdminSecurityDatabaseNotConfigured, custom_psycopg2_connection
 from . import actor as db_actor
 from .actor import CORE_ACTOR, KNOWN_SYSTEM_ACTORS, ACTOR_ENV, \
     InvalidActorError, default_actor, validate_actor
@@ -122,15 +137,10 @@ from .submission import Submission, File, Token, SubmissionResult, \
     Executable, Evaluation
 from .usertest import UserTest, UserTestFile, UserTestManager, \
     UserTestResult, UserTestExecutable
-# WHY: must be imported before configure_mappers() below, otherwise the
-# Admin.admin_groups string reference cannot be resolved and every entry
-# point importing cms.db fails. Tables stay in metadata for mapper
-# resolution; Prisma migrations own their creation (cmsInitDB excludes them).
+# WHY: imported before configure_mappers(), or the Admin.admin_groups reference cannot resolve and every cms.db import fails.
 from .permissions import Permission, Group, GroupPermission, AdminGroup, \
     AdminPermissionOverride, AuditLog
-# WHY imported like the RBAC models: Prisma owns the table's creation, and the
-# web servers only append the lockouts they count so the panel's block list has
-# something to read.
+# WHY imported like the RBAC models: Prisma owns table creation, and the servers only append lockouts.
 from .security_block import SecurityBlock
 
 from .init import init_db
@@ -146,8 +156,7 @@ from .util import test_db_connection, get_contest_list, is_contest_id, \
 configure_mappers()
 
 
-# The following is a method of Dataset that cannot be put in the right
-# file because of circular dependencies.
+# The following is a method of Dataset that cannot be put in the right file because of circular dependencies.
 
 def get_submission_results_for_dataset(self, dataset) -> list[SubmissionResult]:
     """Return a list of all submission results against the specified
@@ -159,10 +168,7 @@ def get_submission_results_for_dataset(self, dataset) -> list[SubmissionResult]:
     returns: list of submission results.
 
     """
-    # We issue this query manually to optimize it: we load all
-    # executables and evaluations at once instead of having SA
-    # lazy-load them when we access them for each SubmissionResult,
-    # one at a time.
+    # We issue this query manually to optimize it
     return self.sa_session\
         .query(SubmissionResult)\
         .filter(SubmissionResult.dataset == dataset)\

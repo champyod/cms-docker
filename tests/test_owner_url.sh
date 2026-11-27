@@ -12,17 +12,17 @@ url() { # url <mode> [env assignments...]
 }
 
 printf '\nthe container side addresses the compose service\n'
-out="$(url container POSTGRES_USER=u POSTGRES_PASSWORD=p POSTGRES_DB=d)"
-[[ "$out" == "postgresql://u:p@database:5432/d" ]] && ok "container URL" || no "container URL was: $out"
+out="$(url container ADMIN_MIGRATE_PASSWORD=p POSTGRES_DB=d)"
+[[ "$out" == postgresql://cms_platform_migrator:*@database:5432/d ]] && ok "container URL" || no "container URL was: $out"
 
 printf '\nthe host side addresses the published interface, never localhost\n'
-out="$(url host POSTGRES_USER=u POSTGRES_PASSWORD=p POSTGRES_DB=d DB_BIND_IP=203.0.113.10 POSTGRES_PORT_EXTERNAL=5432)"
-[[ "$out" == "postgresql://u:p@203.0.113.10:5432/d" ]] && ok "uses DB_BIND_IP" || no "host URL was: $out"
+out="$(url host ADMIN_MIGRATE_PASSWORD=p POSTGRES_DB=d DB_BIND_IP=203.0.113.10 POSTGRES_PORT_EXTERNAL=5432)"
+[[ "$out" == postgresql://cms_platform_migrator:*@203.0.113.10:5432/d ]] && ok "uses DB_BIND_IP" || no "host URL was: $out"
 [[ "$out" != *localhost* ]] && ok "never says localhost" || no "still says localhost"
 
 printf '\nand falls back to loopback only when nothing binds elsewhere\n'
-out="$(url host POSTGRES_USER=u POSTGRES_PASSWORD=p POSTGRES_DB=d)"
-[[ "$out" == "postgresql://u:p@127.0.0.1:5432/d" ]] && ok "loopback default" || no "default was: $out"
+out="$(url host ADMIN_MIGRATE_PASSWORD=p POSTGRES_DB=d)"
+[[ "$out" == postgresql://cms_platform_migrator:*@127.0.0.1:5432/d ]] && ok "loopback default" || no "default was: $out"
 
 printf '\nan unknown mode is refused\n'
 if env -i PATH="$PATH" HOME="${HOME:-/tmp}" bash "$SCRIPT" nope >/dev/null 2>&1; then

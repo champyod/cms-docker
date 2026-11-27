@@ -5,10 +5,7 @@ if (set -o pipefail 2>/dev/null); then
     set -o pipefail
 fi
 
-# __apply_sql.sh — apply every .sql file under admin-panel/prisma/sql/ in filename order.
-# WHY: roles are limited to cmsuser (owner, NOBYPASSRLS) and cms_backup (BYPASSRLS, member of cmsuser)
-# for least privilege; post-restart schema sync runs prisma migrate deploy and re-applies roles/RLS.
-# Safe to re-run: each SQL file is idempotent (DO $$ guards / IF NOT EXISTS).
+# Safe to re-run: every SQL file is idempotent (DO $$ guards / IF NOT EXISTS).
 
 CMS_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$CMS_ROOT"
@@ -17,11 +14,7 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/__lib/common.sh"
 
-# WHY --pre-push: capture legacy permissions before the columns are dropped.
-# In that mode apply ONLY the capture file and be tolerant (never abort the caller).
-# WHY --bootstrap-roles: apply ONLY role-definition files BEFORE the restart so
-# cms_backup can connect with its real password; RLS/hardening are deferred to
-# the post-restart full apply after new code is running.
+# Both modes apply one subset only: capture before the drop, role definitions before the restart.
 PRE_PUSH=0
 BOOTSTRAP_ROLES=0
 if [[ "${1:-}" == "--pre-push" ]]; then
@@ -34,10 +27,7 @@ ENV_FILE=".env"
 SQL_DIR="admin-panel/prisma/sql"
 DB_CONTAINER="cms-database"
 
-# Resolve DB credentials from .env (exact key match via awk — avoids regex metachars).
-# WHY env_unquote: __config_sync quotes a value that contains whitespace or a shell
-# metacharacter, so a password with a space would otherwise reach psql with its quotes
-# still attached (the previous inline gsub stripped quotes but not the escapes).
+# env_unquote: __config_sync quotes a value containing whitespace, so psql would otherwise receive the quotes.
 get_env_val() {
   local key="$1" file="$2" raw
   raw="$(awk -F= -v k="$key" '$1==k { v=$0; sub(/^[^=]*=/, "", v); print v; exit }' "$file" 2>/dev/null | tr -d '\r' || true)"
@@ -65,23 +55,53 @@ if [[ -z "$CMS_BACKUP_PASSWORD" ]]; then
   log_warn "POSTGRES_BACKUP_PASSWORD empty — run './cms config sync' to generate it; continuing with available values"
 fi
 
-# Fail loudly if DB container not running (tolerant in --pre-push / --bootstrap-roles so the update still runs)
+# Empty is tolerated: the password SQL leaves a role whose setting is empty untouched.
+ADMIN_LOGIN_PASSWORD="$(get_env_val "ADMIN_LOGIN_PASSWORD" "$ENV_FILE")"
+ADMIN_READ_PASSWORD="$(get_env_val "ADMIN_READ_PASSWORD" "$ENV_FILE")"
+ADMIN_SECURITY_PASSWORD="$(get_env_val "ADMIN_SECURITY_PASSWORD" "$ENV_FILE")"
+ADMIN_MIGRATE_PASSWORD="$(get_env_val "ADMIN_MIGRATE_PASSWORD" "$ENV_FILE")"
+if [[ -z "$ADMIN_LOGIN_PASSWORD" || -z "$ADMIN_READ_PASSWORD" || -z "$ADMIN_SECURITY_PASSWORD" || -z "$ADMIN_MIGRATE_PASSWORD" ]]; then
+  log_warn "ADMIN_*_PASSWORD empty — run './cms config sync' to generate them; those roles keep PASSWORD NULL"
+fi
+
+# Production cmsuser is NOCREATEROLE, so role DDL runs as the socket-trusted postgres OS user.
+docker_exec_db_superuser() {
+  docker exec -u postgres -i "$DB_CONTAINER" psql -U postgres -d "$DB_NAME" "$@"
+}
+
+# Fallback: a fresh install has no postgres role, and POSTGRES_USER is still superuser until hardening.
+bootstrap_psql() {
+  if [[ "${BOOTSTRAP_AS_POSTGRES:-0}" -eq 1 ]]; then
+    docker_exec_db_superuser "$@"
+  else
+    docker_exec_db "$DB_PASS" -i "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" "$@"
+  fi
+}
+
+# A file whose header carries the marker needs the superuser phase; the normal apply skips it.
+superuser_only_file() {
+  grep -qE '^--[[:space:]]*superuser-only([[:space:]]|$)' "$1"
+}
+
+# WHY this catalog query: a REVOKE in migration history cannot run as the demoted owner, and a
+# NOTICE-only revoke would record a fix that never happened; read the membership after the apply.
+BACKUP_MEMBERSHIP_SQL="SELECT count(*) FROM pg_auth_members am JOIN pg_roles granted ON granted.oid = am.roleid JOIN pg_roles member ON member.oid = am.member WHERE granted.rolname = 'cmsuser' AND member.rolname = 'cms_backup';"
+
+# Fail loudly if DB container not running. --pre-push stays tolerant; --bootstrap-roles must not
+# report success when it could not prove the backup role is read-only.
 if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$DB_CONTAINER"; then
   if [[ "$PRE_PUSH" -eq 1 ]]; then
     log_warn "database container '$DB_CONTAINER' is not running — skipping --pre-push capture (prisma db push will still run)"
     exit 0
   fi
   if [[ "$BOOTSTRAP_ROLES" -eq 1 ]]; then
-    log_warn "database container '$DB_CONTAINER' is not running — skipping --bootstrap-roles (prisma-sync will retry after the restart)"
-    exit 0
+    log_die "database container '$DB_CONTAINER' is not running — cannot bootstrap roles; start it with 'make core' and re-run (prisma-sync will not migrate without a proven cms_backup role)." 1
   fi
   log_die "database container '$DB_CONTAINER' is not running — start it with 'make core' first." 1
 fi
 
 
-# Collect .sql files in filename order (lexicographic == timestamp order)
-# WHY --pre-push: only the capture file is applied so legacy booleans
-# are saved before they are dropped; missing file is a no-op (fresh clone may not have it yet).
+# --pre-push applies only the capture file, before the legacy columns are dropped.
 if [[ "$PRE_PUSH" -eq 1 ]]; then
   CAPTURE_FILE=""
   for _f in admin-panel/prisma/migrations/*_capture_legacy_permissions/migration.sql; do [[ -e "$_f" ]] || continue; CAPTURE_FILE="$_f"; break; done
@@ -93,6 +113,10 @@ if [[ "$PRE_PUSH" -eq 1 ]]; then
   if ! docker_exec_db "$DB_PASS" -i \
     "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -v ON_ERROR_STOP=1 \
     -v "cms_backup_password=$CMS_BACKUP_PASSWORD" \
+    -v "admin_login_password=$ADMIN_LOGIN_PASSWORD" \
+    -v "admin_read_password=$ADMIN_READ_PASSWORD" \
+    -v "admin_security_password=$ADMIN_SECURITY_PASSWORD" \
+    -v "admin_migrate_password=$ADMIN_MIGRATE_PASSWORD" \
     -f - < "$CAPTURE_FILE"; then
     log_warn "failed to apply $CAPTURE_FILE — continuing (prisma db push must still run)"
   else
@@ -101,15 +125,7 @@ if [[ "$PRE_PUSH" -eq 1 ]]; then
   exit 0
 fi
 
-# WHY --bootstrap-roles: apply ONLY role-definition files BEFORE the restart so
-# cms_backup can connect; RLS/hardening are deliberately deferred to post-restart.
-# WHY content-based selector: role files contain CREATE ROLE; RLS/hardening do not.
-# Future role migrations will also contain CREATE ROLE and be auto-included without
-# updating a hardcoded filename list. Additional exclusion of active RLS (CREATE POLICY
-# / ENABLE ROW LEVEL SECURITY in non-comment SQL) is defense-in-depth against a
-# future file that might mention CREATE ROLE in a comment while being RLS-related.
-# Comment lines are stripped for the RLS check to avoid false positives from
-# explanatory comments (e.g., backup_role mentions RLS in its header comment).
+# Role files contain CREATE ROLE and no active RLS policy, and superuser-only files are included because cmsuser cannot run their DDL.
 if [[ "$BOOTSTRAP_ROLES" -eq 1 ]]; then
   if [[ ! -d "$SQL_DIR" ]]; then
     log_info "no $SQL_DIR directory — nothing to apply"
@@ -123,12 +139,16 @@ if [[ "$BOOTSTRAP_ROLES" -eq 1 ]]; then
   fi
   SQL_FILES=()
   for _f in "${_ALL_SQL[@]}"; do
-    if ! grep -q "CREATE ROLE" "$_f"; then
+    if ! grep -q "CREATE ROLE" "$_f" && ! superuser_only_file "$_f"; then
       log_info "skipping non-role file $_f"
       continue
     fi
-    # WHY strip comment lines: backup_role header mentions ROW LEVEL SECURITY in a comment
-    # but is not an RLS policy file; check active SQL only.
+    # Comment lines are stripped: the backup_role header mentions ROW LEVEL SECURITY without being an RLS file.
+    # The role catalog carries its role-specific policies; the bootstrap applies it as postgres even though it contains policy DDL.
+    if [[ "$BOOTSTRAP_ROLES" -eq 1 && "$(basename -- "$_f")" == "20260820110000_generated_roles.sql" ]]; then
+      SQL_FILES+=("$_f")
+      continue
+    fi
     if grep -v '^\s*--' "$_f" | grep -qE "CREATE POLICY|ENABLE ROW LEVEL SECURITY|FORCE ROW LEVEL SECURITY"; then
       log_info "skipping RLS-related file $_f (contains active RLS policy)"
       continue
@@ -139,16 +159,49 @@ if [[ "$BOOTSTRAP_ROLES" -eq 1 ]]; then
     log_info "no role SQL files in $SQL_DIR — nothing to apply"
     exit 0
   fi
-  log_info "applying ${#SQL_FILES[@]} role SQL file(s) to $DB_NAME via $DB_CONTAINER (bootstrap)..."
+  BOOTSTRAP_AS_POSTGRES=0
+  if docker_exec_db_superuser -tAc 'SELECT 1' >/dev/null 2>&1; then
+    BOOTSTRAP_AS_POSTGRES=1
+  elif docker_exec_db "$DB_PASS" -i "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -tAc \
+       "SELECT rolsuper FROM pg_roles WHERE rolname = current_user" 2>/dev/null | grep -qx 't'; then
+    log_warn "no local postgres superuser in $DB_CONTAINER — $DB_USER is still superuser; applying role files as $DB_USER"
+  else
+    log_die "no local postgres superuser in $DB_CONTAINER and $DB_USER is NOCREATEROLE; refusing role bootstrap (start cms-database with its postgres OS user or restore a superuser)." 1
+  fi
+  BOOTSTRAP_USER="postgres"
+  [[ "$BOOTSTRAP_AS_POSTGRES" -eq 1 ]] || BOOTSTRAP_USER="$DB_USER"
+  log_info "applying ${#SQL_FILES[@]} role SQL file(s) to $DB_NAME via $DB_CONTAINER as ${BOOTSTRAP_USER} (bootstrap)..."
   for sql_file in "${SQL_FILES[@]}"; do
     log_info "→ $sql_file"
-    if ! docker_exec_db "$DB_PASS" -i \
-      "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -v ON_ERROR_STOP=1 \
+    if ! bootstrap_psql -v ON_ERROR_STOP=1 \
       -v "cms_backup_password=$CMS_BACKUP_PASSWORD" \
+      -v "admin_login_password=$ADMIN_LOGIN_PASSWORD" \
+      -v "admin_read_password=$ADMIN_READ_PASSWORD" \
+      -v "admin_security_password=$ADMIN_SECURITY_PASSWORD" \
+      -v "admin_migrate_password=$ADMIN_MIGRATE_PASSWORD" \
       -f - < "$sql_file"; then
-      log_warn "failed to apply $sql_file — continuing (prisma-sync will retry after the restart)"
+      log_warn "failed to apply $sql_file — continuing; the membership check below decides whether the bootstrap may report success"
     fi
   done
+  # WHY read pg_auth_members instead of trusting the REVOKE: on a database installed before WS-76 the
+  # bootstrap connects as the demoted owner, where the revoke is refused (42501) and the file can only
+  # warn. A scrolling warning is how the owner-equivalent backup role survived, so the catalog decides.
+  _membership_status=0
+  if [[ "$BOOTSTRAP_AS_POSTGRES" -eq 1 ]]; then
+    _membership="$(docker_exec_db_superuser -X -tA -v ON_ERROR_STOP=1 -c "$BACKUP_MEMBERSHIP_SQL" 2>&1)" || _membership_status=$?
+  else
+    _membership="$(docker_exec_db "$DB_PASS" \
+      "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -X -tA -v ON_ERROR_STOP=1 \
+      -c "$BACKUP_MEMBERSHIP_SQL" 2>&1)" || _membership_status=$?
+  fi
+  if [[ "${_membership_status:-0}" -ne 0 ]]; then
+    log_die "could not read pg_auth_members — cannot prove cms_backup is read-only: $_membership" 1
+  fi
+  _membership="$(printf '%s' "$_membership" | tr -d '[:space:]')"
+  if [[ "$_membership" != "0" ]]; then
+    log_die "cms_backup is still a member of cmsuser (WS-76): a member of the owner inherits its UPDATE and DDL on every object cmsuser owns. REVOKE needs a superuser or ADMIN OPTION on cmsuser — run the one-time revoke as a superuser (scripts/__db_admin.sh documents the postgres --single route) and re-run the bootstrap. Dumps are unaffected: cms_backup keeps BYPASSRLS and its SELECT grants." 1
+  fi
+  log_info "cms_backup holds no membership in cmsuser (WS-76: the backup role is SELECT-only)."
   log_info "role bootstrap complete."
   exit 0
 fi
@@ -159,7 +212,16 @@ if [[ ! -d "$SQL_DIR" ]]; then
 fi
 
 # shellcheck disable=SC2207
-mapfile -t SQL_FILES < <(find "$SQL_DIR" -maxdepth 1 -type f -name '*.sql' | sort)
+mapfile -t _NORMAL_SQL < <(find "$SQL_DIR" -maxdepth 1 -type f -name '*.sql' | sort)
+# Applied by --bootstrap-roles already; the application role would only fail on them here.
+SQL_FILES=()
+for _f in "${_NORMAL_SQL[@]}"; do
+  if superuser_only_file "$_f"; then
+    log_info "skipping superuser-only file $_f (applied by --bootstrap-roles as postgres)"
+    continue
+  fi
+  SQL_FILES+=("$_f")
+done
 if [[ ${#SQL_FILES[@]} -eq 0 ]]; then
   log_info "no .sql files in $SQL_DIR — nothing to apply"
   exit 0
@@ -172,14 +234,16 @@ for sql_file in "${SQL_FILES[@]}"; do
   if ! docker_exec_db "$DB_PASS" -i \
     "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -v ON_ERROR_STOP=1 \
     -v "cms_backup_password=$CMS_BACKUP_PASSWORD" \
+    -v "admin_login_password=$ADMIN_LOGIN_PASSWORD" \
+    -v "admin_read_password=$ADMIN_READ_PASSWORD" \
+    -v "admin_security_password=$ADMIN_SECURITY_PASSWORD" \
+    -v "admin_migrate_password=$ADMIN_MIGRATE_PASSWORD" \
     -f - < "$sql_file"; then
     log_die "failed to apply $sql_file" 1
   fi
 done
 
-# WHY post-apply RLS assertion: ENABLE/FORCE with a mistyped table succeeds silently (DO $$ guard) and leaves the table unprotected. Verify the RESULT, not just the apply exit code.
-# WHY full-apply only: --pre-push and --bootstrap-roles exit before this point; they apply only a subset (capture file / role files) where RLS is deliberately not yet complete, so a check there would false-fail and violate their tolerant contract. Full apply is the only mode where all RLS files have been applied.
-# WHY scope to expected set: the generated *_rls_enable migration (admin-panel/prisma/migrations/*_rls_enable/migration.sql) enumerates exactly the application tables that must have RLS. Checking "all public tables" is brittle: a maintenance/legacy table without RLS would false-fail and abort `make prisma-sync`.
+# Verify the RLS result, not the apply exit code: ENABLE/FORCE on a mistyped table succeeds silently.
 log_info "verifying RLS (ENABLE + FORCE) on expected application tables..."
 _RLS_EXPECTED_FILE=""
 for _f in admin-panel/prisma/migrations/*_rls_enable/migration.sql; do [[ -e "$_f" ]] || continue; _RLS_EXPECTED_FILE="$_f"; break; done

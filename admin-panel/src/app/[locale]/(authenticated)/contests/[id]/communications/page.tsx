@@ -35,5 +35,5 @@ export default async function ContestCommunicationsPage({ params }: ContestRoute
   const effective = await authorizeContestTab('contests.tabs.communications');
   const admin = await getCurrentUser();
   if (!admin) notFound();
-  return <ContestCommunicationsTab contestId={contestId} adminId={admin.id} permissionKeys={[...effective]} />;
+  return <ContestCommunicationsTab contestId={contestId} permissionKeys={[...effective]} />;
 }

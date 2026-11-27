@@ -101,7 +101,9 @@ fi
 # to report a pass over it.
 BACKUP_PARTIAL=0
 BACKUP_STATUS=0
-bash "${SCRIPT_DIR}/__backup.sh" "" 2>&1 || BACKUP_STATUS=$?
+# WHY --root: __backup.sh sources .env after this script exports BACKUP_DIR, so the
+# environment alone is overwritten back to the production root; --root is parsed last.
+bash "${SCRIPT_DIR}/__backup.sh" --root "$DRILLS_BACKUP_ROOT" 2>&1 || BACKUP_STATUS=$?
 
 if [ "$BACKUP_STATUS" -eq 3 ]; then
   log_warn "Backup reported PARTIAL (exit 3): the dump was kept but the manifest does not record this run."
