@@ -11,72 +11,24 @@
 //! chained writer that appends to it is a separate slice, and this layer hands
 //! the batch's audit rows back instead of storing them.
 
+#[path = "support/commit.rs"]
+mod commit_support;
+
 use cms_db::{
-    commit, AuditRow, CompilationOutcome, DatasetId, EvaluationRow, ExecutableRow, ObjectWrite,
-    OperationType, ResultRow, RowState, SubmissionId,
+    commit, AuditRow, DatasetId, EvaluationRow, ObjectWrite, OperationType, RowState, SubmissionId,
 };
 use sqlx::postgres::PgConnection;
-use sqlx::{AssertSqlSafe, Connection, FromRow};
+use sqlx::{AssertSqlSafe, FromRow};
 
-#[allow(dead_code)]
-#[path = "support/schema_check.rs"]
-mod schema_check;
-
-/// The scratch database the frozen schema is created in and dropped after.
-const CHECK_DATABASE: &str = "cms_commit_check";
-const SUBMISSION: i32 = 100;
-const DATASET: i32 = 20;
-const TESTCASE_A: i32 = 40;
-const TESTCASE_B: i32 = 41;
+use commit_support::{
+    compilation_batch, executable_row, open, require_open, result_row, schema_check, stored_result,
+    CHECK_DATABASE, DATASET, NEW_DIGEST, SUBMISSION,
+};
 
 /// Digests the frozen `digest` domain accepts: forty lowercase hex characters.
 const OLD_DIGEST: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-const NEW_DIGEST: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
-
-/// One dataset with two testcases and one submission; replica role disables the
-/// grandparent FKs, but NOT NULL, CHECK and domain constraints still apply.
-const SEED: &[&str] = &[
-    "INSERT INTO datasets (id, task_id, description, autojudge, task_type, \
-        task_type_parameters, score_type, score_type_parameters) \
-     VALUES (20, 1, 'd', true, 'Batch', '{}', 'Sum', '{}')",
-    "INSERT INTO testcases (id, dataset_id, codename, public, input, output) \
-     VALUES (40, 20, 'tc_a', true, 'x', 'x'), (41, 20, 'tc_b', true, 'x', 'x')",
-    "INSERT INTO submissions (id, opaque_id, participation_id, task_id, timestamp, comment, official) \
-     VALUES (100, 1, 1, 1, '2020-01-01 00:00:00', 'c', true)",
-];
-
-/// A connection with the frozen schema, replica role and the parent rows, plus
-/// the base connection used to drop it again.
-async fn open() -> Option<(PgConnection, PgConnection)> {
-    let url = schema_check::skip()?;
-    let check_url = schema_check::with_database(&url, CHECK_DATABASE);
-    let mut base = PgConnection::connect(&url)
-        .await
-        .expect("connecting to the scratch database");
-    schema_check::create_database(&mut base, CHECK_DATABASE).await;
-
-    let mut connection = PgConnection::connect(&check_url)
-        .await
-        .expect("connecting to the check database");
-    // WHY statement by statement: dev/fixtures/cms_schema.sql is the frozen schema.
-    for statement in schema_check::statements(schema_check::FIXTURE) {
-        sqlx::raw_sql(AssertSqlSafe(statement))
-            .execute(&mut connection)
-            .await
-            .expect("creating the frozen schema");
-    }
-    sqlx::raw_sql(AssertSqlSafe("SET session_replication_role = replica"))
-        .execute(&mut connection)
-        .await
-        .expect("disabling FK triggers for the write");
-    for &statement in SEED {
-        sqlx::raw_sql(AssertSqlSafe(statement))
-            .execute(&mut connection)
-            .await
-            .expect("seeding the parent rows");
-    }
-    Some((base, connection))
-}
+const TESTCASE_A: i32 = 40;
+const TESTCASE_B: i32 = 41;
 
 /// One testcase run, with per-row arrays that survive the write.
 fn evaluation_row(testcase_id: i32) -> EvaluationRow {
@@ -93,27 +45,6 @@ fn evaluation_row(testcase_id: i32) -> EvaluationRow {
         evaluation_shard: Some(0),
         evaluation_sandbox_paths: Some(vec!["/tmp/a".to_string(), "/tmp/b".to_string()]),
         evaluation_sandbox_digests: None,
-    }
-}
-
-/// The result row an in-progress evaluation carries: evaluation_outcome NULL.
-fn result_row() -> ResultRow {
-    ResultRow {
-        submission_id: SubmissionId(SUBMISSION),
-        dataset_id: DatasetId(DATASET),
-        compilation_outcome: None,
-        compilation_text: Vec::new(),
-        compilation_tries: 0,
-        compilation_stdout: None,
-        compilation_stderr: None,
-        compilation_time: None,
-        compilation_wall_clock_time: None,
-        compilation_memory: None,
-        compilation_shard: None,
-        compilation_sandbox_paths: None,
-        compilation_sandbox_digests: None,
-        evaluation_outcome: None,
-        evaluation_tries: 3,
     }
 }
 
@@ -144,14 +75,6 @@ fn batch(evaluations: Vec<EvaluationRow>) -> ObjectWrite {
     }
 }
 
-/// Open the live fixture, failing by name when CMS_DB_TEST_URL is absent rather
-/// than skipping.
-async fn require_open() -> (PgConnection, PgConnection) {
-    open()
-        .await
-        .expect("CMS_DB_TEST_URL must name a scratch database")
-}
-
 /// Insert one executable directly, so the precondition does not depend on the
 /// commit under test.
 async fn seed_executable(connection: &mut PgConnection, filename: &str, digest: &str) {
@@ -163,30 +86,6 @@ async fn seed_executable(connection: &mut PgConnection, filename: &str, digest: 
         .execute(&mut *connection)
         .await
         .expect("seeding an executable");
-}
-
-/// One compiled file a compilation carries.
-fn executable_row(filename: &str, digest: &str) -> ExecutableRow {
-    ExecutableRow {
-        submission_id: SubmissionId(SUBMISSION),
-        dataset_id: DatasetId(DATASET),
-        filename: filename.to_string(),
-        digest: digest.parse().expect("a valid digest"),
-    }
-}
-
-/// A Compilation batch carrying exactly the given executable set.
-fn compilation_batch(executables: Vec<ExecutableRow>) -> ObjectWrite {
-    ObjectWrite {
-        operation: OperationType::Compilation,
-        submission_id: SubmissionId(SUBMISSION),
-        dataset_id: DatasetId(DATASET),
-        result: result_row(),
-        executables,
-        evaluations: Vec::new(),
-        score: None,
-        audit: Vec::new(),
-    }
 }
 
 #[derive(Debug, FromRow)]
@@ -223,15 +122,6 @@ struct StoredEvaluation {
     evaluation_sandbox_digests: Option<Vec<String>>,
 }
 
-#[derive(Debug, FromRow)]
-struct StoredResult {
-    compilation_outcome: Option<String>,
-    compilation_text: Vec<String>,
-    compilation_tries: i32,
-    evaluation_outcome: Option<String>,
-    evaluation_tries: i32,
-}
-
 async fn stored_evaluations(connection: &mut PgConnection) -> Vec<StoredEvaluation> {
     sqlx::query_as::<_, StoredEvaluation>(
         "SELECT testcase_id, outcome, text, admin_text, execution_time, \
@@ -245,20 +135,6 @@ async fn stored_evaluations(connection: &mut PgConnection) -> Vec<StoredEvaluati
     .fetch_all(connection)
     .await
     .expect("reading the stored evaluations")
-}
-
-async fn stored_result(connection: &mut PgConnection) -> StoredResult {
-    sqlx::query_as::<_, StoredResult>(
-        "SELECT compilation_outcome::text AS compilation_outcome, compilation_text, \
-                compilation_tries, evaluation_outcome::text AS evaluation_outcome, \
-                evaluation_tries \
-         FROM submission_results WHERE submission_id = $1 AND dataset_id = $2",
-    )
-    .bind(SUBMISSION)
-    .bind(DATASET)
-    .fetch_one(connection)
-    .await
-    .expect("reading the stored result")
 }
 
 /// Two testcases evaluated: both rows land, the result row is written, and the
@@ -439,108 +315,6 @@ async fn an_evaluation_write_keeps_the_executable_set() {
     assert_eq!(stored.len(), 1, "the executable survives");
     assert_eq!(stored[0].filename, "old.bin");
     assert_eq!(stored[0].digest, OLD_DIGEST, "the digest is unchanged");
-
-    drop(connection);
-    schema_check::drop_database(&mut base, CHECK_DATABASE).await;
-}
-
-/// Stale evaluations and a fully scored result the recompilation must invalidate.
-async fn seed_scored_result(connection: &mut PgConnection) {
-    sqlx::raw_sql(AssertSqlSafe(
-        "INSERT INTO evaluations (id, submission_id, dataset_id, testcase_id, outcome, text) \
-         VALUES (500, 100, 20, 40, '1.0', ARRAY['en: right']::varchar[]), \
-                (501, 100, 20, 41, '0.0', ARRAY['en: wrong']::varchar[])",
-    ))
-    .execute(&mut *connection)
-    .await
-    .expect("seeding stale evaluations");
-    sqlx::raw_sql(AssertSqlSafe(
-        "INSERT INTO submission_results (submission_id, dataset_id, compilation_outcome, \
-            compilation_text, compilation_tries, evaluation_outcome, evaluation_tries, \
-            score, score_details, scored_at, public_score, public_score_details, \
-            ranking_score_details) \
-         VALUES (100, 20, 'ok', ARRAY['old']::varchar[], 1, 'ok', 3, \
-            12.5, '{\"score\": 12.5}', '2026-01-01 00:00:09', \
-            7.25, '{\"public\": 7.25}', ARRAY['12.5']::varchar[])",
-    ))
-    .execute(&mut *connection)
-    .await
-    .expect("seeding a scored result");
-}
-
-#[derive(Debug, FromRow)]
-struct StoredScore {
-    score: Option<f64>,
-    score_details: Option<String>,
-    scored_at: Option<String>,
-    public_score: Option<f64>,
-    public_score_details: Option<String>,
-    ranking_score_details: Option<Vec<String>>,
-}
-
-/// The score columns and stamp the object holds after the commit.
-async fn stored_score(connection: &mut PgConnection) -> StoredScore {
-    sqlx::query_as::<_, StoredScore>(
-        "SELECT score, score_details::text AS score_details, \
-                scored_at::text AS scored_at, public_score, \
-                public_score_details::text AS public_score_details, ranking_score_details \
-         FROM submission_results WHERE submission_id = $1 AND dataset_id = $2",
-    )
-    .bind(SUBMISSION)
-    .bind(DATASET)
-    .fetch_one(connection)
-    .await
-    .expect("reading the stored score")
-}
-
-/// Assert the recompilation removed the stale rows and kept the score stamp.
-async fn assert_invalidation(connection: &mut PgConnection) {
-    assert!(
-        stored_evaluations(connection).await.is_empty(),
-        "stale evaluations are invalidated"
-    );
-    let result = stored_result(connection).await;
-    assert_eq!(
-        result.evaluation_outcome, None,
-        "evaluation outcome is cleared"
-    );
-    assert_eq!(result.evaluation_tries, 0, "evaluation tries are cleared");
-    assert_eq!(result.compilation_outcome.as_deref(), Some("ok"));
-    assert_eq!(result.compilation_tries, 1);
-
-    let score = stored_score(connection).await;
-    assert_eq!(score.score, None, "score is cleared");
-    assert_eq!(score.score_details, None, "score details are cleared");
-    assert_eq!(score.public_score, None, "public score is cleared");
-    assert_eq!(
-        score.public_score_details, None,
-        "public details are cleared"
-    );
-    assert_eq!(
-        score.ranking_score_details, None,
-        "ranking details are cleared"
-    );
-    assert_eq!(score.scored_at.as_deref(), Some("2026-01-01 00:00:09"));
-}
-
-/// A recompilation drops stale evaluations and score fields but keeps the stamp.
-#[tokio::test]
-async fn a_compilation_clears_evaluations_and_score_but_keeps_scored_at() {
-    let (mut base, mut connection) = require_open().await;
-    seed_scored_result(&mut connection).await;
-
-    let mut written = compilation_batch(vec![executable_row("new.bin", NEW_DIGEST)]);
-    written.result = ResultRow {
-        compilation_outcome: Some(CompilationOutcome::Ok),
-        compilation_tries: 1,
-        evaluation_tries: 0,
-        ..result_row()
-    };
-    commit(&mut connection, &[written])
-        .await
-        .expect("committing a recompilation over a scored result");
-
-    assert_invalidation(&mut connection).await;
 
     drop(connection);
     schema_check::drop_database(&mut base, CHECK_DATABASE).await;

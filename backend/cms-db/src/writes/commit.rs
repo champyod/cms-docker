@@ -22,7 +22,9 @@ use super::batch::{AuditRow, ObjectWrite, OperationType};
 use super::shapes::{
     CompilationOutcome, EvaluationOutcome, EvaluationRow, ExecutableRow, ResultRow, ScoreRow,
 };
-use super::statements::{INSERT_EXECUTABLES, UPSERT_RESULT, UPSERT_SCORE};
+use super::statements::{
+    CLEAR_SCORE_FOR_COMPILATION, INSERT_EXECUTABLES, UPSERT_RESULT, UPSERT_SCORE,
+};
 use crate::reads::{DatasetId, SubmissionId};
 
 /// The stored evaluations of one submission on one dataset.
@@ -78,8 +80,7 @@ pub async fn commit(
         if group.operation == OperationType::Compilation {
             delete_executables(&mut transaction, group.submission_id, group.dataset_id).await?;
             delete_evaluations(&mut transaction, group.submission_id, group.dataset_id).await?;
-            crate::invalidate_score(&mut transaction, group.submission_id, group.dataset_id)
-                .await?;
+            clear_score(&mut transaction, group.submission_id, group.dataset_id).await?;
         }
         if !group.executables.is_empty() {
             insert_executables(&mut transaction, &group.executables).await?;
@@ -149,6 +150,20 @@ async fn delete_evaluations(
         .bind(submission.0)
         .bind(dataset.0)
         .bind(None::<i32>)
+        .execute(&mut *connection)
+        .await?;
+    Ok(())
+}
+
+/// Clear the five score fields, leaving the stamp the scoring pass set.
+async fn clear_score(
+    connection: &mut PgConnection,
+    submission: SubmissionId,
+    dataset: DatasetId,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(CLEAR_SCORE_FOR_COMPILATION)
+        .bind(submission.0)
+        .bind(dataset.0)
         .execute(&mut *connection)
         .await?;
     Ok(())

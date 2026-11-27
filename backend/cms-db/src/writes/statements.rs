@@ -64,3 +64,10 @@ pub const UPSERT_SCORE: &str = "\
         scored_at = EXCLUDED.scored_at, public_score = EXCLUDED.public_score, \
         public_score_details = EXCLUDED.public_score_details, \
         ranking_score_details = EXCLUDED.ranking_score_details";
+
+/// The five score fields a compilation invalidates, however many hold a value.
+pub const CLEAR_SCORE_FOR_COMPILATION: &str = "\
+    UPDATE submission_results \
+    SET score = NULL, score_details = NULL, public_score = NULL, \
+        public_score_details = NULL, ranking_score_details = NULL \
+    WHERE submission_id = $1 AND dataset_id = $2";
