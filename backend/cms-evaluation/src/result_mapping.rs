@@ -5,6 +5,9 @@
 //! is opened and no requeue is performed: the result is handed to the writer
 //! unchanged, and the caller decides what to do with a refused mapping.
 //!
+//! [`map_user_test_result`] is the sibling that maps a user-test body into its
+//! result row and executable set.
+//!
 //! The operation is the authority for which object and dataset a body belongs
 //! to, and for which testcase an evaluation measured. A body that names another
 //! object, or a codename that does not name exactly one of the dataset's
@@ -14,8 +17,10 @@ mod compilation;
 mod error;
 mod evaluation;
 mod rows;
+mod usertest;
 
 pub use error::MapError;
+pub use usertest::map_user_test_result;
 
 use cms_db::{DatasetId, ObjectWrite, SubmissionId, SubmissionInputs};
 use cms_proto::{Operation, OperationKind};
