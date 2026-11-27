@@ -94,11 +94,14 @@ if grep -qF -- "|${var}|" "$RENDER"; then
 else
   no "the expose generator honours ${var}"
 fi
+# The worker keeps its key in the generator and drops it from the base: every install now
+# answers on loopback unless an operator opts in, and one rule covers all five published
+# services instead of an exception that reads like an oversight.
 var=WORKER_BIND_ADDR
 if grep -qF -- "\${${var}:-" "$COMPOSE"; then
-  ok "worker ${var} still widens the base (WS-24 owns that decision)"
+  no "worker ${var} left in the base"
 else
-  no "worker ${var} still widens the base (WS-24 owns that decision)"
+  ok "worker ${var} left out of the base"
 fi
 if grep -qF -- "|${var}|" "$RENDER"; then
   ok "the expose generator honours ${var}"

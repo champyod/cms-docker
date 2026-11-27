@@ -690,7 +690,7 @@ services:
       - /sys/fs/cgroup:/sys/fs/cgroup:rw
       # mTLS certs (optional, disabled by default — MTLS_WORKERS_ENABLED=0)
     ports:
-      - "${WORKER_BIND_ADDR:-0.0.0.0}:${WORKER_PORT:-26000}:${WORKER_PORT:-26000}"
+      - "127.0.0.1:${WORKER_PORT:-26000}:${WORKER_PORT:-26000}"
     networks:
       - cms-network
     privileged: true
