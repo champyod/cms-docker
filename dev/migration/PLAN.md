@@ -1415,28 +1415,28 @@ a binary that consumes `cms-audit`, `CMS_AUDIT_*` keys stop being dead configura
 The lane's library half is landed on `feat/rust-S6d4-daemon`. Two findings from the parent review, in
 severity order:
 
-**B1 — a stale worker result can overwrite a fresh invalidation (blocking).** The reference marks
-in-flight operations to ignore when it invalidates: `workerpool.py:329-341` records them per shard,
-`release_worker` hands the list back (`:286-288`), and `EvaluationService.py:582-585` drops a result
-whose operation is on that list instead of caching it. The Rust daemon has no equivalent: the queue
-holds only waiting work (`cms-evaluation/src/queue.rs`), `dequeue` in the invalidation path
-(`service/invalidate.rs:174-187`) can only remove operations that are still queued, and
-`run/work.rs:68-90` commits whatever a dispatch returns with no staleness check. So an
-`invalidate_submission` that lands while a shard is mid-operation lets that operation's write commit
-over the invalidated rows, which is the exact corruption the reference's ignore list prevents.
+**B1 — a stale worker result could overwrite a fresh invalidation (fixed, `6b113afa`).** The
+reference marks in-flight operations to ignore when it invalidates: `workerpool.py:329-341` records
+them per shard, `release_worker` hands the list back (`:286-288`), and `EvaluationService.py:582-585`
+drops a result whose operation is on that list instead of caching it. The lane as handed over had no
+equivalent: the queue held only waiting work, `dequeue` in the invalidation path could remove only
+operations still queued, and the worker committed whatever a dispatch returned. An
+`invalidate_submission` landing mid-operation therefore let that operation's write commit over the
+invalidated rows.
 
-Three candidates, from the reference and this tree. No `submission_results` column carries a version
-or generation today (`grep -n 'version\|revision\|generation' src/cms/db/submission.py` finds only the
-licence header), so the third option needs a schema change:
+Fixed by the reference's own mechanism, chosen on evidence rather than preference. A pop claims the
+operation; `remove_matching` marks a claimed operation it names as superseded; the worker releases the
+claim immediately before committing and returns without committing an unwanted result, which drops
+that write transaction entirely. The two rejected candidates: a generation column on
+`submission_results` guards a cross-process race that cannot occur here, because the service runs as
+one container on one shard (`docker-compose.yml:325-362`), and it needs a migration the other two do
+not; keying on the stored try counters fails when a retry bumps a counter for its own reason.
 
-| Candidate | Security | Efficiency + single source | Final-state code | Future-proofing | Reversibility |
-|---|---|---|---|---|---|
-| A. In-flight set in the queue, checked before commit | parity with the reference's own mechanism | no schema; the check is one set lookup per commit | adds a claim/release pair around `process_one` | ties correctness to the queue being the only dispatcher | one revert, no migration |
-| B. Generation counter on `submission_results`, bumped on invalidation, compared before write | strongest: the database refuses a stale write even if two processes race | one extra column read per commit; the rule lives in SQL once | conditional write, no queue bookkeeping | survives multiple daemons and restarts | needs a migration to add and to drop |
-| C. Conditional commit keyed on `evaluation_tries`/`compilation_tries` already stored | no new surface | reuses existing columns | no new state at all | breaks if a retry bumps the counter for its own reason | one revert |
-
-B1 blocked the compose swap until this is chosen; the daemon's library half is landed and gated either
-way.
+Evidence: `backend/cms-evaluation/src/queue.rs` three new unit tests (a superseded claim reports its
+result unwanted, an unrelated invalidation keeps it, a second release reports nothing), both negative
+controls red then restored byte-identically — deleting the `ignored` extension and forcing `release`
+to answer `true` each failed exactly those assertions — and the workspace gate at 208 targets / 1,299
+passed.
 
 **B2 — `enable_worker` / `disable_worker` are authorised but uncalled.** `rpc_authorization.py:43-44`
 lists both; no Python handler and no panel code calls them. They are dead authorisation rows, so the
