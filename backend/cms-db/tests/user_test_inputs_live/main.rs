@@ -10,8 +10,8 @@ use cms_db::{user_test_inputs, DatasetId, UserTestInputs, UserTestInputsError};
 use sqlx::postgres::PgConnection;
 
 use support::{
-    add_result, expected, expected_languages, file_digest, setup, DATASET, MISSING_DATASET,
-    MISSING_USER_TEST, PARTICIPATION, TASK, USER_TEST,
+    add_other_dataset, add_result, expected, expected_languages, file_digest, setup, DATASET,
+    MISSING_DATASET, MISSING_USER_TEST, OTHER_DATASET, PARTICIPATION, TASK, USER_TEST,
 };
 
 /// Reads inputs for the standard pair, expecting both rows to exist.
@@ -91,6 +91,31 @@ async fn a_missing_dataset_is_refused_by_name() {
         other => panic!("expected MissingDataset, got {other:?}"),
     }
     assert!(error.to_string().contains("998"));
+}
+
+#[tokio::test]
+async fn a_dataset_of_another_task_is_refused_by_name() {
+    let mut connection = setup().await;
+    add_other_dataset(&mut connection).await;
+    let error = user_test_inputs(&mut connection, USER_TEST, DatasetId(OTHER_DATASET))
+        .await
+        .expect_err("a dataset of another task is refused, not bundled");
+    match &error {
+        UserTestInputsError::DatasetOfAnotherTask {
+            user_test,
+            task_id,
+            dataset_id,
+        } => {
+            assert_eq!(*user_test, USER_TEST);
+            assert_eq!(*task_id, TASK);
+            assert_eq!(*dataset_id, OTHER_DATASET);
+        }
+        other => panic!("expected DatasetOfAnotherTask, got {other:?}"),
+    }
+    assert_eq!(
+        error.to_string(),
+        "user test 1 on task 10 cannot use dataset 21 of another task"
+    );
 }
 
 #[tokio::test]

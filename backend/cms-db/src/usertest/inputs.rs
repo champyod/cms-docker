@@ -13,12 +13,17 @@
 //! Unlike the submission read, an absent user test or dataset is a named
 //! refusal rather than `None`: a user-test job is built for a row the caller
 //! named, so a missing row is a fault in that name rather than an empty read.
+//! A dataset of another task is refused on the same grounds, before any file
+//! read, as `src/cms/db/usertest.py:123` asserts for a user test's result.
 //!
 //! # Errors
 //!
 //! [`UserTestInputsError`] keeps a driver refusal, a refusal from one of the
 //! shared reads, and a missing named row apart. No database failure is turned
 //! into an absent input.
+//!
+//! A dataset owned by another task is a named refusal, checked before any
+//! file read.
 
 use std::collections::BTreeMap;
 
@@ -62,6 +67,18 @@ pub enum UserTestInputsError {
     /// One of the shared column-exact reads refused a row.
     #[error(transparent)]
     Read(#[from] JudgingReadError),
+    /// The named dataset belongs to another task.
+    #[error(
+        "user test {user_test} on task {task_id} cannot use dataset {dataset_id} of another task"
+    )]
+    DatasetOfAnotherTask {
+        /// The user test that was named.
+        user_test: i32,
+        /// The task that owns the user test.
+        task_id: i32,
+        /// The dataset that was named.
+        dataset_id: i32,
+    },
     /// The named user test has no row.
     #[error("user test {0} does not exist")]
     MissingUserTest(i32),
@@ -186,6 +203,8 @@ async fn read_user_test_tables(
 /// Returns [`UserTestInputsError::Database`] for a read the driver refused,
 /// [`UserTestInputsError::Read`] for a shared read that refused a row, and a
 /// missing-name variant when either named row does not exist.
+/// [`UserTestInputsError::DatasetOfAnotherTask`] names a dataset of another
+/// task before any of its files are read.
 pub async fn user_test_inputs(
     connection: &mut PgConnection,
     user_test_id: i32,
@@ -197,6 +216,13 @@ pub async fn user_test_inputs(
     let Some(dataset) = dataset_by_id(connection, dataset_id).await? else {
         return Err(UserTestInputsError::MissingDataset(dataset_id.0));
     };
+    if dataset.task_id != user_test.task_id {
+        return Err(UserTestInputsError::DatasetOfAnotherTask {
+            user_test: user_test.id,
+            task_id: user_test.task_id,
+            dataset_id: dataset.id.0,
+        });
+    }
     let tables = read_user_test_tables(connection, user_test.id, dataset.id.0).await?;
     let languages = contest_languages(connection, user_test.participation_id).await?;
     Ok(UserTestInputs {

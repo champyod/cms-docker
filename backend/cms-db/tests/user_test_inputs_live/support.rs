@@ -205,3 +205,12 @@ pub async fn add_result(connection: &mut PgConnection) {
     )
     .await;
 }
+
+/// Adds a dataset owned by another task, for the cross-task refusal test.
+pub async fn add_other_dataset(connection: &mut PgConnection) {
+    exec(
+        connection,
+        &format!("INSERT INTO datasets (id, task_id) VALUES ({OTHER_DATASET}, {OTHER_TASK})"),
+    )
+    .await;
+}
