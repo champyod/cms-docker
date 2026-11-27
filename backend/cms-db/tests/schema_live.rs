@@ -20,7 +20,7 @@ mod schema_check;
 use pg_dump::{dump, dump_version, version};
 use schema_check::{
     count, create_database, database_name, difference, drop_database, statements, with_database,
-    CHECK_DATABASE, DOMAINS, FIXTURE, TABLES,
+    CHECK_PREFIX, DOMAINS, FIXTURE, TABLES,
 };
 
 /// What the base database's name must carry, so a real one is never the target.
@@ -35,7 +35,8 @@ async fn the_created_schema_matches_the_frozen_dump() {
         database_name(&url).contains(REQUIRED_NAME_FRAGMENT),
         "{url} does not name a scratch database, so this check will not create one beside it"
     );
-    let check_url = with_database(&url, CHECK_DATABASE);
+    let name = schema_check::unique_database(CHECK_PREFIX);
+    let check_url = with_database(&url, &name);
 
     // WHY before creating the database: a dumper mismatch makes every statement a difference.
     let written_by =
@@ -49,7 +50,7 @@ async fn the_created_schema_matches_the_frozen_dump() {
     let mut base = PgConnection::connect(&url)
         .await
         .expect("connecting to the scratch database");
-    create_database(&mut base, CHECK_DATABASE).await;
+    create_database(&mut base, &name).await;
 
     let mut connection = PgConnection::connect(&check_url)
         .await
@@ -72,7 +73,7 @@ async fn the_created_schema_matches_the_frozen_dump() {
     drop(connection);
 
     let actual = dump(&check_url);
-    drop_database(&mut base, CHECK_DATABASE).await;
+    drop_database(&mut base, &name).await;
 
     assert_eq!(tables, TABLES, "the reference creates {TABLES} tables");
     assert_eq!(domains, DOMAINS, "the reference creates {DOMAINS} domains");

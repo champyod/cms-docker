@@ -22,7 +22,7 @@ use sqlx::{AssertSqlSafe, FromRow};
 
 use commit_support::{
     compilation_batch, executable_row, open, require_open, result_row, schema_check, stored_result,
-    CHECK_DATABASE, DATASET, NEW_DIGEST, SUBMISSION,
+    DATASET, NEW_DIGEST, SUBMISSION,
 };
 
 /// Digests the frozen `digest` domain accepts: forty lowercase hex characters.
@@ -142,7 +142,7 @@ async fn stored_evaluations(connection: &mut PgConnection) -> Vec<StoredEvaluati
 /// completion rule stamps evaluation_outcome = 'ok'.
 #[tokio::test]
 async fn two_evaluations_complete_the_result() {
-    let Some((mut base, mut connection)) = open().await else {
+    let Some((mut base, mut connection, name)) = open().await else {
         return;
     };
     let written = batch(vec![evaluation_row(TESTCASE_A), evaluation_row(TESTCASE_B)]);
@@ -176,13 +176,13 @@ async fn two_evaluations_complete_the_result() {
     assert_eq!(result.evaluation_outcome.as_deref(), Some("ok"));
 
     drop(connection);
-    schema_check::drop_database(&mut base, CHECK_DATABASE).await;
+    schema_check::drop_database(&mut base, &name).await;
 }
 
 /// One of two testcases evaluated: the completion rule must NOT fire.
 #[tokio::test]
 async fn one_of_two_testcases_leaves_outcome_null() {
-    let Some((mut base, mut connection)) = open().await else {
+    let Some((mut base, mut connection, name)) = open().await else {
         return;
     };
     let written = batch(vec![evaluation_row(TESTCASE_A)]);
@@ -201,14 +201,14 @@ async fn one_of_two_testcases_leaves_outcome_null() {
     );
 
     drop(connection);
-    schema_check::drop_database(&mut base, CHECK_DATABASE).await;
+    schema_check::drop_database(&mut base, &name).await;
 }
 
 /// A duplicate evaluation row in the batch is tolerated: the other rows land
 /// and the call returns Ok.
 #[tokio::test]
 async fn a_duplicate_row_does_not_abort_the_batch() {
-    let Some((mut base, mut connection)) = open().await else {
+    let Some((mut base, mut connection, name)) = open().await else {
         return;
     };
     let written = batch(vec![
@@ -232,7 +232,7 @@ async fn a_duplicate_row_does_not_abort_the_batch() {
     assert_eq!(stored[1].execution_memory, Some(1024));
 
     drop(connection);
-    schema_check::drop_database(&mut base, CHECK_DATABASE).await;
+    schema_check::drop_database(&mut base, &name).await;
 }
 
 /// A batch's audit rows come back from the commit instead of being stored: this
@@ -240,7 +240,7 @@ async fn a_duplicate_row_does_not_abort_the_batch() {
 /// one writer that can, and nothing reaches `audit_log` from here.
 #[tokio::test]
 async fn a_batch_hands_its_audit_rows_back() {
-    let Some((mut base, mut connection)) = open().await else {
+    let Some((mut base, mut connection, name)) = open().await else {
         return;
     };
     let mut written = batch(vec![evaluation_row(TESTCASE_A), evaluation_row(TESTCASE_B)]);
@@ -257,14 +257,14 @@ async fn a_batch_hands_its_audit_rows_back() {
     assert_eq!(stored.len(), 2, "the data rows still landed");
 
     drop(connection);
-    schema_check::drop_database(&mut base, CHECK_DATABASE).await;
+    schema_check::drop_database(&mut base, &name).await;
 }
 
 /// A recompilation replaces the whole executable set: the stale old.bin is
 /// cleared and only new.bin remains.
 #[tokio::test]
 async fn a_recompilation_replaces_the_executable_set() {
-    let (mut base, mut connection) = require_open().await;
+    let (mut base, mut connection, name) = require_open().await;
     seed_executable(&mut connection, "old.bin", OLD_DIGEST).await;
 
     let written = compilation_batch(vec![executable_row("new.bin", NEW_DIGEST)]);
@@ -278,14 +278,14 @@ async fn a_recompilation_replaces_the_executable_set() {
     assert_eq!(stored[0].digest, NEW_DIGEST);
 
     drop(connection);
-    schema_check::drop_database(&mut base, CHECK_DATABASE).await;
+    schema_check::drop_database(&mut base, &name).await;
 }
 
 /// A compilation with no executables still clears the set: the DELETE runs even
 /// when the new set is empty.
 #[tokio::test]
 async fn a_compilation_with_no_executables_clears_the_set() {
-    let (mut base, mut connection) = require_open().await;
+    let (mut base, mut connection, name) = require_open().await;
     seed_executable(&mut connection, "old.bin", OLD_DIGEST).await;
 
     let written = compilation_batch(Vec::new());
@@ -297,14 +297,14 @@ async fn a_compilation_with_no_executables_clears_the_set() {
     assert!(stored.is_empty(), "the executable set is cleared");
 
     drop(connection);
-    schema_check::drop_database(&mut base, CHECK_DATABASE).await;
+    schema_check::drop_database(&mut base, &name).await;
 }
 
 /// An Evaluation write must not clear the executable set: the DELETE runs only
 /// for Compilation writes.
 #[tokio::test]
 async fn an_evaluation_write_keeps_the_executable_set() {
-    let (mut base, mut connection) = require_open().await;
+    let (mut base, mut connection, name) = require_open().await;
     seed_executable(&mut connection, "old.bin", OLD_DIGEST).await;
 
     let written = batch(Vec::new());
@@ -318,5 +318,5 @@ async fn an_evaluation_write_keeps_the_executable_set() {
     assert_eq!(stored[0].digest, OLD_DIGEST, "the digest is unchanged");
 
     drop(connection);
-    schema_check::drop_database(&mut base, CHECK_DATABASE).await;
+    schema_check::drop_database(&mut base, &name).await;
 }

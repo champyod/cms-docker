@@ -12,7 +12,7 @@ mod commit_support;
 
 use commit_support::{
     compilation_batch, executable_row, require_open, result_row, schema_check, stored_result,
-    CHECK_DATABASE, NEW_DIGEST,
+    NEW_DIGEST,
 };
 
 /// Stale evaluations and a result whose score is fully or partially populated.
@@ -106,7 +106,7 @@ async fn assert_score_cleared(connection: &mut PgConnection) {
 /// A recompilation drops stale evaluations and score fields but keeps the stamp.
 #[tokio::test]
 async fn a_compilation_clears_evaluations_and_score_but_keeps_scored_at() {
-    let (mut base, mut connection) = require_open().await;
+    let (mut base, mut connection, name) = require_open().await;
     seed_scored_result(&mut connection, true).await;
 
     let mut written = compilation_batch(vec![executable_row("new.bin", NEW_DIGEST)]);
@@ -137,13 +137,13 @@ async fn a_compilation_clears_evaluations_and_score_but_keeps_scored_at() {
     assert_score_cleared(&mut connection).await;
 
     drop(connection);
-    schema_check::drop_database(&mut base, CHECK_DATABASE).await;
+    schema_check::drop_database(&mut base, &name).await;
 }
 
 /// A partial score is cleared too: invalidation does not depend on `scored()`.
 #[tokio::test]
 async fn a_compilation_clears_a_partial_score_but_keeps_scored_at() {
-    let (mut base, mut connection) = require_open().await;
+    let (mut base, mut connection, name) = require_open().await;
     seed_scored_result(&mut connection, false).await;
     let before = stored_score(&mut connection).await;
     assert_eq!(before.score, Some(12.5));
@@ -156,5 +156,5 @@ async fn a_compilation_clears_a_partial_score_but_keeps_scored_at() {
     assert_score_cleared(&mut connection).await;
 
     drop(connection);
-    schema_check::drop_database(&mut base, CHECK_DATABASE).await;
+    schema_check::drop_database(&mut base, &name).await;
 }

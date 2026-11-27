@@ -14,8 +14,8 @@ use sqlx::{AssertSqlSafe, Connection, FromRow};
 #[path = "schema_check.rs"]
 pub mod schema_check;
 
-/// The scratch database this target owns.
-pub const CHECK_DATABASE: &str = "cms_user_test_commit_check";
+/// The scratch database this target owns, named per fixture below.
+pub const CHECK_PREFIX: &str = "cms_user_test_commit_check";
 /// The user test and dataset the result row is keyed by.
 pub const USER_TEST: i32 = 300;
 pub const DATASET: i32 = 200;
@@ -35,13 +35,17 @@ const SEED: &[&str] = &[
 ];
 
 /// Opens the scratch database with the frozen schema and the parent rows.
-pub async fn open() -> Option<(PgConnection, PgConnection)> {
+///
+/// The database name is returned with the connections because each fixture owns
+/// its own: tests in this target run in parallel.
+pub async fn open() -> Option<(PgConnection, PgConnection, String)> {
     let url = schema_check::skip()?;
-    let check_url = schema_check::with_database(&url, CHECK_DATABASE);
+    let name = schema_check::unique_database(CHECK_PREFIX);
+    let check_url = schema_check::with_database(&url, &name);
     let mut base = PgConnection::connect(&url)
         .await
         .expect("connecting to the scratch database");
-    schema_check::create_database(&mut base, CHECK_DATABASE).await;
+    schema_check::create_database(&mut base, &name).await;
 
     let mut connection = PgConnection::connect(&check_url)
         .await
@@ -62,17 +66,17 @@ pub async fn open() -> Option<(PgConnection, PgConnection)> {
             .await
             .expect("seeding the parent rows");
     }
-    Some((base, connection))
+    Some((base, connection, name))
 }
 
 /// Opens the fixture, failing by name when no scratch database was configured.
-pub async fn require_open() -> (PgConnection, PgConnection) {
+pub async fn require_open() -> (PgConnection, PgConnection, String) {
     open().await.expect("CMS_DB_TEST_URL must be configured")
 }
 
 /// Drops the scratch database so a failing assertion is the only residue.
-pub async fn close(mut base: PgConnection) {
-    schema_check::drop_database(&mut base, CHECK_DATABASE).await;
+pub async fn close(mut base: PgConnection, name: &str) {
+    schema_check::drop_database(&mut base, name).await;
 }
 
 /// One result row with every column the statement binds set to a known value.

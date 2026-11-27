@@ -20,7 +20,7 @@ use support::{
 
 #[tokio::test]
 async fn a_compilation_writes_every_result_column_and_its_executable_set() {
-    let (base, mut connection) = require_open().await;
+    let (base, mut connection, name) = require_open().await;
     let write = recorded(compilation([OLD_DIGEST, NEW_DIGEST]));
     let receipts = commit_user_test(&mut connection, &[write])
         .await
@@ -37,12 +37,12 @@ async fn a_compilation_writes_every_result_column_and_its_executable_set() {
     assert_eq!(stored[0].digest, OLD_DIGEST);
     assert_eq!(stored[1].filename, "stub");
     assert_eq!(stored[1].digest, NEW_DIGEST);
-    close(base).await;
+    close(base, &name).await;
 }
 
 #[tokio::test]
 async fn an_evaluation_writes_only_its_own_half_of_the_result() {
-    let (base, mut connection) = require_open().await;
+    let (base, mut connection, name) = require_open().await;
     commit_user_test(
         &mut connection,
         &[recorded(compilation([OLD_DIGEST, NEW_DIGEST]))],
@@ -75,7 +75,7 @@ async fn an_evaluation_writes_only_its_own_half_of_the_result() {
         2,
         "the set is untouched"
     );
-    close(base).await;
+    close(base, &name).await;
 }
 
 /// The compilation half an evaluation must leave exactly as it found it.
@@ -90,7 +90,7 @@ fn assert_compilation_survived(row: &support::Stored) {
 
 #[tokio::test]
 async fn a_recompilation_replaces_the_executable_set() {
-    let (base, mut connection) = require_open().await;
+    let (base, mut connection, name) = require_open().await;
     commit_user_test(
         &mut connection,
         &[recorded(compilation([OLD_DIGEST, NEW_DIGEST]))],
@@ -109,12 +109,12 @@ async fn a_recompilation_replaces_the_executable_set() {
     assert_eq!(stored.len(), 1, "the old executable set was replaced");
     assert_eq!(stored[0].filename, "a.out");
     assert_eq!(stored[0].digest, NEW_DIGEST);
-    close(base).await;
+    close(base, &name).await;
 }
 
 #[tokio::test]
 async fn an_unrecorded_user_test_write_is_refused() {
-    let (base, mut connection) = require_open().await;
+    let (base, mut connection, name) = require_open().await;
     let error = commit_user_test(&mut connection, &[compilation([OLD_DIGEST, NEW_DIGEST])])
         .await
         .expect_err("an unrecorded write is refused");
@@ -124,5 +124,5 @@ async fn an_unrecorded_user_test_write_is_refused() {
         .await
         .expect("counting result rows");
     assert_eq!(count, 0, "nothing was written");
-    close(base).await;
+    close(base, &name).await;
 }

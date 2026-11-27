@@ -7,7 +7,8 @@ use sqlx::postgres::PgConnection;
 use sqlx::{AssertSqlSafe, Connection};
 
 pub use crate::schema::{
-    create, digest, CONTEST, DATASET, PARTICIPATION, SCHEMA, SUBMISSION, TASK, TESTCASE, USER_TEST,
+    create, digest, schema_name, CONTEST, DATASET, PARTICIPATION, SUBMISSION, TASK, TESTCASE,
+    USER_TEST,
 };
 
 /// The secret shared by the scripted worker and the evaluation daemon.
@@ -21,6 +22,8 @@ pub struct Fixture {
     session: Arc<Session>,
     #[allow(dead_code)]
     url: String,
+    /// This fixture's private schema; a sibling test has its own.
+    schema: String,
 }
 
 impl Fixture {
@@ -30,23 +33,33 @@ impl Fixture {
             .ok()
             .filter(|url| !url.trim().is_empty())
             .expect(LIVE_REQUIRED);
+        let schema = schema_name();
         let mut setup = PgConnection::connect(&url)
             .await
             .expect("connecting to the scratch database");
-        create(&mut setup).await;
+        create(&mut setup, &schema).await;
         seed(&mut setup).await;
-        let url = format!("{url}?options=-csearch_path%3D{SCHEMA}");
+        let url = format!("{url}?options=-csearch_path%3D{schema}");
         let session = Arc::new(
             Session::open(&SessionConfig::new(url.clone()))
                 .await
                 .expect("opening the pooled session"),
         );
-        Self { session, url }
+        Self {
+            session,
+            url,
+            schema,
+        }
     }
 
     /// The session the RPC context and the worker share.
     pub fn session(&self) -> Arc<Session> {
         Arc::clone(&self.session)
+    }
+
+    /// This fixture's schema, so a test's own connection selects it.
+    pub fn schema(&self) -> &str {
+        &self.schema
     }
 
     /// The URL with the test schema selected, for a daemon under test.

@@ -17,7 +17,7 @@ pub const TABLES: i64 = 27;
 pub const DOMAINS: i64 = 5;
 
 /// The database this check creates, which it drops again before it asserts.
-pub const CHECK_DATABASE: &str = "cms_schema_check";
+pub const CHECK_PREFIX: &str = "cms_schema_check";
 
 /// The scratch database's URL, or a printed skip when none is configured.
 pub fn skip() -> Option<String> {
@@ -51,6 +51,21 @@ pub fn with_database(url: &str, name: &str) -> String {
         Some(query) => format!("{prefix}/{name}?{query}"),
         None => format!("{prefix}/{name}"),
     }
+}
+
+/// A scratch database name no other test in this process shares.
+///
+/// Tests in one target run on a thread per core, so a fixed name made the
+/// second `CREATE DATABASE` fail on the catalogue's unique index. The process
+/// id plus a counter is unique per test without a random source.
+pub fn unique_database(prefix: &str) -> String {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+    format!(
+        "{prefix}_{}_{}",
+        std::process::id(),
+        NEXT.fetch_add(1, Ordering::Relaxed)
+    )
 }
 
 /// Create `name`, replacing one a previous run left behind.

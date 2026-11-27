@@ -15,8 +15,8 @@ use sqlx::{AssertSqlSafe, Connection};
 #[path = "support/schema_check.rs"]
 mod schema_check;
 
-/// The scratch database the frozen schema is created in and dropped after.
-const CHECK_DATABASE: &str = "cms_eval_write_check";
+/// The scratch database prefix; each fixture appends its own suffix.
+const CHECK_PREFIX: &str = "cms_eval_write_check";
 const SUBMISSION: i32 = 100;
 const DATASET: i32 = 20;
 const TESTCASE_A: i32 = 40;
@@ -76,11 +76,12 @@ async fn one_object_rows_round_trip_their_per_row_arrays() {
     let Some(url) = schema_check::skip() else {
         return;
     };
-    let check_url = schema_check::with_database(&url, CHECK_DATABASE);
+    let name = schema_check::unique_database(CHECK_PREFIX);
+    let check_url = schema_check::with_database(&url, &name);
     let mut base = PgConnection::connect(&url)
         .await
         .expect("connecting to the scratch database");
-    schema_check::create_database(&mut base, CHECK_DATABASE).await;
+    schema_check::create_database(&mut base, &name).await;
 
     let mut connection = PgConnection::connect(&check_url)
         .await
@@ -148,5 +149,5 @@ async fn one_object_rows_round_trip_their_per_row_arrays() {
     assert_eq!(stored[1].admin_text.as_deref(), Some("admin"));
 
     drop(connection);
-    schema_check::drop_database(&mut base, CHECK_DATABASE).await;
+    schema_check::drop_database(&mut base, &name).await;
 }

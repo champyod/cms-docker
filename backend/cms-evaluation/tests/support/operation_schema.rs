@@ -11,7 +11,23 @@ pub const SUBMISSION: i32 = 40;
 pub const USER_TEST: i32 = 50;
 pub const TESTCASE: i32 = 60;
 
-pub const SCHEMA: &str = "evaluation_operation_live";
+pub const SCHEMA_PREFIX: &str = "evaluation_operation_live";
+
+/// A private schema name, so tests running in parallel never share one.
+///
+/// The cargo default is a test thread per core, and every operation test in
+/// this target calls `Fixture::required()`; a single fixed name made the second
+/// `CREATE SCHEMA` fail with a duplicate-key error. The process id plus a
+/// counter is unique per test without needing a random source.
+pub fn schema_name() -> String {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+    format!(
+        "{SCHEMA_PREFIX}_{}_{}",
+        std::process::id(),
+        NEXT.fetch_add(1, Ordering::Relaxed)
+    )
+}
 /// The digest every input and output column carries.
 pub fn digest(byte: u8) -> String {
     format!("{byte:040x}")
@@ -169,11 +185,11 @@ const TABLES: &[&str] = &[
 ];
 
 /// Recreates the schema and seeds the one submission the operation tests use.
-pub async fn create(connection: &mut PgConnection) {
+pub async fn create(connection: &mut PgConnection, schema: &str) {
     for statement in [
-        format!("DROP SCHEMA IF EXISTS {SCHEMA} CASCADE"),
-        format!("CREATE SCHEMA {SCHEMA}"),
-        format!("SET search_path TO {SCHEMA}"),
+        format!("DROP SCHEMA IF EXISTS {schema} CASCADE"),
+        format!("CREATE SCHEMA {schema}"),
+        format!("SET search_path TO {schema}"),
     ] {
         sqlx::raw_sql(AssertSqlSafe(statement))
             .execute(&mut *connection)

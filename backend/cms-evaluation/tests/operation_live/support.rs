@@ -10,7 +10,7 @@ use sqlx::postgres::PgConnection;
 use sqlx::{AssertSqlSafe, Connection, FromRow};
 use tokio::runtime::Handle;
 
-use crate::fixture::{Fixture, DATASET, SCHEMA, SECRET, SUBMISSION, TESTCASE, USER_TEST};
+use crate::fixture::{Fixture, DATASET, SECRET, SUBMISSION, TESTCASE, USER_TEST};
 
 /// Seeds a submission result with the given compilation state.
 pub async fn seed_result(session: &Session, outcome: Option<&str>, tries: i32) {
@@ -83,10 +83,13 @@ pub async fn connection(fixture: &Fixture) -> PgConnection {
     let mut connection = PgConnection::connect(fixture.url())
         .await
         .expect("connecting with the test search path");
-    sqlx::raw_sql(AssertSqlSafe(format!("SET search_path TO {SCHEMA}")))
-        .execute(&mut connection)
-        .await
-        .expect("selecting the test schema");
+    sqlx::raw_sql(AssertSqlSafe(format!(
+        "SET search_path TO {}",
+        fixture.schema()
+    )))
+    .execute(&mut connection)
+    .await
+    .expect("selecting the test schema");
     connection
 }
 
