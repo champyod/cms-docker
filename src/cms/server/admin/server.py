@@ -27,6 +27,7 @@
 
 from datetime import datetime
 import logging
+import os
 
 from sqlalchemy import func, not_, literal_column
 
@@ -56,6 +57,7 @@ class AdminWebServer(WebService):
             "cookie_secret": hex_to_bin(config.web_server.secret_key),
             "debug": config.web_server.tornado_debug,
             "num_proxies_used": config.admin_web_server.num_proxies_used,
+            "forwarded_trust_marker": os.environ.get("FORWARDED_TRUST_MARKER"),
             "auth_middleware": AWSAuthMiddleware,
             "rpc_enabled": True,
             "rpc_auth": self.is_rpc_authorized,

@@ -72,6 +72,7 @@ class ContestWebServer(WebService):
             "debug": config.web_server.tornado_debug,
             "is_proxy_used": None,
             "num_proxies_used": config.contest_web_server.num_proxies_used,
+            "forwarded_trust_marker": os.environ.get("FORWARDED_TRUST_MARKER"),
             "xsrf_cookies": True,
         }
 
