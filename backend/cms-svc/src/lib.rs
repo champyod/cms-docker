@@ -43,7 +43,7 @@ mod resource_service;
 pub mod service;
 
 pub use checker::{CheckReport, Checker, CheckerError, PeerCheck};
-pub use client::{Client, ClientError};
+pub use client::{Client, ClientError, READ_TIMEOUT};
 pub use connector::{
     of_dispatch, of_frame, BackoffPolicy, Connector, DialError, Dialer, NoRoute, PeerSession,
     PeerState, ReconnectNotice, Send,

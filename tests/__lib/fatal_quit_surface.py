@@ -1,17 +1,21 @@
 #!/usr/bin/env python3
-# tests/__lib/fatal_quit_surface.py — the import surface the fatal-quit suite drives.
+# tests/__lib/fatal_quit_surface.py — the import surface the service suites drive.
 #
-# WHY this exists: the suite exercises the REAL cms.io.service.Service and the REAL
-# cms.service.workerpool.WorkerPool, but gevent, sqlalchemy and the rest of the runtime
-# dependencies are not installed in the checkout the suite runs in. Every non-stdlib name
-# those two modules reach for is supplied here as a placeholder, so their own source is
-# loaded untouched from the real tree while the suite runs on the standard library alone.
+# WHY this exists: the proxy suites exercise the REAL cms.io.service.Service, but
+# gevent, sqlalchemy and the rest of the runtime dependencies are not installed in
+# the checkout the suite runs in. Every non-stdlib name that module reaches for is
+# supplied here as a placeholder, so its own source is loaded untouched from the
+# real tree while the suite runs on the standard library alone.
 #
-# Importing this module is what applies the surface: it puts the source tree on sys.path,
-# registers the placeholders, then re-exports the two real modules. The suite imports this
-# before any cms module of its own.
+# Importing this module is what applies the surface: it puts the source tree on
+# sys.path, registers the placeholders, then re-exports the real module. A suite
+# imports this before any cms module of its own.
 #
-# Imported by tests/test_service_fatal_quit.py. Not a suite on its own.
+# The worker-pool half went with the Python EvaluationService it belonged to:
+# WorkerPool.check_timeouts no longer exists to drive, and the Rust client now
+# enforces the same reply deadline (cms-svc/src/client/mod.rs READ_TIMEOUT).
+#
+# Imported by the proxy suites. Not a suite on its own.
 
 import os
 import socket as socket_module
@@ -158,4 +162,3 @@ sys.path.insert(0, SRC_ROOT)
 install_import_surface()
 
 from cms.io.service import Service  # noqa: E402
-from cms.service.workerpool import REACHABILITY_HINT, WorkerPool  # noqa: E402

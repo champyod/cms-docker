@@ -3,6 +3,7 @@
 mod host;
 mod protocol;
 mod scripted;
+mod silence;
 
 use std::error::Error;
 use std::net::SocketAddr;
