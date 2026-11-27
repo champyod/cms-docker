@@ -230,7 +230,7 @@ PROXY_MAX_BODY_SIZE = "100M"     # str; nginx size (K/M/G suffix or bare bytes);
 # CSP is off by default: enable it, watch the report-only stream, then switch
 # CSP_MODE to enforce. OCSP stapling reuses the route resolver (no second one).
 SERVER_TOKENS_OFF = 1           # enum:0,1; 1 hides the exact server version string
-OCSP_STAPLING = 1               # enum:0,1; 1 staples OCSP responses
+OCSP_STAPLING = 1               # enum:0,1; 1 staples OCSP responses when the certificate names an OCSP responder. A certificate without one (every Let's Encrypt certificate issued since 2025-05-07, whose OCSP service was retired on 2025-08-06 in favour of CRLs) is rendered without stapling and the reason is logged, because nginx cannot fetch a response the certificate does not point at
 CSP_ENABLED = 0                 # enum:0,1; 1 emits a Content-Security-Policy header
 CSP_MODE = "report-only"        # enum:report-only,enforce; report-only logs without blocking
 CSP_REPORT_URI = ""             # url; CSP report-uri target; empty sends no reports
