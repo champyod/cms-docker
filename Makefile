@@ -424,7 +424,11 @@ cms-init:
 prisma-sync:
 	@echo "Synchronizing Admin Panel schema via Prisma Migrate (forcing Prisma v6)..."
 	@# Schema sync needs DDL, so it runs as the owner role, never the runtime role.
-	@bash scripts/__apply_sql.sh --bootstrap-roles || echo "WARN: role bootstrap failed — retry after restart" >&2;
+	@# WHY the bootstrap is a gate and not a warning: it is the only step that reads pg_auth_members and
+	@# proves cms_backup holds no membership in cmsuser (WS-76). Continuing after it failed runs
+	@# `migrate deploy` into a database where the backup credential is still owner-equivalent, and the
+	@# deploy reports success — the exact outcome the catalog check exists to prevent.
+	@bash scripts/__apply_sql.sh --bootstrap-roles || { echo "REFUSED: role bootstrap failed — cms_backup's read-only state is unproven, so prisma-sync stops before migrate. Fix the role bootstrap (start the database / run the one-time superuser revoke) and re-run." >&2; exit 1; }
 	@set -a; [ -f .env ] && . ./.env; set +a; \
 	OWNER_URL_NET="$$(bash scripts/__owner_url.sh container)"; \
 	OWNER_URL_LOCAL="$$(bash scripts/__owner_url.sh host)"; \
@@ -463,7 +467,11 @@ prisma-sync:
 	run_tool "$$PRISMA_WHERE" "$$PRISMA_DIR" "$$PRISMA_CMD migrate deploy --schema=$$PRISMA_SCHEMA"; \
 	st=$$?; if [ $$st -ne 0 ]; then echo "Migration deploy failed — check logs above" >&2; exit $$st; fi; \
 	echo "Seeding permission groups and permissions..."; \
-	run_tool "$$SEED_WHERE" "$$SEED_DIR" "$$SEED_CMD prisma/seed-permissions.ts"; \
+	if [ "$$SEED_WHERE" = "host" ] && [ ! -x admin-panel/node_modules/.bin/tsx ]; then \
+		bash scripts/__seed_permissions.sh "$$OWNER_URL_LOCAL"; \
+	else \
+		run_tool "$$SEED_WHERE" "$$SEED_DIR" "$$SEED_CMD prisma/seed-permissions.ts"; \
+	fi; \
 	st=$$?; if [ $$st -ne 0 ]; then echo "Permission seed failed — admins have no effective permissions until seeding succeeds; check logs above and rerun make prisma-sync." >&2; exit $$st; fi
 
 # Migrate the ACTIVE database and verify the result.

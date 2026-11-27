@@ -11,6 +11,7 @@ type HmacSha256 = Hmac<Sha256>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Session {
+    pub session_id: String,
     pub username: String,
     pub expires_at: i64,
 }
@@ -25,19 +26,38 @@ pub enum SessionError {
     Expired,
     #[error("the session signature does not match")]
     BadSignature,
+    #[error("the operating system did not provide session entropy")]
+    NoEntropy,
 }
 
-/// Payload, expiry and signature. The signature covers the first two, so an expiry
-/// cannot be extended without the secret even though it is readable.
-pub fn issue(secret: &str, username: &str, now: i64) -> Result<String, SessionError> {
+/// A random opaque id; the database stores it and the cookie carries it, so a stolen
+/// token can be revoked without waiting for the eight-hour expiry.
+pub fn new_id() -> Result<String, SessionError> {
+    let mut bytes = [0u8; 32];
+    getrandom::getrandom(&mut bytes).map_err(|_| SessionError::NoEntropy)?;
+    Ok(hex::encode(bytes))
+}
+
+/// Payload, expiry, session id and signature. The signature covers all three, so neither
+/// an expiry nor a session id can be changed without the secret.
+pub fn issue(
+    secret: &str,
+    username: &str,
+    session_id: &str,
+    now: i64,
+) -> Result<String, SessionError> {
     if secret.is_empty() {
         return Err(SessionError::NoSecret);
     }
-    if username.is_empty() || username.contains('.') {
+    if username.is_empty()
+        || username.contains('.')
+        || session_id.is_empty()
+        || session_id.contains('.')
+    {
         return Err(SessionError::Malformed);
     }
     let expires_at = now + TTL_SECONDS;
-    let payload = format!("{username}.{expires_at}");
+    let payload = format!("{username}.{expires_at}.{session_id}");
     let signature = sign(secret, payload.as_bytes())?;
     Ok(format!("{payload}.{signature}"))
 }
@@ -46,15 +66,16 @@ pub fn verify(secret: &str, token: &str, now: i64) -> Result<Session, SessionErr
     if secret.is_empty() {
         return Err(SessionError::NoSecret);
     }
-    let mut parts = token.rsplitn(3, '.');
+    let mut parts = token.rsplitn(4, '.');
     let signature = parts.next().ok_or(SessionError::Malformed)?;
+    let session_id = parts.next().ok_or(SessionError::Malformed)?;
     let expires_at = parts.next().ok_or(SessionError::Malformed)?;
     let username = parts.next().ok_or(SessionError::Malformed)?;
     let expires_at: i64 = expires_at.parse().map_err(|_| SessionError::Malformed)?;
-    if username.is_empty() {
+    if username.is_empty() || session_id.is_empty() {
         return Err(SessionError::Malformed);
     }
-    let payload = format!("{username}.{expires_at}");
+    let payload = format!("{username}.{expires_at}.{session_id}");
     let expected = decode(signature).ok_or(SessionError::Malformed)?;
     let mut mac =
         HmacSha256::new_from_slice(secret.as_bytes()).map_err(|_| SessionError::NoSecret)?;
@@ -67,6 +88,7 @@ pub fn verify(secret: &str, token: &str, now: i64) -> Result<Session, SessionErr
         return Err(SessionError::Expired);
     }
     Ok(Session {
+        session_id: session_id.to_string(),
         username: username.to_string(),
         expires_at,
     })
@@ -94,10 +116,18 @@ pub fn cookie_value(header: &str, name: &str) -> Option<String> {
 }
 
 pub fn set_cookie(token: &str, secure: bool) -> String {
-    let secure_flag = if secure { "; Secure" } else { "" };
     format!(
-        "{COOKIE_NAME}={token}; Path=/; HttpOnly; SameSite=Lax; Max-Age={TTL_SECONDS}{secure_flag}"
+        "{COOKIE_NAME}={token}; Path=/; HttpOnly; SameSite=Lax; Max-Age={TTL_SECONDS}{}",
+        secure_flag(secure)
     )
+}
+
+fn secure_flag(secure: bool) -> &'static str {
+    if secure {
+        "; Secure"
+    } else {
+        ""
+    }
 }
 
 /// The session a request carries, if any. A missing secret or a malformed cookie is
@@ -113,8 +143,11 @@ pub fn from_headers(secret: Option<&str>, headers: &axum::http::HeaderMap) -> Op
     verify(secret, &token, now).ok()
 }
 
-pub fn clear_cookie() -> String {
-    format!("{COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0")
+pub fn clear_cookie(secure: bool) -> String {
+    format!(
+        "{COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0{}",
+        secure_flag(secure)
+    )
 }
 
 #[cfg(test)]
@@ -123,15 +156,16 @@ mod tests {
 
     #[test]
     fn a_token_round_trips_and_carries_the_username() {
-        let token = issue("secret", "operator", 1_000).expect("a token is issued");
+        let token = issue("secret", "operator", "sid", 1_000).expect("a token is issued");
         let session = verify("secret", &token, 1_100).expect("the token verifies");
         assert_eq!(session.username, "operator");
+        assert_eq!(session.session_id, "sid");
         assert_eq!(session.expires_at, 1_000 + TTL_SECONDS);
     }
 
     #[test]
     fn another_secret_cannot_forge_a_session() {
-        let token = issue("secret", "operator", 1_000).expect("a token is issued");
+        let token = issue("secret", "operator", "sid", 1_000).expect("a token is issued");
         assert_eq!(
             verify("other", &token, 1_100),
             Err(SessionError::BadSignature)
@@ -140,7 +174,7 @@ mod tests {
 
     #[test]
     fn a_tampered_signature_is_refused() {
-        let token = issue("secret", "operator", 1_000).expect("a token is issued");
+        let token = issue("secret", "operator", "sid", 1_000).expect("a token is issued");
         let mut tampered = token.clone();
         tampered.pop();
         tampered.push(if token.ends_with('a') { 'b' } else { 'a' });
@@ -152,18 +186,29 @@ mod tests {
 
     #[test]
     fn a_longer_expiry_cannot_be_claimed_without_the_secret() {
-        let token = issue("secret", "operator", 1_000).expect("a token is issued");
+        let token = issue("secret", "operator", "sid", 1_000).expect("a token is issued");
         let forged = token.replace(&format!(".{}", 1_000 + TTL_SECONDS), ".9999999999");
         assert!(verify("secret", &forged, 1_100).is_err());
     }
 
     #[test]
     fn an_expired_session_is_refused() {
-        let token = issue("secret", "operator", 1_000).expect("a token is issued");
+        let token = issue("secret", "operator", "sid", 1_000).expect("a token is issued");
         assert_eq!(
             verify("secret", &token, 1_000 + TTL_SECONDS),
             Err(SessionError::Expired)
         );
+    }
+
+    #[test]
+    fn a_session_id_is_signed_and_new_ids_differ() {
+        let token = issue("secret", "operator", "sid", 1_000).expect("a token is issued");
+        let forged = token.replace(".sid.", ".other.");
+        assert_eq!(
+            verify("secret", &forged, 1_100),
+            Err(SessionError::BadSignature)
+        );
+        assert_ne!(new_id().expect("entropy"), new_id().expect("entropy"));
     }
 
     #[test]
@@ -172,13 +217,16 @@ mod tests {
             verify("secret", "nonsense", 1),
             Err(SessionError::Malformed)
         );
-        assert_eq!(verify("secret", "a.b.c", 1), Err(SessionError::Malformed));
+        assert_eq!(
+            verify("secret", "a.b.sid.c", 1),
+            Err(SessionError::Malformed)
+        );
     }
 
     #[test]
     fn an_unconfigured_secret_fails_closed() {
-        assert_eq!(issue("", "operator", 1), Err(SessionError::NoSecret));
-        assert_eq!(verify("", "a.1.ff", 1), Err(SessionError::NoSecret));
+        assert_eq!(issue("", "operator", "sid", 1), Err(SessionError::NoSecret));
+        assert_eq!(verify("", "a.1.sid.ff", 1), Err(SessionError::NoSecret));
     }
 
     #[test]
@@ -197,6 +245,16 @@ mod tests {
         assert!(cookie.contains("HttpOnly"));
         assert!(cookie.contains("SameSite=Lax"));
         assert!(cookie.contains("Secure"));
-        assert!(clear_cookie().contains("Max-Age=0"));
+        assert!(clear_cookie(true).contains("Max-Age=0"));
+        assert!(clear_cookie(true).contains("Secure"));
+    }
+
+    #[test]
+    fn an_explicit_http_cookie_keeps_the_other_attributes() {
+        let cookie = set_cookie("token", false);
+        assert!(cookie.contains("HttpOnly"));
+        assert!(cookie.contains("SameSite=Lax"));
+        assert!(!cookie.contains("Secure"));
+        assert!(!clear_cookie(false).contains("Secure"));
     }
 }

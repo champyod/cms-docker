@@ -162,23 +162,21 @@ describe('runtime — mocked server actions enforce guards', () => {
     vi.doMock('@/lib/auth', () => ({
       getSession: vi.fn(async () => ({ userId: '1', username: 'caller', expiresAt: new Date().toISOString() })),
     }));
-    // WHY this module and not '@/lib/permission-engine': the target-grant read needs Prisma, so it
-    // lives in the server module; permission-engine stays pure for the client bundle.
+    // Server module: the target-grant read needs Prisma, and permission-engine stays pure for the client bundle.
     vi.doMock('@/lib/server/target-permissions', () => ({
       getTargetEffectivePermissions: vi.fn(async () => ({
         status: 'resolved' as const,
         effective: new Set<string>(PERMISSION_REGISTRY.map((d) => d.key)),
       })),
     }));
-    vi.doMock('@/lib/prisma', () => ({
-      prisma: {
-        admins: {
-          findUnique: vi.fn(async () => ({ id: 2, enabled: true, admin_groups: [{ groups: { name: 'Superadmin', id: 1 } }] })),
-          update: vi.fn(async () => ({})),
-          count: vi.fn(async () => 1),
-        },
-      },
-    }));
+    vi.doMock('@/lib/prisma', () => {
+      const admins = {
+        findUnique: vi.fn(async () => ({ id: 2, enabled: true, admin_groups: [{ groups: { name: 'Superadmin', id: 1 } }] })),
+        update: vi.fn(async () => ({})),
+        count: vi.fn(async () => 1),
+      };
+      return { getAdminSecurityClient: () => ({ admins }), prisma: { admins } };
+    });
     vi.doMock('@/lib/audit', () => ({ recordAudit: vi.fn(async () => {}) }));
     vi.doMock('next/cache', () => ({ revalidatePath: vi.fn() }));
     vi.doMock('@/lib/field-permissions', async () => {
@@ -300,5 +298,62 @@ describe('removing an override re-grants, so it is grant-checked like an allow',
   it('an unverifiable resulting set is refused rather than treated as grantable', () => {
     const src = readSource('src/app/actions/adminPermissions.ts');
     expect(src).toContain('resultingEffective === null');
+  });
+});
+
+describe('WS-12 — no path may strip the last superadmin', () => {
+  it('both writers decide the rule through one predicate', () => {
+    const helpers = readSource('src/lib/admin-helpers.ts');
+    expect(helpers).toContain('export async function wouldLeaveNoSuperadmin');
+    // Stated once: drop Superadmin from a target, then ask whether another enabled one remains.
+    expect(helpers).toContain('removesSuperadminStatusViaGroups(target, data)');
+    expect(helpers).toContain('return wouldRemoveLastSuperadmin(adminId)');
+
+    for (const file of ['src/app/actions/admins.ts', 'src/app/actions/adminPermissions.ts']) {
+      expect(readSource(file)).toContain('wouldLeaveNoSuperadmin');
+    }
+  });
+
+  it('setAdminGroups refuses before it writes, not after', async () => {
+    vi.resetModules();
+    vi.doMock('@/lib/permissions', async () => {
+      const actual = await vi.importActual<typeof import('@/lib/permissions')>('@/lib/permissions');
+      return {
+        ...actual,
+        ensurePermission: vi.fn(async () => {}),
+        getPermissions: vi.fn(async () => new Set<string>(['group:assign', 'all:all'])),
+        invalidateAccessCache: vi.fn(),
+      };
+    });
+    vi.doMock('@/lib/admin-permission-guards', async () => {
+      const actual = await vi.importActual<typeof import('@/lib/admin-permission-guards')>('@/lib/admin-permission-guards');
+      return { ...actual, effectiveAfterGroupChange: vi.fn(async () => null) };
+    });
+    vi.doMock('@/lib/admin-helpers', async () => {
+      const actual = await vi.importActual<typeof import('@/lib/admin-helpers')>('@/lib/admin-helpers');
+      return {
+        ...actual,
+        // The only superadmin, and the change drops the group that makes them one.
+        findAdminTarget: vi.fn(async () => ({ id: 1, enabled: true, username: 'root', admin_groups: [{ groups: { name: 'Superadmin', id: 1 } }] })),
+        wouldLeaveNoSuperadmin: vi.fn(async () => true),
+      };
+    });
+    const applyGroupChange = vi.fn(async () => {});
+    vi.doMock('@/lib/prisma', () => ({
+      prisma: {
+        admin_groups: { findMany: vi.fn(async () => [{ group_id: 1 }]) },
+        $transaction: vi.fn(async (fn: (tx: unknown) => Promise<void>) =>
+          fn({ admin_groups: { deleteMany: applyGroupChange, createMany: vi.fn(async () => {}) } }),
+        ),
+      },
+    }));
+    vi.doMock('@/lib/audit', () => ({ recordAudit: vi.fn(async () => {}) }));
+    vi.doMock('next/cache', () => ({ revalidatePath: vi.fn() }));
+
+    const { setAdminGroups } = await import('@/app/actions/adminPermissions');
+    const res = await setAdminGroups(1, [2], 'demote the only superadmin');
+    expect(res.success).toBe(false);
+    if (!res.success) expect(res.error).toMatch(/last superadmin/);
+    expect(applyGroupChange).not.toHaveBeenCalled();
   });
 });

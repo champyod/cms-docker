@@ -28,12 +28,13 @@ for tool in git make curl; do
   printf '#!/usr/bin/env bash\nexit 0\n' > "${SB}/bin/${tool}"
 done
 printf '#!/usr/bin/env bash\nexit 0\n' > "${SB}/scripts/__preflight.sh"
+printf '#!/usr/bin/env bash\nexit 0\n' > "${SB}/scripts/__apply_sql.sh"
 cat > "${SB}/scripts/__backup.sh" <<STUB
 #!/usr/bin/env bash
 touch "${SB}/backup-ran"
 exit 0
 STUB
-chmod +x "${SB}/bin/"* "${SB}/scripts/__preflight.sh" "${SB}/scripts/__backup.sh"
+chmod +x "${SB}/bin/"* "${SB}/scripts/__preflight.sh" "${SB}/scripts/__apply_sql.sh" "${SB}/scripts/__backup.sh"
 
 echo "=== a box with no local cms-database refuses with an instruction ==="
 ( cd "${SB}" && BACKUP_HOST_DIR="${SB}/backups" PATH="${SB}/bin:${PATH}" bash "${SB}/scripts/__update-server.sh" ) > "${SB}/run.log" 2>&1

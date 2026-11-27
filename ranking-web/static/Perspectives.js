@@ -131,8 +131,13 @@ var Perspectives = new function () {
     };
 
     self.anonymous_control = function () {
-        return '<label id="Views_anon"><input type="checkbox" id="Views_anon_box"' +
-            (self.anonymous ? " checked" : "") + " /> Anonymous</label>";
+        // A server-masked board has no names in the payload, so a checkbox that
+        // turned anonymity off would only lie. It becomes a status label; on a
+        // board that does serve names the reader can still hide them locally.
+        if (self.anonymous) {
+            return '<span id="Views_anon" class="anon-locked">Anonymous</span>';
+        }
+        return '<label id="Views_anon"><input type="checkbox" id="Views_anon_box" /> Anonymous</label>';
     };
 
     /* The one overflow rule: wrap shows every tab, scroll pans, menu hides the overflow. */

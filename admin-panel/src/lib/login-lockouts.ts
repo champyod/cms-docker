@@ -1,4 +1,11 @@
-import { LOCKOUT_NAMESPACES, lockoutNamespaceFor, type LockoutSurface } from '@/lib/lockout-namespaces';
+import { createClient } from 'redis';
+
+import {
+  LOCKOUT_NAMESPACES,
+  lockoutNamespaceFor,
+  rankingMetadataKeyFor,
+  type LockoutSurface,
+} from '@/lib/lockout-namespaces';
 import { clearLockouts, listLockouts, type RedisLockout } from '@/lib/redis-lockouts';
 
 export interface LoginLockout extends RedisLockout {
@@ -10,12 +17,7 @@ export interface LockoutActor {
   readonly ip: string;
 }
 
-/**
- * The account and address a counter key names. The address family ends its raw
- * key at `ip#` and so carries no account; every other key is `<username>|<ip>`,
- * the shape both web servers write. A key outside every namespace, or one with
- * no separator to split on, is refused rather than guessed at.
- */
+/** The account and address a counter key names; hashed accounts carry their display facts in metadata. */
 export function describeLockoutActor(key: string): LockoutActor | null {
   const entry = lockoutNamespaceFor(key);
   if (entry === null) return null;
@@ -24,6 +26,44 @@ export function describeLockoutActor(key: string): LockoutActor | null {
   const separator = raw.indexOf('|');
   if (separator < 1) return null;
   return { username: raw.slice(0, separator), ip: raw.slice(separator + 1) };
+}
+
+function parseIdentity(raw: string | null): LockoutActor | null {
+  if (raw === null) return null;
+  try {
+    const value: unknown = JSON.parse(raw);
+    if (typeof value !== 'object' || value === null) return null;
+    const record = value as Record<string, unknown>;
+    if (typeof record.username !== 'string' || typeof record.ip !== 'string') return null;
+    return { username: record.username, ip: record.ip };
+  } catch {
+    return null;
+  }
+}
+
+/** Read ranking display facts with one connection; missing values fall back to the raw key. */
+export async function loadRankingIdentities(
+  url: string,
+  keys: readonly string[],
+): Promise<Map<string, LockoutActor>> {
+  const pairs = keys
+    .map((key) => ({ key, metadata: rankingMetadataKeyFor(key) }))
+    .filter((pair): pair is { key: string; metadata: string } => pair.metadata !== null);
+  if (pairs.length === 0) return new Map();
+  const client = createClient({ url });
+  client.on('error', () => undefined);
+  await client.connect();
+  try {
+    const values = await client.mGet(pairs.map((pair) => pair.metadata));
+    const identities = new Map<string, LockoutActor>();
+    pairs.forEach((pair, index) => {
+      const identity = parseIdentity(values[index] ?? null);
+      if (identity !== null) identities.set(pair.key, identity);
+    });
+    return identities;
+  } finally {
+    await client.quit();
+  }
 }
 
 /** Every live counter on every surface, tagged with the surface it came from. */

@@ -61,6 +61,8 @@ fn as_score(value: &Value) -> Option<f64> {
 #[derive(Debug, Clone)]
 pub struct TaskMode {
     pub key: String,
+    pub contest_id: i32,
+    pub contest: String,
     pub mode: ScoreMode,
 }
 

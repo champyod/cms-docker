@@ -21,6 +21,8 @@ fn inputs(seed: &Value) -> (Vec<TaskMode>, Vec<Submission>, Vec<Subchange>) {
         .iter()
         .map(|(key, body)| TaskMode {
             key: key.clone(),
+            contest_id: 0,
+            contest: body["contest"].as_str().unwrap_or("c0").to_string(),
             mode: ScoreMode::from_wire(body["score_mode"].as_str().expect("a mode"))
                 .expect("a known mode"),
         })
@@ -146,10 +148,14 @@ fn a_negative_score_survives_max_but_not_a_released_query() {
     let tasks = vec![
         TaskMode {
             key: "t".to_string(),
+            contest_id: 0,
+            contest: "c0".to_string(),
             mode: ScoreMode::Max,
         },
         TaskMode {
             key: "u".to_string(),
+            contest_id: 0,
+            contest: "c0".to_string(),
             mode: ScoreMode::MaxTokenedLast,
         },
     ];

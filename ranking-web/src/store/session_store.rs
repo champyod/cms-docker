@@ -1,0 +1,56 @@
+use sqlx::PgPool;
+
+use super::StoreError;
+
+/// WHY system:auth: the session table is read and written before (and without) a signed-in
+/// actor, exactly like the credential lookup. The AUTH_BOOTSTRAP policy admits that identity.
+const SESSION_ACTOR_SQL: &str = "SELECT set_config('cms.actor', 'system:auth', true)";
+
+pub async fn insert(
+    pool: &PgPool,
+    session_id: &str,
+    admin_id: i32,
+    username: &str,
+    ttl_seconds: i64,
+) -> Result<(), StoreError> {
+    let mut tx = pool.begin().await?;
+    sqlx::query(SESSION_ACTOR_SQL).execute(&mut *tx).await?;
+    sqlx::query(
+        "INSERT INTO ranking_sessions (session_id, admin_id, username, expires_at) \
+         VALUES ($1, $2, $3, now() + ($4 * interval '1 second'))",
+    )
+    .bind(session_id)
+    .bind(admin_id)
+    .bind(username)
+    .bind(ttl_seconds)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+pub async fn is_live(pool: &PgPool, session_id: &str, username: &str) -> Result<bool, StoreError> {
+    let mut tx = pool.begin().await?;
+    sqlx::query(SESSION_ACTOR_SQL).execute(&mut *tx).await?;
+    let live: Option<(i32,)> = sqlx::query_as(
+        "SELECT 1 FROM ranking_sessions \
+         WHERE session_id = $1 AND username = $2 AND expires_at > now()",
+    )
+    .bind(session_id)
+    .bind(username)
+    .fetch_optional(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(live.is_some())
+}
+
+pub async fn delete(pool: &PgPool, session_id: &str) -> Result<(), StoreError> {
+    let mut tx = pool.begin().await?;
+    sqlx::query(SESSION_ACTOR_SQL).execute(&mut *tx).await?;
+    sqlx::query("DELETE FROM ranking_sessions WHERE session_id = $1")
+        .bind(session_id)
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await?;
+    Ok(())
+}

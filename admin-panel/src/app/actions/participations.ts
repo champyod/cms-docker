@@ -6,6 +6,7 @@ import { ensurePermission, getPermissions } from '@/lib/permissions';
 import { ACTION_PERMISSIONS } from '@/lib/permission-engine';
 import { stripDisallowedFields } from '@/lib/field-permissions';
 import { recordAudit } from '@/lib/audit';
+import { NOT_AUTHENTICATED, resolveActingAdminId } from '@/lib/server/acting-admin';
 import {
   executeParticipationUpdate,
   parseIpAllowlist,
@@ -213,12 +214,14 @@ export async function revealParticipationPassword(participationId: number): Prom
   }
 }
 
-export async function sendMessage(participationId: number, adminId: number, data: {
+export async function sendMessage(participationId: number, data: {
   subject: string;
   text: string;
 }): Promise<ActionResult> {
   await ensurePermission('message:send');
   await ensurePermission('message:create');
+  const adminId = await resolveActingAdminId();
+  if (adminId === null) return { success: false, error: NOT_AUTHENTICATED };
 
   try {
     const message = await prisma.messages.create({

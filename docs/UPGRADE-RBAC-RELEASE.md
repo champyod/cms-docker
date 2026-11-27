@@ -118,7 +118,7 @@ The database rollback matters more than the code rollback: the schema change is 
 - **One `.env` instead of six.** Edit `config.toml` and re-run `./cms config sync` — never edit `.env` by hand, it is overwritten.
 - **`./cms config sync` now adds newly-introduced config keys** to an existing `config.toml` without touching values you already set.
 - **New secrets are generated automatically**: `RPC_SECRET` and `POSTGRES_BACKUP_PASSWORD`. Nothing to set by hand.
-- **Backups use `cms_backup` (BYPASSRLS, member of `cmsuser`).** Only `cmsuser` and `cms_backup` exist; the database owner `cmsuser` is demoted to `NOBYPASSRLS` so RLS binds.
+- **Backups use `cms_backup` (BYPASSRLS, SELECT-only, no membership in `cmsuser`).** Only `cmsuser` and `cms_backup` exist; the database owner `cmsuser` is demoted to `NOBYPASSRLS` so RLS binds.
 - **Schema sync is `prisma migrate deploy`**, with a role bootstrap step before the restart so `cms_backup` is available immediately.
 
 ## Known limits of this upgrade

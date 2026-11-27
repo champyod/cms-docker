@@ -4,14 +4,13 @@ import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 
 import bcrypt from 'bcryptjs';
-import crypto from 'crypto';
 
 import { createSession, deleteSession, getSession } from '@/lib/auth';
 import { SYSTEM_IDENTITIES, withActor } from '@/lib/db-actor';
 import { getFreshPermissions } from '@/lib/permissions';
 import { hasEffectivePermission } from '@/lib/permission-engine';
 import { getCaptchaEnv, resolveActiveProvider, verifyCaptcha, type CaptchaProvider } from '@/lib/captcha';
-import { prisma } from '@/lib/prisma';
+import { getAdminLoginClient, prisma } from '@/lib/prisma';
 import { safeAdminSelect, type SafeAdmin } from '@/lib/prisma-selects';
 import { redirect } from '@/lib/redirect';
 import {
@@ -30,7 +29,6 @@ import { isLoginExempt } from '@/lib/security/exemptions';
 import { recordLoginLockout } from '@/lib/security/lockouts';
 
 const DUMMY_BCRYPT_HASH = '$2a$10$C6UzMDM.H6dfI/f/IKcEeO7ZBpQz0l8Dp5uJHnKzTKmPqR3sWbGyq';
-const PLAINTEXT_PREFIX = 'plaintext:';
 const BCRYPT_PREFIX = 'bcrypt:';
 
 export interface LoginActionState {
@@ -47,21 +45,14 @@ interface AuthenticatedAdmin {
   authentication: string;
 }
 
-// A dual-stack socket hands back `::ffff:127.0.0.1` where a v4-only one reports
-// the bare address, so the prefix is stripped before the v4 test rather than
-// being tested for twice.
+// A dual-stack socket reports ::ffff:127.0.0.1 where a v4-only one reports the bare address.
 function isLoopbackIp(ip: string): boolean {
   if (ip === 'local' || ip === '::1') return true;
   const address = ip.startsWith('::ffff:') ? ip.substring('::ffff:'.length) : ip;
   return /^127\./.test(address);
 }
 
-// The username bucket keeps one attacker to one account from exhausting every
-// bucket, while the IP bucket stops the same source from resetting its counter
-// by rotating usernames. Both families must be tracked or either protection is
-// trivially bypassed. Loopback is the one exception: funnel, tailscale serve and
-// direct local access all present the same address to every user, so an IP
-// bucket there would be one shared counter that locks out unrelated accounts.
+// Both buckets are tracked or either protection is bypassed; loopback is exempt because every user shares one address.
 async function resolveRequestIdentity(
   username: string,
 ): Promise<{ readonly bucketKeys: readonly string[]; readonly attempt: LoginAttemptContext }> {
@@ -108,8 +99,7 @@ async function recordLoginFailure(
 
 export async function getCaptchaState(username?: string): Promise<{ required: boolean; enabled: boolean; provider: CaptchaProvider; siteKey: string; threshold: number; banThreshold: number }> {
   const env = getCaptchaEnv();
-  // WHY health decides the rendered provider here: this is the panel's render
-  // path, so an unreachable primary must offer the next provider in the chain.
+  // Render path: an unreachable primary must offer the next provider in the chain.
   const active = await resolveActiveProvider(env);
   const configured = env.enabled && active.siteKey.length > 0 && active.secretKey.length > 0;
   if (!configured) return { required: false, enabled: false, provider: active.provider, siteKey: '', threshold: env.threshold, banThreshold: env.banThreshold };
@@ -120,37 +110,27 @@ export async function getCaptchaState(username?: string): Promise<{ required: bo
   return { required, enabled: true, provider: active.provider, siteKey: active.siteKey, threshold: env.threshold, banThreshold: env.banThreshold };
 }
 
-function verifyPlaintextPassword(password: string, stored: string): boolean {
-  const expected = stored.substring(PLAINTEXT_PREFIX.length);
-  const actualBytes = Buffer.from(password);
-  const expectedBytes = Buffer.from(expected);
-  return actualBytes.length === expectedBytes.length && crypto.timingSafeEqual(actualBytes, expectedBytes);
-}
-
 async function verifyStoredPassword(password: string, stored: string): Promise<boolean> {
-  if (stored.startsWith(PLAINTEXT_PREFIX)) return verifyPlaintextPassword(password, stored);
-  const hash = stored.startsWith(BCRYPT_PREFIX) ? stored.substring(BCRYPT_PREFIX.length) : stored;
-  return bcrypt.compare(password, hash);
+  // Admin credentials are bcrypt-only; a plaintext or legacy value never authenticates.
+  if (!stored.startsWith(BCRYPT_PREFIX)) return false;
+  return bcrypt.compare(password, stored.substring(BCRYPT_PREFIX.length));
 }
 
 async function findActiveAdmin(username: string): Promise<AuthenticatedAdmin | null> {
-  // WHY system:auth: this is credential verification, which by definition runs before a session
-  // exists. It is the only code in the app allowed to use that identity, and `admins` is the only
-  // table whose policy admits it.
+  // Login role: it holds admins.authentication, and there is no fallback to the application connection.
+  const client = getAdminLoginClient();
+  // system:auth is the only identity admitted before a session exists, and only for credential verification.
   const admin = await withActor({ kind: 'system', name: SYSTEM_IDENTITIES.AUTH }, () =>
-    prisma.admins.findUnique({ where: { username } }),
+    client.admins.findUnique({
+      where: { username },
+      select: { id: true, username: true, authentication: true, enabled: true },
+    }),
   );
   if (!admin || !admin.enabled) return null;
   return admin;
 }
 
-/**
- * Run pre-session work under the credential identity.
- *
- * WHY this exists: everything below runs before a session cookie exists, so `requireDbActor()` has no
- * actor to derive and every query would raise. `system:auth` is the identity the database admits for
- * exactly these tables — see AUTH_BOOTSTRAP and AUTH_LEDGER in scripts/__generate_rls_sql.sh.
- */
+/** Pre-session work runs as system:auth, the only identity admitted before a session exists. */
 function asAuth<T>(work: () => Promise<T>): Promise<T> {
   return withActor({ kind: 'system', name: SYSTEM_IDENTITIES.AUTH }, work);
 }
@@ -171,11 +151,7 @@ async function completeLogin(admin: AuthenticatedAdmin, bucketKeys: readonly str
   await clearBucket(bucketKeys);
 }
 
-/**
- * Signing in is its own permission, so a group can hold ranking rights without opening
- * this surface to its members. A refused sign-in is reported exactly like a wrong
- * password: the account does exist, and saying so would confirm it to whoever probes.
- */
+// Signing in is its own permission, and a refusal reads exactly like a wrong password.
 async function maySignIn(admin: AuthenticatedAdmin): Promise<boolean> {
   const permissions = await asAuth(() => getFreshPermissions(admin.id.toString()));
   return permissions !== null && hasEffectivePermission(permissions, 'admin:login');
@@ -187,8 +163,7 @@ async function refuseLogin(
   exempt: boolean,
   attempt: LoginAttemptContext,
 ): Promise<LoginActionState> {
-  // An exempt identity is not counted and not challenged, so its wrong passwords
-  // cannot re-arm a counter or summon a challenge that would block it.
+  // An exempt identity is neither counted nor challenged, so a wrong password cannot re-arm a counter.
   if (!exempt) await recordLoginFailure(bucketKeys, username, attempt);
   const nextState: LoginActionState = { error: 'Invalid credentials' };
   if (!exempt && (await shouldRequireCaptcha(bucketKeys[0]))) Object.assign(nextState, buildCaptchaRequiredState());
@@ -200,9 +175,7 @@ export async function login(_prevState: LoginActionState | null, formData: FormD
   const password = String(formData.get('password') ?? '');
   if (!username || !password) return { error: 'Username and password are required' };
   const { bucketKeys, attempt } = await resolveRequestIdentity(username);
-  // WHY before every gate: an exempt account or address is not policed at all, so
-  // the lockout refusal, the challenge and the failure count are all skipped. A
-  // lift that only cleared the counters could be re-earned; this cannot.
+  // Checked before every gate: a lift that only cleared the counters could be re-earned.
   const clientIp = await resolveClientIp();
   const exempt = await asAuth(() => isLoginExempt(username, clientIp));
   if (!exempt) {

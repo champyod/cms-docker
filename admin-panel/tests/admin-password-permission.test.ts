@@ -28,26 +28,28 @@ async function loadUpdateAdmin(
   vi.doMock('@/lib/auth', () => ({
     getSession: vi.fn(async () => ({ userId: '1', username: 'caller', expiresAt: new Date().toISOString() })),
   }));
-  // WHY this module and not '@/lib/permission-engine': the target-grant read needs Prisma, so it
-  // lives in the server module; permission-engine stays pure for the client bundle.
+  // Server module: the target-grant read needs Prisma, and permission-engine stays pure for the client bundle.
   vi.doMock('@/lib/server/target-permissions', () => ({
     getTargetEffectivePermissions: vi.fn(async () => ({
       status: 'resolved' as const,
       effective: new Set<string>(targetPermissions),
     })),
   }));
-  vi.doMock('@/lib/prisma', () => ({
-    prisma: {
-      admins: {
-        findUnique: vi.fn(async () => TARGET_ROW),
-        update: vi.fn(async (args: { data: Record<string, unknown> }) => {
-          writtenData.push(args.data);
-          return {};
-        }),
-        count: vi.fn(async () => 1),
-      },
-    },
-  }));
+  vi.doMock('@/lib/prisma', () => {
+    // Both clients point at the same delegates: this suite observes the write, not which connection carried it.
+    const admins = {
+      findUnique: vi.fn(async () => TARGET_ROW),
+      update: vi.fn(async (args: { data: Record<string, unknown> }) => {
+        writtenData.push(args.data);
+        return {};
+      }),
+      count: vi.fn(async () => 1),
+    };
+    return {
+      getAdminSecurityClient: () => ({ admins }),
+      prisma: { admins },
+    };
+  });
   vi.doMock('@/lib/audit', () => ({
     recordAudit: vi.fn(async (entry: AuditCall) => {
       auditEntries.push(entry);

@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import {
   DEFAULT_PASSWORD_KIND,
   formatStoredPassword,
+  formatBcryptPassword,
   isPasswordKind,
   parseStoredPassword,
 } from '@/lib/password-format';
@@ -14,6 +15,13 @@ describe('formatStoredPassword', () => {
 
     const hash = stored.slice('bcrypt:'.length);
     await expect(bcrypt.compare('s3cret', hash)).resolves.toBe(true);
+  });
+
+  it('formats admin credentials as bcrypt without a storage choice', async () => {
+    const stored = await formatBcryptPassword('s3cret');
+    expect(stored.startsWith('bcrypt:')).toBe(true);
+    expect(stored).not.toContain('s3cret');
+    await expect(bcrypt.compare('s3cret', stored.slice('bcrypt:'.length))).resolves.toBe(true);
   });
 
   it('roundtrips plaintext through parseStoredPassword', async () => {

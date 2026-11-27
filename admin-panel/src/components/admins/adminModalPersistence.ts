@@ -1,7 +1,6 @@
 import { createAdmin, updateAdmin, getAdmins } from '@/app/actions/admins';
 import { setAdminGroups, setAdminOverride, clearAdminOverride, type AdminAccessOverride } from '@/app/actions/adminPermissions';
 import { stripDisallowedFields } from '@/lib/field-permissions';
-import type { PasswordKind } from '@/lib/password-format';
 import type { OverrideEffect } from '@/lib/permission-engine';
 import type { AdminWithLogin } from '@/lib/prisma-selects';
 import type { AdminFormState } from './adminFormConfig';
@@ -64,22 +63,19 @@ export async function persistAdminAccessChanges(adminId: number, draft: AdminAcc
 export interface PersistAdminAccountParams {
   initialData: AdminWithLogin | null | undefined;
   formData: AdminFormState;
-  passwordKind: PasswordKind;
   callerPermissionSet: ReadonlySet<string>;
 }
 
 export async function persistAdminAccount({
   initialData,
   formData,
-  passwordKind,
   callerPermissionSet,
 }: PersistAdminAccountParams): Promise<{ success: boolean; error?: string; adminId: number | null }> {
   if (initialData) {
     const allowed = stripDisallowedFields('admins', formData as unknown as Record<string, unknown>, callerPermissionSet);
     const updated = await updateAdmin(initialData.id, {
       name: allowed.name as string | undefined,
-      passwordKind,
-      ...(allowed.password ? { password: allowed.password as string } : {}),
+          ...(allowed.password ? { password: allowed.password as string } : {}),
     });
     return { success: updated.success, error: updated.error, adminId: initialData.id };
   }
@@ -90,8 +86,7 @@ export async function persistAdminAccount({
     name: formData.name,
     username: formData.username,
     password: formData.password,
-    passwordKind,
-  });
+    });
   if (!created.success) return { success: false, error: created.error, adminId: null };
 
   const admins = await getAdmins();

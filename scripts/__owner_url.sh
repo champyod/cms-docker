@@ -8,8 +8,8 @@ REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 [ -f "${REPO_ROOT}/.env" ] && { set -a; . "${REPO_ROOT}/.env"; set +a; }
 
 mode="${1:-}"
-user="${POSTGRES_USER:-cmsuser}"
-pass="${POSTGRES_PASSWORD:-}"
+user="${POSTGRES_MIGRATE_USER:-cms_platform_migrator}"
+pass="${ADMIN_MIGRATE_PASSWORD:-}"
 db="${POSTGRES_DB:-cmsdb}"
 
 case "$mode" in

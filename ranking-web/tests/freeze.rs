@@ -19,6 +19,7 @@ fn freeze_row(value: Option<&str>) -> OverrideRow {
         target_key: "u0".to_string(),
         action: "freeze".to_string(),
         payload: value.map(|value| serde_json::json!({ "value": value })),
+        contest_id: 1,
     }
 }
 

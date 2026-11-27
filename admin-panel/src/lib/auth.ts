@@ -3,6 +3,7 @@ import crypto from "crypto";
 import { cookies } from "next/headers";
 
 import { withActor, SYSTEM_IDENTITIES } from "@/lib/db-actor";
+import { isSecureCookie as resolveSecureCookie } from "@/lib/cookie-security";
 import { prisma } from "@/lib/prisma";
 import {
   SESSION_COOKIE_NAME,
@@ -28,8 +29,8 @@ import {
 export { encrypt, decrypt };
 export type { SessionPayload };
 
-// COOKIE_SECURE=true only if explicitly set — defaults false so HTTP access works
-const isSecureCookie = process.env.COOKIE_SECURE === 'true';
+// Secure unless a local HTTP deployment explicitly opts out.
+const isSecureCookie = resolveSecureCookie(process.env.COOKIE_SECURE);
 
 function buildCookieOptions(expiresAt: Date) {
   return {

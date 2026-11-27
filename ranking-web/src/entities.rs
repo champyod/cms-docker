@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 use serde::Serialize;
 use sqlx::postgres::{PgPool, PgRow};
 
+use crate::identity::Identity;
 use crate::overrides::load_hidden_tasks;
 use crate::store::{ShownSet, StoreError};
 
@@ -69,7 +70,12 @@ pub use crate::store::EntityKind as Kind;
 /// task list read one interpretation rather than two. The load is the one-query
 /// `load_hidden_tasks`, not the whole override fold, because /tasks/ is polled constantly and
 /// needs no user, team or score override.
-pub async fn list_body(pool: &PgPool, kind: Kind, shown: &ShownSet) -> Result<Vec<u8>, StoreError> {
+pub async fn list_body(
+    pool: &PgPool,
+    kind: Kind,
+    shown: &ShownSet,
+    identity: Identity,
+) -> Result<Vec<u8>, StoreError> {
     match kind {
         Kind::Contest => {
             let hidden = load_hidden_tasks(pool, shown.contest_ids()).await?;
@@ -98,7 +104,10 @@ pub async fn list_body(pool: &PgPool, kind: Kind, shown: &ShownSet) -> Result<Ve
         // task. Serving the whole directory here while the one-entity read refused part of it is
         // the same defect in a smaller place: two answers to what the board serves.
         Kind::Team => encode(&map_by_key(drawn::<Team>(pool, kind, None, shown).await?)),
-        Kind::User => encode(&map_by_key(drawn::<User>(pool, kind, None, shown).await?)),
+        Kind::User => {
+            let rows = drawn::<User>(pool, kind, None, shown).await?;
+            encode(&map_users(rows, identity))
+        }
     }
 }
 
@@ -114,12 +123,30 @@ pub async fn one_body(
     kind: Kind,
     key: &str,
     shown: &ShownSet,
+    identity: Identity,
 ) -> Result<Option<Vec<u8>>, StoreError> {
     match kind {
         Kind::Contest => one::<Contest>(pool, kind, key, shown).await,
         Kind::Task => one::<Task>(pool, kind, key, shown).await,
         Kind::Team => one::<Team>(pool, kind, key, shown).await,
-        Kind::User => one::<User>(pool, kind, key, shown).await,
+        Kind::User => {
+            let Some(real) = public_user_key(pool, key, shown, identity).await? else {
+                return Ok(None);
+            };
+            let Some(mut user) = drawn::<User>(pool, kind, Some(&real), shown)
+                .await?
+                .into_iter()
+                .next()
+            else {
+                return Ok(None);
+            };
+            if identity.masked() {
+                let (first, last) = identity.name("", "");
+                user.f_name = first;
+                user.l_name = last;
+            }
+            Ok(Some(encode(&user)?))
+        }
     }
 }
 
@@ -127,14 +154,57 @@ pub async fn one_body(
 /// for a user who has none, so this is never a 404. The per-submission score, token
 /// and extra come from the scorer, not the bare submission row. It reads the shared
 /// ledger rather than rebuilding one, because the caller already holds it.
-pub fn sublist_body(ledger: &crate::scoring::Ledger, user: &str) -> Result<Vec<u8>, StoreError> {
-    encode(&ledger.sublist(user))
+pub fn sublist_body(
+    ledger: &crate::scoring::Ledger,
+    user: &str,
+    identity: Identity,
+) -> Result<Vec<u8>, StoreError> {
+    let public = identity.public_key(user);
+    let entries: Vec<_> = ledger
+        .sublist(user)
+        .into_iter()
+        .cloned()
+        .map(|mut entry| {
+            entry.user = public.clone();
+            entry
+        })
+        .collect();
+    encode(&entries)
 }
 
 fn map_by_key<T: Keyed>(rows: Vec<T>) -> BTreeMap<String, T> {
     rows.into_iter()
         .map(|row| (row.key().to_string(), row))
         .collect()
+}
+
+fn map_users(rows: Vec<User>, identity: Identity) -> BTreeMap<String, User> {
+    rows.into_iter()
+        .map(|mut user| {
+            let key = identity.public_key(&user.key);
+            if identity.masked() {
+                let (first, last) = identity.name("", "");
+                user.f_name = first;
+                user.l_name = last;
+            }
+            (key, user)
+        })
+        .collect()
+}
+
+/// The real key behind a request for a user, or None when the public key names no
+/// user the board draws. Unmasked, the request key already is the real key.
+async fn public_user_key(
+    pool: &PgPool,
+    public: &str,
+    shown: &ShownSet,
+    identity: Identity,
+) -> Result<Option<String>, StoreError> {
+    if !identity.masked() {
+        return Ok(Some(public.to_string()));
+    }
+    let users = drawn::<User>(pool, Kind::User, None, shown).await?;
+    Ok(identity.resolve(public, users.iter().map(|user| &user.key)))
 }
 
 fn encode<T: Serialize>(value: &T) -> Result<Vec<u8>, StoreError> {

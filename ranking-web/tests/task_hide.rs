@@ -8,6 +8,7 @@
 use cms_ranking::binding::ServedContest;
 use cms_ranking::db::Db;
 use cms_ranking::entities::{list_body, Kind};
+use cms_ranking::identity::Identity;
 use cms_ranking::store::{load_ledger, ShownSet};
 use sqlx::PgPool;
 
@@ -106,7 +107,7 @@ fn shown() -> ShownSet {
 }
 
 async fn listed_tasks(pool: &PgPool) -> serde_json::Value {
-    let body = list_body(pool, Kind::Task, &shown())
+    let body = list_body(pool, Kind::Task, &shown(), Identity::new(false))
         .await
         .expect("the task list renders");
     serde_json::from_slice(&body).expect("the task list is json")

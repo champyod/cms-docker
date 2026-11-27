@@ -9,16 +9,14 @@ import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { useDictionary } from '@/hooks/useDictionary';
 import { surfaceLoadMessages, useSurfaceLoad } from '@/hooks/useSurfaceLoad';
 
-// Why no ranking member: the board is its own contest tab now, because a scoreboard is
-// not a message. It used to be a third tab here beside announcements and questions.
+// The board is its own tab: a scoreboard is not a message.
 export type CommTab = 'announcements' | 'questions';
 
-export function useContestCommunications(contestId: number, adminId: number) {
+export function useContestCommunications(contestId: number) {
   const dict = useDictionary();
   const confirm = useConfirm();
   const { destructiveConfirm } = useConfirmationCopy();
-  // Why: mutation actions throw on 403 — the feedback path toasts the denial
-  // instead of leaving an unhandled rejection with no visible outcome.
+  // Mutation actions throw on 403; the feedback path turns that into a visible toast.
   const runAction = useActionFeedback();
   const [activeTab, setActiveTab] = useState<CommTab>('announcements');
   const [announcements, setAnnouncements] = useState<unknown[]>([]);
@@ -36,9 +34,7 @@ export function useContestCommunications(contestId: number, adminId: number) {
     else setQuestions(await getQuestions(contestId));
   }, [contestId, activeTab]);
 
-  // Why the refusal is not swallowed any more: the load ran under a catch that only logged, so a
-  // refused tab read as "no announcements" and "no questions". It now ends in data, denied or
-  // failed, and the panel renders that; a tab switch re-runs the load for the tab it opened.
+  // A refusal ends in denied, never in an empty tab that reads as "nothing published".
   const { status, reload } = useSurfaceLoad(load, surfaceLoadMessages(dict));
 
   const selectTab = useCallback((tab: CommTab): void => {
@@ -50,7 +46,7 @@ export function useContestCommunications(contestId: number, adminId: number) {
     if (!announcementSubject.trim() || !announcementText.trim()) return;
     const result = await runAction(
       { pending: 'Publishing announcement...', success: 'Announcement published', failure: 'Publish failed' },
-      () => createAnnouncement(contestId, adminId, { subject: announcementSubject, text: announcementText }),
+      () => createAnnouncement(contestId, { subject: announcementSubject, text: announcementText }),
     );
     if (!result?.success) return;
     setShowAnnouncementForm(false);
@@ -69,12 +65,11 @@ export function useContestCommunications(contestId: number, adminId: number) {
   };
 
   const handleReply = async (questionId: number): Promise<void> => {
-    // Why the marker alone is a legal send: an answer that points at the statement has no body to
-    // write, so demanding one dropped the classification the operator had chosen.
+    // The marker alone is a legal send: a statement answer has no body to write.
     if (!replySettled && (!replySubject.trim() || !replyText.trim())) return;
     const result = await runAction(
       { pending: 'Sending reply...', success: 'Reply sent', failure: 'Reply failed' },
-      () => replyToQuestion(questionId, adminId, {
+      () => replyToQuestion(questionId, {
         reply_subject: replySubject,
         reply_text: replyText,
         resolution_kind: replySettled ? 'settled_by_statement' : undefined,

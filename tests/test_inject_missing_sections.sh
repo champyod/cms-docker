@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+
 # A value written into a table config/cms.toml does not have must not vanish without a warning.
 set -uo pipefail
 
@@ -15,8 +16,7 @@ no() { fail=$((fail + 1)); printf '  FAIL %s\n' "$1"; }
 SANDBOX="$(mktemp -d)"
 trap 'rm -rf "$SANDBOX"' EXIT
 
-# The regression is a write into a table the config lacks, so the captcha tables are
-# stripped; a copy that already had them would only exercise the update path.
+# The regression is a write into a table the config lacks, so the captcha tables are stripped; a copy that already had them would only exercise the update path.
 new_sandbox() {
   mkdir -p "${1}/config"
   awk '
@@ -24,7 +24,7 @@ new_sandbox() {
     /^\[/                                        { skip = 0 }
     !skip                                         { print }
   ' "$SAMPLE" > "${1}/config/cms.toml"
-  printf 'POSTGRES_DB=cmsdb\n' > "${1}/.env"
+  printf 'POSTGRES_DB=cmsdb\nADMIN_SECURITY_PASSWORD=fixture_security_pw\n' > "${1}/.env"
 }
 
 parses() {
@@ -85,6 +85,41 @@ else
   no "the injected config parses as TOML"
 fi
 
+echo "the admin-security write URL is the account role, never the application URL"
+security_url="$(python3 - "$INJECTED" <<'PY'
+import sys, tomllib
+with open(sys.argv[1], "rb") as handle:
+    print(tomllib.load(handle).get("database", {}).get("admin_security_url", ""))
+PY
+)"
+case "$security_url" in
+  postgresql+psycopg2://cms_admin_account_security:fixture_security_pw@database:5432/cmsdb)
+    ok "ADMIN_SECURITY_PASSWORD reaches database.admin_security_url as cms_admin_account_security" ;;
+  *)
+    no "database.admin_security_url is not the account role's URL (got: '${security_url}')" ;;
+esac
+if [[ "$security_url" == *cmsuser* ]]; then
+  no "the admin-security URL fell back to the application role"
+else
+  ok "the admin-security URL never names the application role"
+fi
+if [[ "$(grep -c '^admin_security_url = ' "$INJECTED" || true)" -eq 1 ]]; then
+  ok "admin_security_url is written exactly once in [database]"
+else
+  no "admin_security_url is written exactly once in [database]"
+fi
+
+NO_SECURITY="$(mktemp -d)"
+new_sandbox "$NO_SECURITY"
+printf 'POSTGRES_DB=cmsdb\n' > "${NO_SECURITY}/.env"
+if (cd "$NO_SECURITY" && bash "$SCRIPT" >/dev/null 2>&1) \
+   && ! grep -q '^admin_security_url = ' "${NO_SECURITY}/config/cms.toml"; then
+  ok "without ADMIN_SECURITY_PASSWORD no URL is written — no fallback to database.url"
+else
+  no "a missing admin-security password still produced a URL"
+fi
+rm -rf "$NO_SECURITY"
+
 echo "creating a table never duplicated one that already existed"
 for section in contest_web_server admin_web_server; do
   count="$(grep -c "^\[${section}\]$" "$INJECTED" || true)"
@@ -105,16 +140,10 @@ else
 fi
 
 echo "the injector checks the file it just wrote"
-# Every case below runs the real injector in its own sandbox, so a fault in one
-# cannot leak into the next and none of them can reach the repository's own
-# config/cms.toml.
+# Every case below runs the real injector in its own sandbox, so a fault in one cannot leak into the next and none of them can reach the repository's own config/cms.toml.
 REAL_PYTHON="$(command -v python3)"
 
-# A stand-in for the writer under test: the real interpreter runs first, and this
-# then produces the defect a broken writer produces — a bare, unquoted value the
-# loader refuses, or a file that is gone. Which writer is targeted is decided by
-# the payload itself rather than by a line number, so the stub survives any edit
-# to the injector that moves a write.
+# A stand-in for the writer under test: the real interpreter runs first, and this then produces the defect a broken writer produces — a bare, unquoted value the loader refuses, or a file that is gone.
 stub_python() {
   mkdir -p "${1}/bin"
   cat >"${1}/bin/python3" <<'SH'
@@ -210,8 +239,7 @@ fi
 
 # --- the testcase-copy switch, which CMS read but no config key could set ----
 
-# contest_web_server holds both copy switches, so a bare grep cannot tell them
-# apart; this reads a key out of that one section and nowhere else.
+# contest_web_server holds both copy switches, so a bare grep cannot tell them apart; this reads a key out of that one section and nowhere else.
 contest_value() {
   awk -v key="$1" '
     /^\[contest_web_server\]$/ { inside=1; next }
@@ -269,8 +297,7 @@ fi
 
 # --- propagate_generated: make env and the injector must share one process ---
 
-# Pull a function out of the engine by name rather than by line number, so an
-# edit that moves it does not silently reduce this to a test of nothing.
+# Pull a function out of the engine by name rather than by line number, so an edit that moves it does not silently reduce this to a test of nothing.
 extract_function() {
   awk -v fn="$1" '
     $0 ~ "^" fn "\\(\\) \\{" { inside=1 }
@@ -284,11 +311,9 @@ PROP="${SANDBOX}/propagate"
 new_sandbox "$PROP"
 mkdir -p "${PROP}/scripts"
 cp "$SCRIPT" "${PROP}/scripts/__inject_config.sh"
-# The injector sources its logger out of scripts/__lib; without it the run dies
-# on a missing file and the propagation is never reached.
+# The injector sources its logger out of scripts/__lib; without it the run dies on a missing file and the propagation is never reached.
 cp -R "${REPO_ROOT}/scripts/__lib" "${PROP}/scripts/__lib"
-# Stands in for `make env`: rewriting .env is the whole contract, and the value
-# differs from the shipped default so only a real propagation can produce it.
+# Stands in for `make env`: rewriting .env is the whole contract, and the value differs from the shipped default so only a real propagation can produce it.
 cat >"${PROP}/Makefile" <<'MK'
 env:
 	@printf 'SUBMIT_LOCAL_COPY=false\n' > .env

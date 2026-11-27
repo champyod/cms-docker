@@ -8,6 +8,12 @@ import { recordAudit } from '@/lib/audit';
 import { ensurePermission } from '@/lib/permissions';
 import { prisma } from '@/lib/prisma';
 import {
+  ACCESS_MODE_PROTECTED,
+  ACCESS_MODE_PUBLIC,
+  isAccessMode,
+  type AccessMode,
+} from '@/lib/ranking-access-mode';
+import {
   assertWordingHasContest,
   readWording,
   wordingOverrides,
@@ -29,7 +35,7 @@ export interface AppearanceFields extends WordingFields {
   organisation: string;
   /** Short display name shown below the logo on ranking board. Falls back to title if empty. */
   displayName: string;
-  accessMode: 'public' | 'protected';
+  accessMode: AccessMode;
   showIdColumn: boolean;
   anonymous: boolean;
   footerText: string;
@@ -82,7 +88,7 @@ function toAppearance(row: RankingSettingsRow, contestId: number | null): Rankin
     subtitle: wording.subtitle,
     organisation: row.organisation ?? '',
     displayName: row.display_name ?? '',
-    accessMode: row.access_mode === 'protected' ? 'protected' : 'public',
+    accessMode: row.access_mode === ACCESS_MODE_PUBLIC ? ACCESS_MODE_PUBLIC : ACCESS_MODE_PROTECTED,
     showIdColumn: readShowIdColumn(row.columns),
     anonymous: readAnonymous(row.columns),
     footerText: row.footer_text ?? '',
@@ -321,7 +327,7 @@ interface AppearanceColumns {
   wording_overrides?: Prisma.InputJsonValue | typeof Prisma.JsonNull;
   organisation?: string | null;
   display_name?: string | null;
-  access_mode?: 'public' | 'protected';
+  access_mode?: AccessMode;
   columns?: Prisma.InputJsonValue;
   footer_text?: string | null;
   credits_text?: string | null;
@@ -362,6 +368,9 @@ function toRow(fields: StatedAppearanceFields, contestId: number | null): Appear
     row.display_name = fields.displayName || null;
   }
   if (fields.accessMode !== undefined) {
+    if (!isAccessMode(fields.accessMode)) {
+      throw new Error('accessMode must be public or protected');
+    }
     row.access_mode = fields.accessMode;
   }
   if (fields.showIdColumn !== undefined || fields.anonymous !== undefined) {

@@ -1,32 +1,39 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import bcrypt from 'bcryptjs';
 
 import type { LoginActionState } from '@/app/actions/auth';
 
 const ADMIN_ID = 7;
 const USERNAME = 'ada';
 const PASSWORD = 'secret';
-const STORED_AUTHENTICATION = `plaintext:${PASSWORD}`;
+const STORED_AUTHENTICATION = `bcrypt:${bcrypt.hashSync(PASSWORD, 10)}`;
 
 type LoginAction = typeof import('@/app/actions/auth').login;
 
 interface Harness {
   login: LoginAction;
   createSession: ReturnType<typeof vi.fn>;
+  findCredential: ReturnType<typeof vi.fn>;
+  findViaApplicationClient: ReturnType<typeof vi.fn>;
 }
 
 async function loadLoginWith(grantedPermissions: readonly string[]): Promise<Harness> {
   vi.resetModules();
   const createSession = vi.fn(async () => undefined);
+  const findCredential = vi.fn(async () => ({
+    id: ADMIN_ID,
+    username: USERNAME,
+    enabled: true,
+    authentication: STORED_AUTHENTICATION,
+  }));
+  // The credential read uses the login client; both delegates are held so a test can prove which ran.
+  const findViaApplicationClient = vi.fn(async () => null);
   vi.doMock('@/lib/auth', () => ({ createSession, deleteSession: vi.fn(), getSession: vi.fn() }));
   vi.doMock('@/lib/prisma', () => ({
+    getAdminLoginClient: () => ({ admins: { findUnique: findCredential } }),
     prisma: {
       admins: {
-        findUnique: vi.fn(async () => ({
-          id: ADMIN_ID,
-          username: USERNAME,
-          enabled: true,
-          authentication: STORED_AUTHENTICATION,
-        })),
+        findUnique: findViaApplicationClient,
         update: vi.fn(async () => undefined),
       },
     },
@@ -58,7 +65,12 @@ async function loadLoginWith(grantedPermissions: readonly string[]): Promise<Har
       throw Object.assign(new Error('NEXT_REDIRECT'), { redirectedTo: path });
     },
   }));
-  return { login: (await import('@/app/actions/auth')).login, createSession };
+  return {
+    login: (await import('@/app/actions/auth')).login,
+    createSession,
+    findCredential,
+    findViaApplicationClient,
+  };
 }
 
 function credentials(username: string = USERNAME, password: string = PASSWORD): FormData {
@@ -99,12 +111,21 @@ describe('signing in requires admin:login', () => {
   });
 
   it('opens a session for an admin whose group carries admin:login', async () => {
-    const { login, createSession } = await loadLoginWith(['admin:login', 'ranking:read']);
+    const { login, createSession, findCredential, findViaApplicationClient } = await loadLoginWith([
+      'admin:login',
+      'ranking:read',
+    ]);
 
     const state = await attemptLogin(login);
 
     expect(state.error).toBeUndefined();
     expect(createSession).toHaveBeenCalledTimes(1);
+    // Four admitted columns over the login client; the application connection is never consulted.
+    expect(findCredential).toHaveBeenCalledWith({
+      where: { username: USERNAME },
+      select: { id: true, username: true, authentication: true, enabled: true },
+    });
+    expect(findViaApplicationClient).not.toHaveBeenCalled();
   });
 
   it('refuses a ranking operator, whose group carries no admin:login', async () => {
@@ -122,5 +143,20 @@ describe('signing in requires admin:login', () => {
     const refused = await attemptLogin(operator.login);
 
     expect(refused.error).toBe('Invalid credentials');
+  });
+
+  it('refuses a legacy plaintext credential instead of comparing it', async () => {
+    const harness = await loadLoginWith(['admin:login']);
+    harness.findCredential.mockResolvedValue({
+      id: ADMIN_ID,
+      username: USERNAME,
+      enabled: true,
+      authentication: `plaintext:${PASSWORD}`,
+    });
+
+    const state = await attemptLogin(harness.login);
+
+    expect(state.error).toBe('Invalid credentials');
+    expect(harness.createSession).not.toHaveBeenCalled();
   });
 });

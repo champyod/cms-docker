@@ -24,7 +24,7 @@ fn pool() -> PgPool {
 }
 
 async fn clear(pool: &PgPool) -> Result<(), sqlx::Error> {
-    const STATEMENTS: [&str; 8] = [
+    const STATEMENTS: [&str; 9] = [
         "DELETE FROM ranking_config",
         "DELETE FROM ranking_subchanges",
         "DELETE FROM ranking_submissions",
@@ -33,6 +33,7 @@ async fn clear(pool: &PgPool) -> Result<(), sqlx::Error> {
         "DELETE FROM ranking_teams",
         "DELETE FROM ranking_contests",
         "DELETE FROM ranking_settings",
+        "DELETE FROM ranking_overrides",
     ];
     for statement in STATEMENTS {
         sqlx::query(statement).execute(pool).await?;
@@ -152,4 +153,88 @@ async fn a_user_with_no_submissions_gets_an_empty_sublist() {
         .await
         .expect("a body");
     assert_eq!(body.as_ref(), b"[]");
+}
+
+/// A board the operator marked anonymous carries no name, username or face. The
+/// surrogate key is the one a client receives, and the real key no longer resolves.
+#[tokio::test]
+#[ignore = "requires a live postgres carrying the ranking tables"]
+async fn an_anonymous_board_hides_identity_from_every_public_read() {
+    let pool = pool();
+    clear(&pool).await.expect("the tables are reachable");
+    seed_entities(&pool).await.expect("the seed applies");
+    for statement in [
+        "INSERT INTO ranking_submissions (key, \"user\", task, time) VALUES ('s0', 'u0', 't0', 1)",
+        "INSERT INTO ranking_subchanges (key, submission, time, score) VALUES ('sc0', 's0', 2, 30.0)",
+        "INSERT INTO ranking_settings (id, columns, access_mode) VALUES (1, '{\"anonymous\": true}', 'public')",
+    ] {
+        sqlx::query(statement)
+            .execute(&pool)
+            .await
+            .expect("the anonymous seed applies");
+    }
+
+    let board = body(get(app(), "/board").await).await;
+    let entries = board.as_object().expect("a board object");
+    assert_eq!(entries.len(), 1, "one visible row");
+    let (public_key, entry) = entries.iter().next().expect("one entry");
+    assert_eq!(entry["f_name"], "—");
+    assert_eq!(entry["l_name"], "");
+    assert!(!board.to_string().contains("Ada"));
+    assert!(!board.to_string().contains("u0"));
+    assert!(public_key.starts_with("p_"));
+
+    let user = body(get(app(), &format!("/users/{public_key}")).await).await;
+    assert_eq!(user["f_name"], "—");
+    assert_eq!(user["l_name"], "");
+    assert!(!user.to_string().contains("Ada"));
+
+    let users = body(get(app(), "/users/").await).await;
+    assert!(!users.to_string().contains("Ada"));
+    assert!(users.get(public_key).is_some());
+
+    assert_eq!(
+        get(app(), "/users/u0").await.status(),
+        StatusCode::NOT_FOUND,
+        "the real username is not a public identifier"
+    );
+    let scores = body(get(app(), "/scores").await).await;
+    assert!(!scores.to_string().contains("u0"));
+    assert!(scores.get(public_key).is_some());
+    let history = body(get(app(), "/history").await).await;
+    assert!(!history.to_string().contains("u0"));
+
+    let face = get(app(), "/faces/u0").await;
+    assert_eq!(face.status(), StatusCode::OK);
+    assert_eq!(face.headers()["content-type"], "image/png");
+}
+
+async fn body(response: axum::response::Response) -> serde_json::Value {
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("a body");
+    serde_json::from_slice(&bytes).expect("json")
+}
+
+/// A board without the anonymous flag still serves names: the masking is the flag's
+/// effect, not a permanent loss of the projection.
+#[tokio::test]
+#[ignore = "requires a live postgres carrying the ranking tables"]
+async fn a_public_board_keeps_the_names_it_always_served() {
+    let pool = pool();
+    clear(&pool).await.expect("the tables are reachable");
+    seed_entities(&pool).await.expect("the seed applies");
+    for statement in [
+        "INSERT INTO ranking_submissions (key, \"user\", task, time) VALUES ('s0', 'u0', 't0', 1)",
+        "INSERT INTO ranking_subchanges (key, submission, time, score) VALUES ('sc0', 's0', 2, 30.0)",
+    ] {
+        sqlx::query(statement)
+            .execute(&pool)
+            .await
+            .expect("the score seed applies");
+    }
+    let board = body(get(app(), "/board").await).await;
+    assert!(board.get("u0").is_some());
+    assert_eq!(board["u0"]["f_name"], "Ada");
+    assert_eq!(board["u0"]["l_name"], "Zero");
 }

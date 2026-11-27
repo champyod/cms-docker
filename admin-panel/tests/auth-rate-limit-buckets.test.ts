@@ -3,8 +3,7 @@ import { buildIpBucketKey, clearBucket, isRateLimited, loginBuckets, pruneExpire
 
 const MAX = 5;
 
-// The store falls back to this map when no shared Redis is configured, which is
-// the path under test: pin the URL off so an ambient value cannot switch it.
+// No shared Redis: pin REDIS_URL off so an ambient value cannot switch the store.
 beforeEach(() => {
   vi.stubEnv('REDIS_URL', '');
   loginBuckets.clear();
@@ -94,17 +93,13 @@ describe('eviction under flood', () => {
   });
 
   it('still evicts something when every bucket is at the limit', async () => {
-    // Reaching the oldest-only fallback needs a full map whose every entry is
-    // already at the limit, because the caller's own freshly created bucket is
-    // itself under the limit and is always the preferred victim.
+    // The oldest-only fallback needs a full map where every entry is already at the limit.
     loginBuckets.clear();
     for (let i = 0; i < 1000; i++) {
       loginBuckets.set(`flood${i}|7.7.7.7`, { count: MAX, resetAt: Date.now() + 60_000 });
     }
     loginBuckets.set('sentinel|7.7.7.7', { count: MAX, resetAt: Date.now() - 60_000 });
-    // Re-entering the sentinel raises it past the limit and refreshes its
-    // resetAt, so it is no longer the oldest and the fallback must drop a flood
-    // bucket instead of the at-limit victim.
+    // Re-entering refreshes resetAt, so the fallback must drop a flood bucket, not the at-limit victim.
     await recordFailedAttempt(['sentinel|7.7.7.7']);
     expect(loginBuckets.size).toBe(1000);
     expect(loginBuckets.has('sentinel|7.7.7.7')).toBe(true);
@@ -113,17 +108,14 @@ describe('eviction under flood', () => {
 });
 
 describe('bucket key selection by client address', () => {
-  // Why through resolveBucketKeys and not the predicate: it is the only seam the
-  // login action actually consumes, so these cases hold even if the loopback
-  // check is later inlined, and the assertions read in the terms the rate
-  // limiter sees. The module is reloaded per case because the action reads its
-  // headers at call time, which needs a freshly stubbed next/headers.
+  // Through resolveBucketKeys: it is the seam the login action consumes, and each case needs freshly stubbed headers.
   async function resolveKeys(forwardedFor?: string): Promise<readonly string[]> {
     vi.resetModules();
     vi.stubEnv('AUTH_SECRET', 'auth-rate-limit-suite-fixture-secret');
     vi.doMock('server-only', () => ({}));
     vi.doMock('@/lib/security/exemptions', () => ({ isLoginExempt: vi.fn(async () => false) }));
     vi.doMock('@/lib/prisma', () => ({
+      getAdminLoginClient: () => ({ admins: { findUnique: vi.fn(async () => null) } }),
       prisma: { admins: { findUnique: vi.fn(async () => null), update: vi.fn(async () => undefined) } },
     }));
     vi.doMock('next/headers', () => ({
@@ -134,8 +126,7 @@ describe('bucket key selection by client address', () => {
     formData.set('username', 'alice');
     formData.set('password', 'wrong');
     await login(null, formData);
-    // Why re-import: the reload above hands the action its own rate-limiter
-    // instance, so the one this file imported at load time is a different map.
+    // Re-import: the action got its own rate-limiter instance, so this file's map is a different one.
     const { loginBuckets: reloaded } = await import('@/lib/auth-rate-limit');
     return [...reloaded.keys()];
   }

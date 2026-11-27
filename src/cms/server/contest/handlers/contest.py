@@ -59,6 +59,7 @@ from cms.server.login_exemption import is_login_exempt
 from cms.server.login_lockout_ledger import record_login_lockout
 from cms.server.contest.authentication import authenticate_request
 from cms.server.credits import load_credits
+from cmscommon.cookies import session_cookie_attributes
 from cmscommon.datetime import get_timezone
 from .base import BaseHandler
 from ..phase_management import compute_actual_phase
@@ -87,6 +88,20 @@ class ContestHandler(BaseHandler):
         self.contest_url: Url = None
         self.contest: Contest
         self.impersonated_by_admin = False
+
+    def set_login_cookie(self, name: str, value: str | bytes) -> None:
+        """Issue or refresh the contest session with one attribute source."""
+        self.set_secure_cookie(
+            name,
+            value,
+            expires_days=None,
+            max_age=config.contest_web_server.cookie_duration,
+            **session_cookie_attributes(),
+        )
+
+    def clear_login_cookie(self, name: str) -> None:
+        """Clear the contest session with the same attributes used to issue it."""
+        self.clear_cookie(name, **session_cookie_attributes())
 
     @property
     def captcha(self) -> Captcha:
@@ -204,14 +219,9 @@ class ContestHandler(BaseHandler):
             ip_address)
 
         if cookie is None:
-            self.clear_cookie(cookie_name)
+            self.clear_login_cookie(cookie_name)
         elif self.refresh_cookie:
-            self.set_secure_cookie(
-                cookie_name,
-                cookie,
-                expires_days=None,
-                max_age=config.contest_web_server.cookie_duration,
-            )
+            self.set_login_cookie(cookie_name, cookie)
 
         self.impersonated_by_admin = impersonated
         return participation

@@ -1,11 +1,10 @@
 'use client';
 
 import { Input } from '@/components/core/Input';
-import { PasswordFieldWithKind } from '@/components/core/PasswordFieldWithKind';
+import { PasswordFieldWithGenerator } from '@/components/core/PasswordFieldWithGenerator';
 import { SavedSecretReveal } from '@/components/core/SavedSecretReveal';
 import { RestrictedField } from '@/components/core/RestrictedField';
 import { revealAdminPassword } from '@/app/actions/admins';
-import type { PasswordKind } from '@/lib/password-format';
 import type { FieldAccessTable } from '@/lib/field-permissions';
 import type { AdminWithLogin } from '@/lib/prisma-selects';
 import type { AdminFormState } from './adminFormConfig';
@@ -16,9 +15,7 @@ interface AdminAccountFieldsProps {
   canCreate: boolean;
   fieldAccess: FieldAccessTable<'admins'>;
   canRevealPassword: boolean;
-  passwordKind: PasswordKind;
   updateForm: (updates: Partial<AdminFormState>) => void;
-  onPasswordKind: (kind: PasswordKind) => void;
 }
 
 export function AdminAccountFields({
@@ -27,9 +24,7 @@ export function AdminAccountFields({
   canCreate,
   fieldAccess,
   canRevealPassword,
-  passwordKind,
   updateForm,
-  onPasswordKind,
 }: AdminAccountFieldsProps): React.JSX.Element {
   return (
     <>
@@ -66,14 +61,12 @@ export function AdminAccountFields({
         label={`Password ${initialData ? '(Leave empty to keep current)' : ''}`}
         lockHint="Read-only — you lack admin:password:update"
       >
-        <PasswordFieldWithKind
+        <PasswordFieldWithGenerator
           label=""
           value={formData.password}
           onChange={(password) => updateForm({ password })}
           required={!initialData}
           placeholder="••••••••"
-          kind={passwordKind}
-          onKind={onPasswordKind}
         />
         {initialData && (
           <SavedSecretReveal

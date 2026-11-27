@@ -6,6 +6,7 @@ import { ensurePermission, getPermissions } from '@/lib/permissions';
 import { ACTION_PERMISSIONS } from '@/lib/permission-engine';
 import { stripDisallowedFields } from '@/lib/field-permissions';
 import { recordAudit } from '@/lib/audit';
+import { NOT_AUTHENTICATED, resolveActingAdminId } from '@/lib/server/acting-admin';
 
 export async function getQuestions(contestId: number) {
   await ensurePermission('question:list');
@@ -24,12 +25,14 @@ export async function getQuestions(contestId: number) {
 /** How a reply answered the question: the statement settled it, or an answer had to clarify it. */
 export type QuestionResolutionKind = 'clarification_needed' | 'settled_by_statement';
 
-export async function replyToQuestion(questionId: number, adminId: number, data: {
+export async function replyToQuestion(questionId: number, data: {
   reply_subject: string;
   reply_text: string;
   resolution_kind?: QuestionResolutionKind;
 }) {
   await ensurePermission(ACTION_PERMISSIONS.replyToQuestion);
+  const adminId = await resolveActingAdminId();
+  if (adminId === null) return { success: false, error: NOT_AUTHENTICATED };
   const permissions = await getPermissions();
   const allowed = stripDisallowedFields('questions', {
     reply_subject: data.reply_subject,

@@ -202,6 +202,7 @@ async fn a_hide_naming_no_projected_contest_is_reported_as_unmatched() {
 fn the_diagnostics_surface_keeps_its_keys_and_adds_the_causes() {
     let body = serde_json::to_value(Diagnostics {
         ready: true,
+        identity_masked: true,
         skipped_overrides: 1,
         skipped_subchanges: 2,
         hidden_task_subchanges: 4,
@@ -211,6 +212,8 @@ fn the_diagnostics_surface_keeps_its_keys_and_adds_the_causes() {
         withheld_task_hides: 1,
         renamed_task_hides: 2,
         unmatched_task_hides: 3,
+        contests_on_board: 1,
+        contests_with_overrides: 1,
     })
     .expect("the diagnostics serialize");
 

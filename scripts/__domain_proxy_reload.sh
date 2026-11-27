@@ -34,7 +34,7 @@ fi
 # template gained after that render — such as the generated routes — never lands. The
 # domain tool owns that transform, and reloads the proxy itself once it succeeds; a box
 # whose domain is not configured keeps the bare reload.
-if bash "${SCRIPT_DIR}/__domain.sh" proxy --apply >/dev/null 2>&1; then
+if bash "${SCRIPT_DIR}/__domain.sh" proxy --apply --yes </dev/null >/dev/null 2>&1; then
   if [[ "$STRICT" != "1" ]]; then
     exit 0
   fi
