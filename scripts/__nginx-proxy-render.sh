@@ -34,6 +34,7 @@ PROXY_COMMON='
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-CMS-Trusted-Proxy "@FORWARDED_TRUST_MARKER@";
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header X-Content-Type-Options "nosniff" always;
     add_header X-XSS-Protection "1; mode=block" always;'
@@ -52,6 +53,7 @@ PROXY_ADMIN_PANEL='
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $remote_addr;
     proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-CMS-Trusted-Proxy "@FORWARDED_TRUST_MARKER@";
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header X-Content-Type-Options "nosniff" always;
     add_header X-XSS-Protection "1; mode=block" always;'
@@ -116,6 +118,7 @@ $PROXY_COMMON
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-CMS-Trusted-Proxy "@FORWARDED_TRUST_MARKER@";
         proxy_pass http://cms_contest;
         proxy_redirect off;
     }
@@ -135,6 +138,12 @@ $PROXY_COMMON
     location /ws {
         proxy_pass http://cms_contest;
         proxy_http_version 1.1;
+        # A location that sets any proxy_set_header drops every inherited one, so the
+        # asserted address and the trust marker are restated rather than inherited.
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-CMS-Trusted-Proxy "@FORWARDED_TRUST_MARKER@";
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection \"upgrade\";
     }
@@ -161,6 +170,7 @@ $PROXY_COMMON
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-CMS-Trusted-Proxy "@FORWARDED_TRUST_MARKER@";
         proxy_pass http://cms_contest;
         proxy_redirect off;
     }
@@ -180,6 +190,12 @@ $PROXY_COMMON
     location /ws {
         proxy_pass http://cms_contest;
         proxy_http_version 1.1;
+        # A location that sets any proxy_set_header drops every inherited one, so the
+        # asserted address and the trust marker are restated rather than inherited.
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-CMS-Trusted-Proxy "@FORWARDED_TRUST_MARKER@";
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection \"upgrade\";
     }
@@ -200,13 +216,20 @@ fi
 PROXY_MAX_BODY_SIZE="${PROXY_MAX_BODY_SIZE:-100M}"
 export PROXY_COMMON HTTP_SERVER FUNNEL_SERVERS
 export ADMIN_PANEL_CONTAINER ADMIN_NEXT_LISTEN_PORT
+# The value the panel compares against, so a request the proxy did not stamp is not
+# believed. Empty means the panel trusts no chain at all, which is the safe default:
+# a browser reaching the panel directly then cannot choose its own rate-limit bucket.
+FORWARDED_TRUST_MARKER="${FORWARDED_TRUST_MARKER:-}"
 REALM="${FUNNEL_REALM:-CMS restricted}"
 REALM_SAFE=$(printf '%s' "$REALM" | sed 's/[&|/]/\\&/g')
+# The marker travels the same sed pass as the realm, so it needs the same escaping: a
+# marker containing | or & would otherwise corrupt the substitution rather than be inserted.
+MARKER_SAFE=$(printf '%s' "$FORWARDED_TRUST_MARKER" | sed 's/[&|/]/\\&/g')
 # WHY @PROXY_MAX_BODY_SIZE@ is a sentinel and not ${PROXY_MAX_BODY_SIZE}: the two blocks
 # above are single-quoted so nginx's own $host and $scheme survive the shell, which means
 # envsubst expands PROXY_COMMON to text that still reads ${PROXY_MAX_BODY_SIZE} and never
 # looks at it again — one pass, no recursion. nginx would then be handed a literal
 # ${PROXY_MAX_BODY_SIZE} as its body size and refuse to start. The same substitution pass
 # that already resolves @FUNNEL_REALM@ resolves this one.
-envsubst '${CONTEST_LISTEN_PORT} ${PROXY_COMMON} ${HTTP_SERVER} ${FUNNEL_SERVERS} ${ADMIN_PANEL_CONTAINER} ${ADMIN_NEXT_LISTEN_PORT}' < /etc/nginx/templates/default.conf.template | sed -e "s|@FUNNEL_REALM@|$REALM_SAFE|g" -e "s|@PROXY_MAX_BODY_SIZE@|$PROXY_MAX_BODY_SIZE|g" > /etc/nginx/conf.d/default.conf
+envsubst '${CONTEST_LISTEN_PORT} ${PROXY_COMMON} ${HTTP_SERVER} ${FUNNEL_SERVERS} ${ADMIN_PANEL_CONTAINER} ${ADMIN_NEXT_LISTEN_PORT}' < /etc/nginx/templates/default.conf.template | sed -e "s|@FUNNEL_REALM@|$REALM_SAFE|g" -e "s|@PROXY_MAX_BODY_SIZE@|$PROXY_MAX_BODY_SIZE|g" -e "s|@FORWARDED_TRUST_MARKER@|$MARKER_SAFE|g" > /etc/nginx/conf.d/default.conf
 exec nginx -g 'daemon off;'
