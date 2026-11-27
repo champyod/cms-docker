@@ -1,8 +1,5 @@
 #!/usr/bin/env bash
-# Pins the wiring that makes a comma-list <SVC>_BIND_IP publish config-only: the
-# unified base compose file no longer interpolates the front-door binds (docker
-# compose rejects a comma in a host_ip), and the Makefile regenerates the override
-# from .env before a stack comes up so the configured addresses are what binds.
+# Pins config-only binds: the base stays single-address and the generated override carries comma lists.
 set -uo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -15,8 +12,37 @@ fail=0
 ok() { pass=$((pass + 1)); printf '  ok   %s\n' "$1"; }
 no() { fail=$((fail + 1)); printf '  FAIL %s\n' "$1"; }
 
-# Front-door binds must be gone from the base port specs, or a comma list reaches
-# docker compose and fails to parse.
+service_block() {
+  local service="$1"
+  awk -v service="$service" '
+    $0 == "  " service ":" { inside = 1; next }
+    inside && /^  [^ ]/ { exit }
+    inside { print }
+  ' "$COMPOSE"
+}
+
+check_loopback_publish() {
+  local service="$1" mapping="$2" block ports publishes
+  block="$(service_block "$service")"
+  ports="$(awk '
+    /^    ports:/ { inside = 1; next }
+    inside && /^    [^ ]/ { exit }
+    inside { print }
+  ' <<<"$block")"
+  if grep -qF -- "- \"${mapping}\"" <<<"$ports"; then
+    ok "${service} publishes on 127.0.0.1"
+  else
+    no "${service} publishes on 127.0.0.1"
+  fi
+  publishes="$(grep -cE '^      - "' <<<"$ports" || true)"
+  if [[ "${publishes:-0}" -eq 1 ]]; then
+    ok "${service} publishes exactly one host entry"
+  else
+    no "${service} publishes exactly one host entry (found ${publishes:-0})"
+  fi
+}
+
+# Front-door binds must stay out of the base port specs, or a comma list reaches docker compose.
 for var in CONTEST_BIND_IP NGINX_BIND_IP ADMIN_BIND_IP ADMIN_NEXT_BIND_IP RANKING_BIND_IP; do
   if grep -qF -- "\${${var}:-" "$COMPOSE"; then
     no "base compose still interpolates ${var}"
@@ -25,21 +51,21 @@ for var in CONTEST_BIND_IP NGINX_BIND_IP ADMIN_BIND_IP ADMIN_NEXT_BIND_IP RANKIN
   fi
 done
 
-# The panel's host publish is the one front-door address the base file names itself,
-# and it names it loopback. The panel identifies a caller from a proxy-asserted header
-# (x-real-ip / rightmost x-forwarded-for), so a published address that reaches :8891
-# without a proxy lets the caller choose its own login bucket and the identity its
-# audit rows carry. Widening belongs to ADMIN_NEXT_BIND_IP in the generated override,
-# one entry per address — a routable value is a decision to front the panel with a
-# proxy of your own, never a convenience for reaching it directly.
+# These services speak HTTP and hold Secure cookies, so a direct routable publish is unusable.
+check_loopback_publish contest-web-server \
+  '127.0.0.1:${CONTEST_PORT_EXTERNAL:-8888}:${CONTEST_LISTEN_PORT:-8888}'
+check_loopback_publish admin-web-server \
+  '127.0.0.1:${ADMIN_PORT_EXTERNAL:-8889}:${ADMIN_LISTEN_PORT:-8889}'
+check_loopback_publish ranking-web-server \
+  '127.0.0.1:${RANKING_PORT_EXTERNAL:-8890}:${RANKING_LISTEN_PORT:-8890}'
+
+# The panel identifies a caller from a proxy-asserted header, so direct access also spoofs its audit identity.
 PANEL_BLOCK="$(awk '/^  admin-panel-next:/,/^  admin-web-server:/' "$COMPOSE")"
 if printf '%s\n' "$PANEL_BLOCK" | grep -qF -- '- "127.0.0.1:${ADMIN_NEXT_PORT_EXTERNAL:-8891}:3000"'; then
   ok "admin-panel-next publishes on 127.0.0.1"
 else
   no "admin-panel-next publishes on 127.0.0.1"
 fi
-# One entry only: a second publish is how a routable address gets added alongside the
-# loopback one, and the positive check above would stay green while it was.
 publishes="$(printf '%s\n' "$PANEL_BLOCK" | grep -cE '^      - "[^"]*:[0-9]+"$' || true)"
 if [[ "${publishes:-0}" -eq 1 ]]; then
   ok "admin-panel-next publishes exactly one host entry"

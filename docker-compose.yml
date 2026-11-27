@@ -426,7 +426,7 @@ services:
     networks:
       - cms-network
     ports:
-      - "0.0.0.0:${CONTEST_PORT_EXTERNAL:-8888}:${CONTEST_LISTEN_PORT:-8888}"
+      - "127.0.0.1:${CONTEST_PORT_EXTERNAL:-8888}:${CONTEST_LISTEN_PORT:-8888}"
     privileged: true
     command: >
       sh -c "sudo mkdir -p /var/local/log/cms/ContestWebServer-${CONTEST_WEB_SERVER_SHARD:-0} /var/local/cache/cms /var/local/lib/cms &&
@@ -573,7 +573,7 @@ services:
     networks:
       - cms-network
     ports:
-      - "0.0.0.0:${ADMIN_PORT_EXTERNAL:-8889}:${ADMIN_LISTEN_PORT:-8889}"
+      - "127.0.0.1:${ADMIN_PORT_EXTERNAL:-8889}:${ADMIN_LISTEN_PORT:-8889}"
     command: ["cmsAdminWebServer"]
     labels:
       - "traefik.enable=true"
@@ -634,7 +634,7 @@ services:
     networks:
       - cms-network
     ports:
-      - "0.0.0.0:${RANKING_PORT_EXTERNAL:-8890}:${RANKING_LISTEN_PORT:-8890}"
+      - "127.0.0.1:${RANKING_PORT_EXTERNAL:-8890}:${RANKING_LISTEN_PORT:-8890}"
     command: ["cms-ranking"]
     labels:
       - "traefik.enable=true"
