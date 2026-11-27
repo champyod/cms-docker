@@ -226,6 +226,7 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-CMS-Trusted-Proxy $FORWARDED_TRUST_MARKER;
     }
 }
 
@@ -240,6 +241,7 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-CMS-Trusted-Proxy $FORWARDED_TRUST_MARKER;
     }
 }
 
@@ -257,6 +259,16 @@ server {
     }
 }
 ```
+
+> **The `X-CMS-Trusted-Proxy` line is required, not optional.** The contest server, the
+> classic admin and the panel believe a forwarded client address only from a request that
+> carries the configured `FORWARDED_TRUST_MARKER`, and read every other request as having
+> no client address. Leave it out and contestant logins all count under one rate-limit
+> bucket, audit rows record no address, and a contest with an IP restriction refuses
+> everyone. Because a request that reaches a UI port directly could otherwise name its own
+> address — clearing an IP restriction or moving a login into another person's bucket —
+> the origins never believe an unmarked chain. Each `location` block needs its own copy:
+> nginx does not merge `proxy_set_header`, so a block that sets any of them drops the rest.
 
 Enable and reload:
 ```bash

@@ -703,6 +703,7 @@ VAR_SPECS=(
   "Contest|[contest]|SECRET_KEY|secret||hex32"
   "Contest|[contest]|COOKIE_DURATION|num||10800"
   "Contest|[contest]|NUM_PROXIES_USED|num||1"
+  "Contest|[contest]|FORWARDED_TRUST_MARKER|secret||random"
   "Contest|[contest]|MAX_SUBMISSION_LENGTH|num||100000"
   "Contest|[contest]|MAX_INPUT_LENGTH|num||5000000"
   "Contest|[contest]|SUBMIT_LOCAL_COPY|bool||true"

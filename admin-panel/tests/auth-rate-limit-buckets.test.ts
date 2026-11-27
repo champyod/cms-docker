@@ -2,6 +2,7 @@ import { afterAll, describe, expect, it, beforeEach, vi } from 'vitest';
 import { buildIpBucketKey, clearBucket, isRateLimited, loginBuckets, pruneExpiredLoginBuckets, recordFailedAttempt } from '@/lib/auth-rate-limit';
 
 const MAX = 5;
+const MARKER = 'auth-rate-limit-suite-marker';
 
 // No shared Redis: pin REDIS_URL off so an ambient value cannot switch the store.
 beforeEach(() => {
@@ -118,8 +119,17 @@ describe('bucket key selection by client address', () => {
       getAdminLoginClient: () => ({ admins: { findUnique: vi.fn(async () => null) } }),
       prisma: { admins: { findUnique: vi.fn(async () => null), update: vi.fn(async () => undefined) } },
     }));
+    // The marker the front proxy stamps: without it the panel reads a request as
+    // unproxied and counts every caller under the local sentinel, which is the point
+    // of the guard and would make every case below assert that one bucket.
+    vi.stubEnv('FORWARDED_TRUST_MARKER', MARKER);
     vi.doMock('next/headers', () => ({
-      headers: async () => new Headers(forwardedFor === undefined ? {} : { 'x-forwarded-for': forwardedFor }),
+      headers: async () =>
+        new Headers(
+          forwardedFor === undefined
+            ? {}
+            : { 'x-forwarded-for': forwardedFor, 'x-cms-trusted-proxy': MARKER },
+        ),
     }));
     const { login } = await import('@/app/actions/auth');
     const formData = new FormData();
