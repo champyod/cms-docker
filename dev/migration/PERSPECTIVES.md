@@ -67,6 +67,25 @@ once it has been seen to fail on a dead input); claim and overlap rules resolve 
 | P-41 | CLI surface: same command names, arguments, exit codes and messages | D12 | command table test |
 | P-42 | queue and cache semantics: Redis keys, TTLs, and what happens when Redis is down | D09 | failure injection |
 
+### S-6d4 — the evaluation daemon (2026-11-27)
+
+| Perspective | Status | Evidence |
+|---|---|---|
+| P-36 cutover | **partly proved** — the compose service now runs `cms-evaluation` on the same port with the same published bind, but no rehearsal on the dev stack has been run, so the zero-downtime claim is not yet earned | `docker-compose.yml` service block; `cms-evaluation --help` path unexercised |
+| P-37 rollback | proved at source level — reverting `8cf56448` restores `cmsEvaluationService` and the Python unit is one commit back (`35083c54`), so the switch is one revert each way; no data shape changed | `git revert` of the two, no migration involved |
+| P-38 observability | partly proved — the daemon logs a named line per failed sweep and per failed operation, and `queue_status` reports depth; no metrics endpoint exists | `cms-evaluation/src/run.rs:66-68`, `service.rs` `queue_status` |
+| P-41 CLI surface | proved — `cms-evaluation` reads the same `EVALUATION_SERVICE_PORT`/`SHARD` names, binds the configured port (`0.0.0.0:25000`), refuses a missing or empty `DATABASE_URL` with a named message and exit 1, and the healthcheck names the binary it starts | `env -u DATABASE_URL` and `DATABASE_URL=""` both → `real_exit=1` plus the refusal line; with a scratch URL it prints `listening on 0.0.0.0:25000`; `docker compose config` parses the block |
+| P-43 no duplicate implementation | proved — `EvaluationService.py` (1,178), `workerpool.py` (497) and the entrypoint (53) are deleted in the same epic, and the retry limits are re-pointed at their existing home rather than copied | `35083c54` |
+| P-44 one concept, one definition | proved — the reply deadline exists once in `cms-svc` `READ_TIMEOUT` and the worker pool's separate supervision was not reproduced beside it | `2d35d56f` |
+| P-45 complexity budget | proved — longest function 38 lines, largest touched file under 250 code lines, four `#[allow(dead_code)]` documented as the shared-fixture case | measured over `git diff --name-only` |
+| P-48 record | proved — this section, `dev/migration/PLAN.md` S-6d4, and the epic T6/T7 rows carry the SHAs and the measured numbers | this file, `PLAN.md`, `epics/017` |
+
+Two behaviours deliberately still owned by Python, and the reason each is not a duplicate: the
+`ServiceCoord` dial from `PrometheusExporter`/`contest`/`admin`/`AddSubmission` is a *client* of the
+service, which the Rust binary now answers on 25000 — not an implementation of it; and
+`src/cms/service/esoperations.py` still owns the planner, which decides what work exists rather than
+performing it. The daemon consumes that contract instead of restating it.
+
 ## D. Quality and process
 
 | ID | Perspective | Domain | Proof |
