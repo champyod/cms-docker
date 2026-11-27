@@ -1380,6 +1380,21 @@ Wrong auto-manager, missing language and wrong input-digest controls each failed
 and were restored byte-identically. New code files stay below 250 code lines and functions at or below
 40 lines. Python stays until the daemon/compose-swap slice.
 
+### S-6d4 (in flight): the EvaluationService daemon
+
+The four capability slices before this one left the service library-complete but not deployable. What
+remains is the daemon: a user-test write path (`cms-db/src/writes/` has no `user_test_results`
+statement; `grep -rn user_test_results cms-db/src/writes/` finds only a doc comment), the
+dispatch/write loop with the reference's end-of-operation effects, the 117-second sweeper
+(`src/cms/service/EvaluationService.py:310`), the `new_evaluation` call toward ScoringService
+(`:805,826,857`), the binary, and the compose entrypoint. `cms-scoring` is the structural template.
+
+Done when the binary serves `new_submission`, `new_user_test`, `queue_status` and `workers_status`
+on the reference port, one submission operation runs from read to committed write against a live
+database with a scripted dispatcher, the four end-of-operation branches are pinned by tests, and
+every guard has a negative control seen red. The compose swap and the deletion of
+`src/cms/service/EvaluationService.py` follow the verified parent gate, in the same epic.
+
 ### S-8a: the write surface Decision A needs
 
 The operator chose A on 2026-11-25: the panel keeps its UI and calls a Rust write
