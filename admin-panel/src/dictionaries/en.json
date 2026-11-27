@@ -131,25 +131,7 @@
     "stats": {
       "totalUsers": "Total Users",
       "totalContests": "Total Contests",
-      "totalSubmissions": "Total Submissions",
-      "enrolled": "{count} enrolled in running contests",
-      "activeNow": "{count} running now",
-      "pending": "{count} waiting for a score"
-    },
-    "serviceState": {
-      "ok": "All services are running",
-      "degraded": "Some services are not running",
-      "down": "Services have stopped"
-    },
-    "checkedAt": "checked {count}",
-    "servicesTitle": "Services",
-    "servicesDetail": "container orchestration",
-    "activity": {
-      "title": "Recent activity",
-      "empty": "No recent activity to display",
-      "user": "User",
-      "task": "Task",
-      "when": "When"
+      "totalSubmissions": "Total Submissions"
     }
   },
   "errors": {

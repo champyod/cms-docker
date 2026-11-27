@@ -1,7 +1,6 @@
 'use client';
 
 import { Badge } from '@/components/core/Badge';
-import { Button } from '@/components/core/Button';
 import { RowActions, rowActionGroupLabel } from '@/components/core/RowActions';
 import type { ResponsiveColumn, ResponsiveRowProps } from '@/components/core/ResponsiveTable';
 import { useAppRouter } from '@/hooks/useAppRouter';
@@ -52,16 +51,14 @@ function renderIdCell(contest: ContestRowData): React.JSX.Element {
 
 function renderNameCell(contest: ContestRowData, onOpenContest: (id: number) => void): React.JSX.Element {
   return (
-    <Button
-      variant="link"
-      size="sm"
-      className="flex max-w-48 items-center gap-2 truncate px-0 font-medium"
-      title={contest.name}
+    <button
       onClick={(event) => { event.stopPropagation(); onOpenContest(contest.id); }}
+      className="flex max-w-48 items-center gap-2 truncate font-medium text-foreground transition-colors hover:text-primary"
+      title={contest.name}
     >
       {contest.name}
-      <ExternalLink className="h-3 w-3 opacity-50" aria-hidden />
-    </Button>
+      <ExternalLink className="h-3 w-3 opacity-50" />
+    </button>
   );
 }
 

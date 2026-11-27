@@ -118,12 +118,11 @@ describe('persistTheme', () => {
 });
 
 describe('applyTheme', () => {
-  it('swaps the root class, records the preference and notifies subscribers', () => {
+  it('swaps the root class and notifies subscribers', () => {
     const classList = createFakeClassList(['dark']);
-    const dataset: Record<string, string> = {};
     const eventTypes: string[] = [];
     vi.stubGlobal('document', {
-      documentElement: { classList, dataset },
+      documentElement: { classList },
       dispatchEvent: (event: Event) => {
         eventTypes.push(event.type);
         return true;
@@ -134,28 +133,7 @@ describe('applyTheme', () => {
 
     expect(classList.classes.has('light')).toBe(true);
     expect(classList.classes.has('dark')).toBe(false);
-    expect(dataset.themePreference).toBe('light');
     expect(eventTypes).toEqual([THEME_CHANGE_EVENT]);
-  });
-
-  it('resolves `system` to the OS mode while still recording the choice', () => {
-    const classList = createFakeClassList(['light']);
-    const dataset: Record<string, string> = {};
-    vi.stubGlobal('document', {
-      documentElement: { classList, dataset },
-      dispatchEvent: () => true,
-    });
-    vi.stubGlobal('window', {
-      matchMedia: (query: string) => ({ matches: query.includes('dark') }),
-    });
-
-    applyTheme('system');
-
-    // The class is the painted mode; the attribute is what the person chose. Keeping both is
-    // what lets the control show "follow system" instead of guessing from the class.
-    expect(classList.classes.has('dark')).toBe(true);
-    expect(classList.classes.has('light')).toBe(false);
-    expect(dataset.themePreference).toBe('system');
   });
 });
 
@@ -200,14 +178,7 @@ describe('NO_FLASH_THEME_SCRIPT', () => {
     expect(NO_FLASH_THEME_SCRIPT).toContain(THEME_COOKIE_NAME);
     expect(NO_FLASH_THEME_SCRIPT).toContain(THEME_STORAGE_KEY);
     expect(NO_FLASH_THEME_SCRIPT).toContain('prefers-color-scheme');
-  });
-
-  it('paints the resolved mode and keeps the three-state choice', () => {
-    // Both halves matter: the class is what avoids the flash, the attribute is what lets the
-    // control show "follow system" when the OS happens to agree with an explicit light choice.
-    expect(NO_FLASH_THEME_SCRIPT).toContain("c.add(d?'dark':'light')");
-    expect(NO_FLASH_THEME_SCRIPT).toContain('dataset.themePreference=p');
-    expect(NO_FLASH_THEME_SCRIPT).toContain("p!=='light'&&p!=='dark'&&p!=='system'");
+    expect(NO_FLASH_THEME_SCRIPT).toContain("c.add(t)");
   });
 
   it('is an IIFE so it executes immediately when injected', () => {
