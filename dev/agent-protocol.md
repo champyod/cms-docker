@@ -12,7 +12,7 @@ disagree.
 |---|---|---|
 | how work is cut, staffed, proved, landed | `dev/agent-protocol.md` §1 + `coordination/PROTOCOL.md` | Tier A/B/C, Selection and Evidence in §1; board claims and chat for overlap in the coordination protocol |
 | which files an agent may edit right now | `coordination/PROTOCOL.md` in the panel checkout | claim on the board before editing; overlaps go to a chat thread |
-| what this migration must achieve and in what order | `dev/migration/PLAN.md` | nine decisions, slices S-0…S-9, seven gates |
+| what this migration must achieve and in what order | `dev/migration/PLAN.md` | slices S-0…S-14 with measured done conditions; `dev/migration/PERSPECTIVES.md` is the append-only coverage registry |
 
 ---
 

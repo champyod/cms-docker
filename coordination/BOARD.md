@@ -61,6 +61,7 @@ Six branches verified fast-forward from `0c2f8f99` — **merge queue, one at a t
 | C2 | the expired-waiver card's meaning | security overview page + dictionary | operator decision (named 2026-10-27, epics 006/007 follow-up) |
 | C3 | `recordAudit`'s error swallow | `admin-panel/src/lib/…` audit path | operator decision (named 2026-10-27, epics 007 follow-up) |
 | C4 | 009.2 CLAUDE.md wiring | `CLAUDE.md` | operator's false-positive ruling on the `AUTH_SECRET=` doc line |
+| C5 | S-6d3p-chain: how the Rust evaluator appends chained audit receipts | `backend/cms-audit/src/lib.rs`, `backend/cms-audit/Cargo.toml`, `backend/cms-evaluation/src/service.rs`, possibly a new panel route | operator choice between a Rust SHA-256 chain (direct `sha2`, audit-store credentials and verified TLS) and a panel HTTP surface (new public route and credentials); insert-only is rejected — see `dev/migration/PLAN.md` § S-6d3p-chain |
 
 ## Notes
 

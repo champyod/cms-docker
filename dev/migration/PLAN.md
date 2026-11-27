@@ -335,7 +335,7 @@ The lane names in the landing log (`feat/rust-S3b-files`, `feat/rust-S3c-users`)
 labels, not live branches; both code sets are ancestors of this trunk's HEAD
 (`git merge-base --is-ancestor` = yes for `9bc48370` and `8123e4aa`).
 
-**S-3 IS NOT COMPLETE — 244 lines of `util.py` were deferred by decision (2026-11-22).** The lane ported the
+**S-3 closure record — the 244-line queue (deferred 2026-11-22, closed by S-3g).** The lane ported the
 binding half (`_read_service_binding`, `service_binding`, `active_contest_id`, `_bootstrap_contest_id`,
 `contest_binding`, `_resolved_contest`) and deliberately left six reads, on the stated ground that they read
 other lanes' tables and would re-create the mixture `util.py` already suffers from. That reasoning was
@@ -364,7 +364,7 @@ interactive prompts (`ask_for_contest:113`, `ask_for_active_contest:296`) belong
 them, not here; and the five-second registry TTL cache was dropped, so every binding read is the database's
 current answer — a behaviour change worth knowing when a caller expected the reference's staleness.
 
-**S-3 IS STILL NOT COMPLETE — the "every function has a counterpart" claim was false (2026-11-22).** The
+**S-3 closure record — the name-level audit (gap found 2026-11-22, closed by S-3h).** The
 S-3g lane reported that every function in `src/cms/db` now has a Rust counterpart, and the merge message
 repeated it. A mechanical check — every module-level `def` in the 21 Python files compared against the
 crate's `fn` names — found 20 without a verbatim counterpart. Most are covered under another name or by the
@@ -1294,36 +1294,75 @@ Likely paths: `backend/cms-db/src/writes/{commit,statements,shapes}.rs`,
 Done when: a live test on the frozen schema recompiles an object with scored rows and asserts the
 evaluation rows and five score columns are cleared while `scored_at` survives; a control omitting
 the invalidation fails that test, then is restored byte-identically.
-Perspectives touched: P-11 (replay idempotency), P-12 (batch equals single-row path), P-32 (audit
-before commit); P-43 `n/a — deletion belongs to the later daemon/compose-swap slice`.
+Perspectives touched: P-11 (replay idempotency), P-12 (batch equals single-row path), P-32 `n/a — no audit
+path changes`; P-43 `n/a — deletion belongs to the later daemon/compose-swap slice`.
 Deletion status: capability slice; `src/cms/db/submission.py` stays. The Python EvaluationService
 file is deleted only by the later daemon/compose-swap slice, not by this one.
 
-### S-6d3p (planned): `WorkerOutput` to `ObjectWrite` plus audit receipt chaining
+### S-6d3p-map (planned, unblocked): pure operation-to-write mapping
 
-Scope: map a parsed `WorkerOutput` into one `ObjectWrite` per operation, then append the audit rows
-the commit hands back through the chained writer rather than writing unchained rows on the CMS
-connection (`backend/cms-db/src/writes/commit.rs:70-71`, `backend/cms-audit/src/lib.rs:34,87`).
+Scope: map a parsed `WorkerOutput`, its `cms_proto::Operation` and the matching `SubmissionInputs`
+into one `ObjectWrite` per operation; no audit writer, no mock and no new dependency
+(`backend/cms-evaluation/src/result.rs:48`, `backend/cms-proto/src/jobs/operation.rs:82-84`,
+`backend/cms-db/src/judging.rs:36`).
 Likely paths: `backend/cms-evaluation/src/{result,runner,service}.rs`,
-`backend/cms-db/src/writes/{batch,commit,shapes}.rs`, `backend/cms-audit/src/lib.rs`,
-`backend/cms-evaluation/tests/`, `backend/cms-db/tests/commit_live.rs`.
-Done when: a returned worker body maps to the exact result, evaluation and executable rows, the
-commit receipt reaches `cms-audit` with a computed `entry_hash` chained to the previous row, and a
-control dropping the chain or a row fails a named test, then is restored byte-identically.
-Perspectives touched: P-06 (RPC reply shape), P-10 (numeric semantics), P-32 (append-only audit
-written before the change commits); P-43 `n/a — deletion belongs to the later daemon/compose-swap
-slice`.
+`backend/cms-db/src/writes/{batch,shapes}.rs`, `backend/cms-evaluation/tests/`,
+`backend/cms-db/tests/writes_statements.rs`.
+Done when: a returned body maps to the exact `ResultRow`, `EvaluationRow` and `ExecutableRow`
+values, translating the operation's testcase codename to its id the way
+`src/cms/grading/Job.py:628,672` does; a compilation carries `score: None`, which skips `upsert_score`
+(`backend/cms-db/src/writes/commit.rs:83-85`) whose SQL overwrites `scored_at` unconditionally
+(`backend/cms-db/src/writes/statements.rs:58-65`); and `group_by_object`'s key gains
+`archive_sandbox` (`backend/cms-db/src/writes/batch.rs:219,228`), matching the reference's four-part
+key at `src/cms/service/EvaluationService.py:605-611`. A control dropping the codename mapping, the
+`None` score or the fourth key fails a named test, then is restored byte-identically.
+Perspectives touched: P-06 (RPC reply shape), P-10 (numeric semantics), P-12 (batch equals
+single-row path); P-43 `n/a — deletion belongs to the later daemon/compose-swap slice`.
 Deletion status: capability slice; `src/cms/service/EvaluationService.py` stays and is deleted only
 by the later daemon/compose-swap slice.
+
+### S-6d3p-chain (decision-gated; not an autonomous next slice): audit receipt chaining
+
+Scope: append the `AuditRow`s the commit hands back (`backend/cms-db/src/writes/commit.rs:70-71`) to
+the audit store with a computed hash chained to the previous row. No chained Rust writer exists:
+`backend/cms-audit/src/lib.rs:87-110` inserts caller-supplied `entry_hash`/`prev_hash` only, and
+`grep -rn 'sha2::' backend --include='*.rs'` finds no hashing call; the reference chain is
+`admin-panel/src/lib/audit.ts:186-222`.
+
+Three candidates, from the code at this SHA:
+- A Rust SHA-256 chain in `cms-audit`: direct `sha2` dependency plus audit-store credentials and
+  verified TLS (`backend/cms-audit/src/lib.rs:39-72`) — Tier C for the dependency and credentials.
+- A panel HTTP surface that appends through the existing TypeScript chain: a new public route and
+  credentials — Tier C for the new surface.
+- Keep the insert-only writer and accept caller-supplied hashes: rejected, because the S-6d3j review
+  already found unchained rows indistinguishable from tampered ones.
+
+A and B both satisfy tamper-evidence and differ on which process owns the chain and its secret; the
+operator's ruling is required under §1 Tier C and Selection, so no lane opens on this slice alone.
+Tracked as **C5** in `coordination/BOARD.md` § Decision-gated candidates.
+Likely paths: `backend/cms-audit/src/lib.rs`, `backend/cms-audit/Cargo.toml`,
+`backend/cms-evaluation/src/service.rs`, `backend/cms-audit/tests/store.rs`, and a panel route if B
+is chosen.
+Done when: the chosen writer appends each receipt with a recomputable `entry_hash` chained to the
+previous row, an unchained or dropped row fails a named test, and a live store test confirms the
+writer role can insert but not rewrite; the exact gate follows the operator's choice.
+Perspectives touched: P-32 (append-only audit written before the change commits), P-48 (the choice
+and its rejected alternative recorded); P-43 `n/a — deletion belongs to the later daemon/compose-swap
+slice`.
+Deletion status: capability slice, decision-gated; `src/cms/service/EvaluationService.py` stays and
+is deleted only by the later daemon/compose-swap slice.
 
 ### S-6d3q (planned): user-test inputs and builders
 
 Scope: read one user test's records, files, managers, executables and languages, then build the same
-compilation and evaluation bodies the reference sends for a user test.
-Likely paths: `backend/cms-db/src/usertest/{files,results,result,model}.rs`,
-`backend/cms-evaluation/src/{job,service}.rs`, and a new
-`backend/cms-evaluation/src/user_test_job.rs` if the submission builder's shape cannot be reused;
-tests under `backend/cms-evaluation/tests/`.
+compilation and evaluation bodies the reference sends for a user test, reusing the existing
+`CompilationJob::from_user_test` and `EvaluationJob::from_user_test` constructors rather than
+duplicating them (`backend/cms-grading/src/job/user_test.rs:40,118`).
+Likely paths: the measured seam `backend/cms-db/src/{lib.rs,judging.rs,usertest/**}`, exposing the
+private `contest_languages` read (`backend/cms-db/src/judging.rs:153-154`) and adding `UserTestInputs`
+beside `SubmissionInputs` (`backend/cms-db/src/judging.rs:36,233`);
+`backend/cms-evaluation/src/{lib.rs,support.rs,user_test_job.rs}`; tests under
+`backend/cms-evaluation/tests/` and `backend/cms-db/tests/`.
 Done when: one read plus one builder produce the pinned user-test bodies, a missing file or dataset
 is refused by name rather than defaulted, and a control swapping a user-test kind for a submission
 kind fails a named test, then is restored byte-identically.
