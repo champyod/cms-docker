@@ -1318,7 +1318,8 @@ reason convention at `backend/cms-db/tests/writes_batch.rs:97-107`. **D-017-6:**
 `plus.tombstone`; a failed evaluation with that flag and an existing `Digest::TOMBSTONE` executable
 maps to a compilation-invalidation `ObjectWrite`, matching
 `src/cms/service/EvaluationService.py:746-762`. Requeueing stays in the later service slice, so the
-mapper remains pure.
+mapper remains pure; a tombstone flag without an existing tombstone executable is a named no-write
+result rather than a retry.
 
 Likely paths: `backend/cms-evaluation/src/{result,runner,service}.rs`,
 `backend/cms-db/src/writes/{batch,shapes}.rs`, `backend/cms-evaluation/tests/`,
