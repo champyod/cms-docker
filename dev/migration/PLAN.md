@@ -1380,35 +1380,51 @@ Wrong auto-manager, missing language and wrong input-digest controls each failed
 and were restored byte-identically. New code files stay below 250 code lines and functions at or below
 40 lines. Python stays until the daemon/compose-swap slice.
 
-### S-6d4 (in flight): the EvaluationService daemon
+### S-6d4 (landed 2026-11-27)
 
-The four capability slices before this one left the service library-complete but not deployable. What
-remains is the daemon: a user-test write path (`cms-db/src/writes/` has no `user_test_results`
-statement; `grep -rn user_test_results cms-db/src/writes/` finds only a doc comment), the
-dispatch/write loop with the reference's end-of-operation effects, the 117-second sweeper
-(`src/cms/service/EvaluationService.py:310`), the `new_evaluation` call toward ScoringService
-(`:805,826,857`), the binary, and the compose entrypoint. `cms-scoring` is the structural template.
+The four capability slices before this one left the service library-complete but not deployable. The
+daemon closed that: a user-test write path in `cms-db/src/writes/`, the dispatch/write loop with the
+reference's end-of-operation effects, the 117-second sweeper (`EvaluationService.py:310`), the
+`new_evaluation` call toward ScoringService (`:805,826,857`), the `invalidate_submission` RPC the panel
+already sends, and the binary.
 
-Done when the binary serves `new_submission`, `new_user_test`, `queue_status` and `workers_status`
-on the reference port, one submission operation runs from read to committed write against a live
-database with a scripted dispatcher, the four end-of-operation branches are pinned by tests, and
-every guard has a negative control seen red. The compose swap and the deletion of
-`src/cms/service/EvaluationService.py` follow the verified parent gate, in the same epic.
+Landed as, in order: `02720964` the daemon (lane `feat/rust-S6d4-daemon`, library half), `6b113afa` the
+superseded-result guard (B1), `8cf56448` the Dockerfile build + compose entrypoint swap, `35083c54` the
+Python deletion, `2d35d56f` the worker reply deadline the deletion made necessary.
 
-### S-6d4 deletion inventory (measured 2026-11-27)
+Done conditions met, each with evidence: the binary serves `new_submission`, `new_user_test`,
+`queue_status`, `workers_status` and `invalidate_submission` (`tests/binary/serving.rs`); one submission
+operation runs from read to committed write against live PostgreSQL with a scripted dispatcher
+(`tests/operation_live`); the four end-of-operation branches are pinned and each negative control was
+seen red then restored byte-identically; workspace gate 208 targets / 1,301 passed; seven repo gates
+green.
 
-What must change before `src/cms/service/EvaluationService.py` can be removed, read off the tree:
+### S-6d4 deletion inventory — all blockers closed
 
-| Blocker | Evidence |
+| Blocker | Resolution |
 |---|---|
-| `invalidate_submission` is a live panel call and has no Rust method | `admin-panel/src/lib/evaluation-rpc.ts:31-55` sends `__method: 'invalidate_submission'`; authorised at `src/cms/server/admin/rpc_authorization.py:45`; `cms_evaluation::service::Evaluation::methods()` lists only four methods |
-| `enable_worker` / `disable_worker` are authorised but have no caller | `src/cms/server/admin/rpc_authorization.py:43-44`; no call site in the Python admin handlers or the panel, so they are dead authorisation rows rather than a missing feature |
-| `MAX_COMPILATION_TRIES` / `MAX_EVALUATION_TRIES` are imported by the Python admin | `src/cms/server/admin/server.py:164-175` reads them off `EvaluationService.EvaluationService`; the Rust constants live in `cms_evaluation::operation` |
-| The compose entrypoint and healthcheck name the Python binary | `docker-compose.yml:355-361` runs `cmsEvaluationService` and healthchecks `pgrep -f cmsEvaluationService && python3 -c …` |
-| Two Python services dial it by `ServiceCoord` | `src/cmscontrib/PrometheusExporter.py:84`, `src/cms/server/contest/server.py:135`, `src/cms/server/admin/server.py:82`, `src/cmscontrib/AddSubmission.py:43` |
+| `invalidate_submission` had no Rust method | `cms-evaluation/src/service/invalidate.rs`, wired into `Evaluation::methods()`; the panel's `evaluation-rpc.ts:31-55` call now reaches it |
+| `enable_worker` / `disable_worker` authorised, no caller | dead rows; removed from `rpc_authorization.py` rather than ported |
+| `MAX_COMPILATION_TRIES` / `MAX_EVALUATION_TRIES` imported by the admin | repointed at `cms.service.esoperations`, which already owns them as module constants — the value is not copied a third time |
+| Compose entrypoint and healthcheck named the Python binary | `docker-compose.yml` runs `cms-evaluation` and healthchecks `pgrep -f cms-evaluation`; `scripts/__config_sync.sh:1189` emits the same name |
+| Two Python services dial it by `ServiceCoord` | unchanged and correct: they dial the service on port 25000, which the Rust binary now answers |
 
-The audit-store credentials from S-6d3p-chain belong to this slice's swap: once `cms-evaluation` is
-a binary that consumes `cms-audit`, `CMS_AUDIT_*` keys stop being dead configuration.
+`src/cms/service/EvaluationService.py` (1,178 lines), `src/cms/service/workerpool.py` (497) and
+`src/scripts/cmsEvaluationService` (53) are deleted; `src/setup.py` no longer installs the entrypoint.
+
+One gap the deletion exposed and the swap would have shipped: `workerpool.check_timeouts` disabled a
+worker silent for 600 s, and the Rust client had no reply deadline, so a hung worker would have blocked
+`call()` for ever. `cms-svc` now sets `READ_TIMEOUT` (600 s, the reference value) as a socket read
+deadline, with a test that waits 200 ms with it and 3.0 s without it (`2d35d56f`).
+
+A second defect the parent gate found and the lane never ran into: the live suites only passed under
+`--test-threads=1`. At cargo's default every test in a target runs concurrently, and each did
+`DROP`/`CREATE` on one fixed database or schema name, so the second died on the catalogue's unique
+index — 10 failures out of 208 targets. Each fixture now takes a name built from the process id and a
+counter, returned with its connections so cleanup drops its own; restoring a fixed name reproduces the
+duplicate-key failure (`79ef5753`). The honest gate is the parallel one: 208 targets / 1,301 passed.
+
+The audit-store credentials note stands: `CMS_AUDIT_*` become live once `cms-audit` gains a consumer.
 
 ### S-6d4 review findings (2026-11-27)
 
