@@ -80,17 +80,11 @@ pub async fn stored_compilation(connection: &mut PgConnection) -> StoredCompilat
 }
 
 pub async fn connection(fixture: &Fixture) -> PgConnection {
-    let mut connection = PgConnection::connect(fixture.url())
+    // The fixture's URL already selects its search path, so a plain connection
+    // is on the right schema; no second statement can drift from it.
+    PgConnection::connect(fixture.url())
         .await
-        .expect("connecting with the test search path");
-    sqlx::raw_sql(AssertSqlSafe(format!(
-        "SET search_path TO {}",
-        fixture.schema()
-    )))
-    .execute(&mut connection)
-    .await
-    .expect("selecting the test schema");
-    connection
+        .expect("connecting with the test search path")
 }
 
 /// The daemon context over the test's pooled session.

@@ -22,8 +22,6 @@ pub struct Fixture {
     session: Arc<Session>,
     #[allow(dead_code)]
     url: String,
-    /// This fixture's private schema; a sibling test has its own.
-    schema: String,
 }
 
 impl Fixture {
@@ -45,21 +43,12 @@ impl Fixture {
                 .await
                 .expect("opening the pooled session"),
         );
-        Self {
-            session,
-            url,
-            schema,
-        }
+        Self { session, url }
     }
 
     /// The session the RPC context and the worker share.
     pub fn session(&self) -> Arc<Session> {
         Arc::clone(&self.session)
-    }
-
-    /// This fixture's schema, so a test's own connection selects it.
-    pub fn schema(&self) -> &str {
-        &self.schema
     }
 
     /// The URL with the test schema selected, for a daemon under test.
