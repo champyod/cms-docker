@@ -9,9 +9,11 @@ rest of the system having moved. `OPT-4` (single cutover) is rejected because a 
 be attributed to one component; `OPT-5` (shadow run) stays available per slice as the verification
 method — it is a way to check a step, not a different way to move.
 
-Status of this document: the slice order and sizes below are **measured**, on
+Status of this document: the slice order and sizes below were **measured** on
 `feat/rust-trunk-reconcile` at `937c06e3`. The deliverable of each slice is a done-condition, not a
-prose goal; a slice that cannot state its check is not in the list.
+prose goal; a slice that cannot state its check is not in the list. Reconciled 2026-11-27 against
+`feat/rust-trunk-reconcile` @ `b0845140` (this lane's base): every status and blocker row the trunk
+contradicts is corrected below with its command; the historic measurements stay as measured.
 
 ---
 
@@ -171,6 +173,21 @@ Read:       dev/agent-protocol.md §1 (binding), dev/migration/INVENTORY.md §<n
             (the behaviour to reproduce), THREAT-MODEL.md §<n> (what must not weaken)
 ```
 
+### 4.1 Workflow references and the unimplemented route contract
+
+The brief's workflow pointer resolves inside this checkout to `dev/agent-protocol.md` §1 (binding
+decision and evidence rules) plus `coordination/PROTOCOL.md` (board claim before edit, chat for
+overlaps). `TEAM-WORKFLOW.md` does not exist on this trunk; the hub-root file outside the checkout
+is not copied here. The coverage registry is `dev/migration/PERSPECTIVES.md` — append-only, restored
+from the read-only `rust-migration-plan/docs/backend-migration/PERSPECTIVES.md`; a slice's coverage
+table lists `proved — …` or `n/a — …` for every row it touches, and an unowned row blocks the merge
+(§1 Evidence).
+
+`FEATURES.tsv` also does not exist here. It stays an **unimplemented S-1 follow-up contract**:
+the route-table identity perspective (P-01) will diff a generated route list against it when a
+slice implements that contract. Until then no gate claims it; do not fabricate the file or turn the
+pointer into a current gate.
+
 ---
 
 ## 5. Open, and blocking
@@ -190,7 +207,7 @@ It is recorded here rather than assumed.
 
 | # | What | State |
 |---|---|---|
-| B1 | **Two crates for S-2a**: `aes` 0.8 and `bcrypt` 0.17 (verified: 0 occurrences in `Cargo.lock` at `e418a316`; `base64`/`sha1`/`rand` already transitive). Proposed in `0b76f9f2` on `feat/rust-S2a-crypto-core`, one revert. Asked twice 2026-11-22, both forms timed out unanswered. | **OPEN — operator.** No crate that depends on `cms-db` can be called green on the trunk until it is answered. |
+| B1 | **Two crates for S-2a**: `aes` 0.8 and `bcrypt` 0.17. First proposed in `0b76f9f2` on `feat/rust-S2a-crypto-core` with 0 occurrences in `Cargo.lock` at `e418a316`; asked twice 2026-11-22, both forms timed out unanswered. | **RESOLVED — operator approved 2026-11-22** (landing log row for `2f1337db`): `backend/Cargo.lock:12-13` pins `aes` 0.8.4 and `:68-69` pins `bcrypt` 0.17.1; `backend/cms-db/Cargo.toml:7,9` uses both. The earlier "OPEN — operator" row was stale. |
 | F1 | **`src/cmscommon/eventsource.py` (400 lines) does not need porting.** Its only Python consumer is `src/cmsranking/RankingWebServer.py:47` — the module S-4 deletes — and the Rust equivalent already exists: `ranking-web/src/events.rs` (accepts `text/event-stream`, the ten-minute close, the media-range matching). It leaves S-2 along with S-4, so S-2 drops 5,950 → 5,550 and S-2b is 739 lines, not 1,139. | Recorded; S-4's deletion is the trigger, so no extra step. |
 | F2 | **A pre-existing auth gap the port must carry.** `cms-db/src/auth.rs`'s `PlaintextPassword::matches` authenticates a `plaintext:` row, while `src/cmscommon/crypto.py:213` deliberately refuses one — its own comment: a `plaintext:` row *is* the password, so honouring it hands the account to anyone who can read the database. Nothing calls `matches` on a login path yet, so it is not exploitable today. | **Must land before S-8** (the admin web server). Not S-2a's, which ported the functions faithfully. |
 | F3 | **The `cmscommon` cipher is AES-128-CBC with no MAC and an unvalidated padding**, and existing ciphertext lives in the database and `config.toml`. Replacing it is a migration with a dual-read re-encryption path, not a refactor. | **Operator's call, not taken.** Reported by S-2a; the port is byte-compatible instead. |
@@ -304,17 +321,21 @@ in the database; the missing MAC remains a named finding (F3), not something the
 | epic | files | lines | state |
 |---|---|---|---|
 | S-3a | `actor` 183, `session` 154, `base` 330, `drop` 84 | **751** | **merged** (`c07e695a`) |
-| S-3b | `fsobject` 437 → `filecacher` 954 (filecacher imports `FSObject`, `LargeObject`) | **1,391** | in a lane |
-| S-3c | `user` 439, `username/models` 175, `username/resolution` 211, `permissions` 145, `admin` 70, `security_block` 56 | **1,096** | in a lane, independent of S-3b |
+| S-3b | `fsobject` 437 → `filecacher` 954 (filecacher imports `FSObject`, `LargeObject`) | **1,391** | **merged on trunk** — `backend/cms-db/src/filecache/mod.rs` introduced by `9bc48370`; branch `feat/rust-S3b-filecacher` does not exist (`git rev-parse --verify` fails) |
+| S-3c | `user` 439, `username/models` 175, `username/resolution` 211, `permissions` 145, `admin` 70, `security_block` 56 | **1,096** | **merged on trunk** — `backend/cms-db/src/user.rs` introduced by `8123e4aa`; branch `feat/rust-S3c-user` does not exist (`git rev-parse --verify` fails) |
 | S-3d | `submission` 799, `task` 646 | **1,445** | **merged** (`d8e75868`) |
 | S-3e | `contest` 499, `usertest` 550 | **1,049** | **merged** (`5432c958`) |
-| S-3f | `util` 568, `__init__` 175 | **743** | **partial** — 244 lines deferred, see S-3g |
+| S-3f | `util` 568, `__init__` 175 | **743** | **complete** — the 244 deferred reads are closed by S-3g (`4df2295e`) |
 
 The arithmetic, computed rather than asserted: 751 + 1,391 + 1,096 + 1,445 + 1,049 + 743 = **6,475**, plus
 `types.py` **248** (already ported into `cms-db`'s `types.rs` long before S-3), `init.py` **52** and
 `username/__init__.py` **41** = **6,816**, which is the `wc -l` total. Nothing in the slice is unassigned.
 
-**S-3 IS NOT COMPLETE — 244 lines of `util.py` were deferred by decision (2026-11-22).** The lane ported the
+The lane names in the landing log (`feat/rust-S3b-files`, `feat/rust-S3c-users`) are historical
+labels, not live branches; both code sets are ancestors of this trunk's HEAD
+(`git merge-base --is-ancestor` = yes for `9bc48370` and `8123e4aa`).
+
+**S-3 closure record — the 244-line queue (deferred 2026-11-22, closed by S-3g).** The lane ported the
 binding half (`_read_service_binding`, `service_binding`, `active_contest_id`, `_bootstrap_contest_id`,
 `contest_binding`, `_resolved_contest`) and deliberately left six reads, on the stated ground that they read
 other lanes' tables and would re-create the mixture `util.py` already suffers from. That reasoning was
@@ -331,12 +352,19 @@ sound when it was written and is now obsolete: every one of those tables has sin
 | `enumerate_files` | 63 | 506-568 |
 | **total** | **244** | |
 
-So S-3's queue is S-3g for these six, and only then is the slice done. Also deferred and stated: the two
+That queue is closed by S-3g (`4df2295e`): all six have Rust counterparts on this trunk, checked at
+`b0845140` — `get_contest_list` `backend/cms-db/src/contest/reads.rs:36`, `is_contest_id`
+`backend/cms-db/src/contest/reads.rs:48`, `get_submissions`
+`backend/cms-db/src/submission/search.rs:43`, `get_submission_results`
+`backend/cms-db/src/submission/result.rs:107`, `get_datasets_to_judge`
+`backend/cms-db/src/reads/dataset.rs:175`, `enumerate_files`
+`backend/cms-db/src/reads/files.rs:25`. The heading above records why the queue existed, not its
+present state. Also deferred and stated: the two
 interactive prompts (`ask_for_contest:113`, `ask_for_active_contest:296`) belong to the CLI crate that asks
 them, not here; and the five-second registry TTL cache was dropped, so every binding read is the database's
 current answer — a behaviour change worth knowing when a caller expected the reference's staleness.
 
-**S-3 IS STILL NOT COMPLETE — the "every function has a counterpart" claim was false (2026-11-22).** The
+**S-3 closure record — the name-level audit (gap found 2026-11-22, closed by S-3h).** The
 S-3g lane reported that every function in `src/cms/db` now has a Rust counterpart, and the merge message
 repeated it. A mechanical check — every module-level `def` in the 21 Python files compared against the
 crate's `fn` names — found 20 without a verbatim counterpart. Most are covered under another name or by the
@@ -350,8 +378,13 @@ type system, and four were deliberately left out (the two interactive prompts, `
 | **`registerable_teams_query`** — a contest decides, else the team's own flag | `user.py:165-178` | 14 lines |
 
 Confirmed *not* a gap: `resolve_username_config` is ported as `resolve_config` (`username/policy.rs:68`).
-The schema gap is the serious one: a fresh deployment cannot initialise a database from Rust, so the Python
-tree cannot be deleted while it stands. Queued as **S-3h**.
+The schema gap was the serious one, and it is closed by S-3h (`be01014e`):
+`backend/cms-db/src/schema/mod.rs:37` `init_db`, introduced by `3ede338d`, executes the frozen
+pg_dump SQL under `backend/cms-db/sql/*.sql`, so a fresh deployment initialises the database from
+Rust. The Python `compile_codename`/`compile_filename`/`compile_digest` generators have **no direct
+Rust functions by design**: with the DDL dumped from the reference there is nothing left for a DDL
+compiler to emit. Recorded as the frozen-DDL choice, not as an unported gap; the heading above
+records the state when the gap was found.
 
 ### Crate layout: `cms-worker` is three crates, and the split is measured (2026-11-23)
 
@@ -378,8 +411,8 @@ them at once. The split is now evidence-driven, not scheduled by taste:
 | S-6c5 scoring daemon | `cms-scoring` RPC, sweeper/worker, binary and compose entrypoint | **merged** `b5216bf4` (see note) |
 | S-6d1 ES planner | predicates, retry bounds and per-dataset submission/user-test operations | **merged** `2b328100` (see note) |
 | S-6d2 ES sweep | four contest-scoped candidate reads and the planned operations built from them | **merged** `a5920ce6` (see note) |
-| S-6d3a ES queue | priority-then-timestamp queue, duplicate refusal, cumulative status | **committed** `b5bb73a7` (see note) |
-| S-6d3b ES RPC context | named-object reads, `new_submission`/`new_user_test`, `queue_status` | **committed** `67569040` (see note) |
+| S-6d3a ES queue | priority-then-timestamp queue, duplicate refusal, cumulative status | **merged** `b5bb73a7` (see note; ancestor of HEAD, gate in §7) |
+| S-6d3b ES RPC context | named-object reads, `new_submission`/`new_user_test`, `queue_status` | **merged** `67569040` (see note; ancestor of HEAD, gate in §7) |
 | S-6d3c auto managers | task-type manager list, reusing Communication's existing `manager` name | **merged** `39490ba3` (see note) |
 | S-6d3d dataset parameters | `task_type_parameters` raw JSON text on both dataset read paths | **merged** `226e6e23` (see note) |
 | S-6d3e submission inputs | one read for a submission job's records, files, managers, executables and languages | **merged** `d4bf98eb` (see note) |
@@ -1250,6 +1283,94 @@ The unrelated `commit_live` fixed-database-name race under default-parallel
 runs remains untouched; the accepted gate is serial. The daemon still needs the
 `WorkerOutput`-to-`ObjectWrite` mapping, audit receipt handling, service loop,
 user-test inputs/builders, binary and compose entrypoint.
+
+### S-6d3o (planned): invalidate evaluations and score on compilation commit
+
+Scope: a compilation commit clears the old evaluations and score together with the executable set,
+as `src/cms/db/submission.py:587-615` does, leaving `scored_at` unchanged. The board's `done` row was
+false — the only branch commit is a claim, not code.
+Likely paths: `backend/cms-db/src/writes/{commit,statements,shapes}.rs`,
+`backend/cms-db/tests/commit_live.rs`, `backend/cms-evaluation/src/service.rs`.
+Done when: a live test on the frozen schema recompiles an object with scored rows and asserts the
+evaluation rows and five score columns are cleared while `scored_at` survives; a control omitting
+the invalidation fails that test, then is restored byte-identically.
+Perspectives touched: P-11 (replay idempotency), P-12 (batch equals single-row path), P-32 `n/a — no audit
+path changes`; P-43 `n/a — deletion belongs to the later daemon/compose-swap slice`.
+Deletion status: capability slice; `src/cms/db/submission.py` stays. The Python EvaluationService
+file is deleted only by the later daemon/compose-swap slice, not by this one.
+
+### S-6d3p-map (planned, unblocked): pure operation-to-write mapping
+
+Scope: map a parsed `WorkerOutput`, its `cms_proto::Operation` and the matching `SubmissionInputs`
+into one `ObjectWrite` per operation; no audit writer, no mock and no new dependency
+(`backend/cms-evaluation/src/result.rs:48`, `backend/cms-proto/src/jobs/operation.rs:82-84`,
+`backend/cms-db/src/judging.rs:36`).
+Likely paths: `backend/cms-evaluation/src/{result,runner,service}.rs`,
+`backend/cms-db/src/writes/{batch,shapes}.rs`, `backend/cms-evaluation/tests/`,
+`backend/cms-db/tests/writes_statements.rs`.
+Done when: a returned body maps to the exact `ResultRow`, `EvaluationRow` and `ExecutableRow`
+values, translating the operation's testcase codename to its id the way
+`src/cms/grading/Job.py:628,672` does; a compilation carries `score: None`, which skips `upsert_score`
+(`backend/cms-db/src/writes/commit.rs:83-85`) whose SQL overwrites `scored_at` unconditionally
+(`backend/cms-db/src/writes/statements.rs:58-65`); and `group_by_object`'s key gains
+`archive_sandbox` (`backend/cms-db/src/writes/batch.rs:219,228`), matching the reference's four-part
+key at `src/cms/service/EvaluationService.py:605-611`. A control dropping the codename mapping, the
+`None` score or the fourth key fails a named test, then is restored byte-identically.
+Perspectives touched: P-06 (RPC reply shape), P-10 (numeric semantics), P-12 (batch equals
+single-row path); P-43 `n/a — deletion belongs to the later daemon/compose-swap slice`.
+Deletion status: capability slice; `src/cms/service/EvaluationService.py` stays and is deleted only
+by the later daemon/compose-swap slice.
+
+### S-6d3p-chain (decision-gated; not an autonomous next slice): audit receipt chaining
+
+Scope: append the `AuditRow`s the commit hands back (`backend/cms-db/src/writes/commit.rs:70-71`) to
+the audit store with a computed hash chained to the previous row. No chained Rust writer exists:
+`backend/cms-audit/src/lib.rs:87-110` inserts caller-supplied `entry_hash`/`prev_hash` only, and
+`grep -rn 'sha2::' backend --include='*.rs'` finds no hashing call; the reference chain is
+`admin-panel/src/lib/audit.ts:186-222`.
+
+Three candidates, from the code at this SHA:
+- A Rust SHA-256 chain in `cms-audit`: direct `sha2` dependency plus audit-store credentials and
+  verified TLS (`backend/cms-audit/src/lib.rs:39-72`) — Tier C for the dependency and credentials.
+- A panel HTTP surface that appends through the existing TypeScript chain: a new public route and
+  credentials — Tier C for the new surface.
+- Keep the insert-only writer and accept caller-supplied hashes: rejected, because the S-6d3j review
+  already found unchained rows indistinguishable from tampered ones.
+
+A and B both satisfy tamper-evidence and differ on which process owns the chain and its secret; the
+operator's ruling is required under §1 Tier C and Selection, so no lane opens on this slice alone.
+Tracked as **C5** in `coordination/BOARD.md` § Decision-gated candidates.
+Likely paths: `backend/cms-audit/src/lib.rs`, `backend/cms-audit/Cargo.toml`,
+`backend/cms-evaluation/src/service.rs`, `backend/cms-audit/tests/store.rs`, and a panel route if B
+is chosen.
+Done when: the chosen writer appends each receipt with a recomputable `entry_hash` chained to the
+previous row, an unchained or dropped row fails a named test, and a live store test confirms the
+writer role can insert but not rewrite; the exact gate follows the operator's choice.
+Perspectives touched: P-32 (append-only audit written before the change commits), P-48 (the choice
+and its rejected alternative recorded); P-43 `n/a — deletion belongs to the later daemon/compose-swap
+slice`.
+Deletion status: capability slice, decision-gated; `src/cms/service/EvaluationService.py` stays and
+is deleted only by the later daemon/compose-swap slice.
+
+### S-6d3q (planned): user-test inputs and builders
+
+Scope: read one user test's records, files, managers, executables and languages, then build the same
+compilation and evaluation bodies the reference sends for a user test, reusing the existing
+`CompilationJob::from_user_test` and `EvaluationJob::from_user_test` constructors rather than
+duplicating them (`backend/cms-grading/src/job/user_test.rs:40,118`).
+Likely paths: the measured seam `backend/cms-db/src/{lib.rs,judging.rs,usertest/**}`, exposing the
+private `contest_languages` read (`backend/cms-db/src/judging.rs:153-154`) and adding `UserTestInputs`
+beside `SubmissionInputs` (`backend/cms-db/src/judging.rs:36,233`);
+`backend/cms-evaluation/src/{lib.rs,support.rs,user_test_job.rs}`; tests under
+`backend/cms-evaluation/tests/` and `backend/cms-db/tests/`.
+Done when: one read plus one builder produce the pinned user-test bodies, a missing file or dataset
+is refused by name rather than defaulted, and a control swapping a user-test kind for a submission
+kind fails a named test, then is restored byte-identically.
+Perspectives touched: P-06 (RPC method identity), P-12 (batch equals single-row path), P-13 (empty
+inputs), P-44 (one concept, one definition); P-43 `n/a — deletion belongs to the later
+daemon/compose-swap slice`.
+Deletion status: capability slice; `src/cms/service/EvaluationService.py` stays and is deleted only
+by the later daemon/compose-swap slice.
 
 ### S-8a: the write surface Decision A needs
 
