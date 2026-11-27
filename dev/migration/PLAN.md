@@ -1306,6 +1306,20 @@ Scope: map a parsed `WorkerOutput`, its `cms_proto::Operation` and the matching 
 into one `ObjectWrite` per operation; no audit writer, no mock and no new dependency
 (`backend/cms-evaluation/src/result.rs:48`, `backend/cms-proto/src/jobs/operation.rs:82-84`,
 `backend/cms-db/src/judging.rs:36`).
+
+Measurement on 2026-11-27 found two missing policies before any code was written. **D-017-5:** the
+mapper creates audit-row data, not a writer: `actor_id=None`; the result uses
+`submissionresult:create` when no prior result exists and `submissionresult:update` otherwise; each
+new evaluation and executable uses `evaluation:create` and `executable:create`; entities are the
+table names, ids are slash-separated composite keys, only the result carries a `before` state, and
+the reason is `judging commit`. These verbs come from the worker-reserved permissions at
+`admin-panel/src/lib/permission-registry.ts:182-189`; the existing batch fixture supplies the id and
+reason convention at `backend/cms-db/tests/writes_batch.rs:97-107`. **D-017-6:** `WorkerOutput` gains
+`plus.tombstone`; a failed evaluation with that flag and an existing `Digest::TOMBSTONE` executable
+maps to a compilation-invalidation `ObjectWrite`, matching
+`src/cms/service/EvaluationService.py:746-762`. Requeueing stays in the later service slice, so the
+mapper remains pure.
+
 Likely paths: `backend/cms-evaluation/src/{result,runner,service}.rs`,
 `backend/cms-db/src/writes/{batch,shapes}.rs`, `backend/cms-evaluation/tests/`,
 `backend/cms-db/tests/writes_statements.rs`.
@@ -1315,8 +1329,9 @@ values, translating the operation's testcase codename to its id the way
 (`backend/cms-db/src/writes/commit.rs:83-85`) whose SQL overwrites `scored_at` unconditionally
 (`backend/cms-db/src/writes/statements.rs:58-65`); and `group_by_object`'s key gains
 `archive_sandbox` (`backend/cms-db/src/writes/batch.rs:219,228`), matching the reference's four-part
-key at `src/cms/service/EvaluationService.py:605-611`. A control dropping the codename mapping, the
-`None` score or the fourth key fails a named test, then is restored byte-identically.
+key at `src/cms/service/EvaluationService.py:605-611`. Tests also pin the audit-row recipe and the
+tombstone invalidation mapping. Controls dropping the codename mapping, the `None` score, the fourth
+key, an audit row or the tombstone branch each fail a named test, then are restored byte-identically.
 Perspectives touched: P-06 (RPC reply shape), P-10 (numeric semantics), P-12 (batch equals
 single-row path); P-43 `n/a — deletion belongs to the later daemon/compose-swap slice`.
 Deletion status: capability slice; `src/cms/service/EvaluationService.py` stays and is deleted only
