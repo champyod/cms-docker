@@ -222,6 +222,7 @@ commit names the lane tip and the gate result it was accepted on.
 
 | When | Lane | Tip | Gate re-run by the parent | Merge commit |
 |---|---|---|---|---|
+| 2026-11-27 | `feat/rust-S6d3p-chain` | `93882d08` | workspace fmt/clippy 0; full serial workspace 203 targets / 1,272 passed / 0 failed; seven repo gates 0; panel tsc 0 and vitest 5,141 passed; seven controls red then byte-restored; live PostgreSQL 18.6 chain verified by the panel's own TypeScript verifier | `31cac4a6` |
 | 2026-11-27 | `feat/rust-S6d3p-map` | `dcf2441a` | fmt/clippy 0; `cms-db` 71 targets / 415 passed, `cms-evaluation` 9 targets / 107 passed; shard control seen red then restored | `e824fbb1` |
 | 2026-11-27 | `feat/rust-panel-refresh` | `88760c81` | all seven repo gates 0; panel tsc 0 and vitest 390 files / 5,141 tests 0; full serial Rust workspace 0; `admin-panel/**` equals `b9599929` | `a3a06808` |
 | 2026-11-27 | `feat/rust-S6d3o-invalidate-v2` | `cdbed520` | fmt/clippy 0; invalidation 2/2; commit 7/7; full serial `cms-db` 0; four controls seen red then restored | `0a08040c` |
