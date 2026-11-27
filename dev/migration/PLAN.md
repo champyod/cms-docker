@@ -222,6 +222,9 @@ commit names the lane tip and the gate result it was accepted on.
 
 | When | Lane | Tip | Gate re-run by the parent | Merge commit |
 |---|---|---|---|---|
+| 2026-11-27 | `feat/rust-panel-refresh` | `88760c81` | all seven repo gates 0; panel tsc 0 and vitest 390 files / 5,141 tests 0; full serial Rust workspace 0; `admin-panel/**` equals `b9599929` | `a3a06808` |
+| 2026-11-27 | `feat/rust-S6d3o-invalidate-v2` | `cdbed520` | fmt/clippy 0; invalidation 2/2; commit 7/7; full serial `cms-db` 0; four controls seen red then restored | `0a08040c` |
+| 2026-11-27 | `feat/rust-S6d3q-usertest` | `6b39d9e4` | fmt/clippy 0; live inputs 6/6; builders 8/8; full serial `cms-db` + `cms-evaluation` 0 | `a9e80159` |
 | 2026-11-22 | `feat/rust-S2c-datetime` | `2e28ff39` | `cargo test -p cms-db --test mapping_datetime` → 7 passed, 0 failed, 2 ignored | `a3a605c4` |
 | 2026-11-22 | `feat/rust-S1-equivalence-oracle` | `58a6c24b` | `python3 -m unittest tests/test_render_parity.py` → 20 tests OK | `b282ed4c` |
 | 2026-11-22 | `feat/rust-svc-host` | `32db4b41` | `cargo test -p cms-svc` → 25 passed; parent's own mutation of `connection.rs:76` (`Send::Dropped` → `Flow::Continue`) failed `refusals::a_request_without_an_id_closes_the_connection_without_a_reply`, exit 101, then restored byte-identical | `578c743d` |
