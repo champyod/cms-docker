@@ -14,11 +14,36 @@ use crate::{
 
 #[tokio::test]
 async fn the_bound_host_answers_queue_status_and_quit_stops_the_process() {
-    let url = std::env::var("CMS_DB_TEST_URL")
+    let url = database_url();
+    let mut setup = prepare_schema(&url).await;
+    let mut running = spawn_with(&variables(&url));
+    let address = running.started();
+    let mut client = Client::connect(address, Some(SECRET.to_owned()))
+        .expect("the reported listener accepts the test client");
+
+    assert_echo(&mut client);
+    assert_queue_status(&mut client);
+    assert_quit(&mut client);
+    assert_stopped(running);
+    sqlx::raw_sql(AssertSqlSafe(format!(
+        "DROP SCHEMA IF EXISTS {SCHEMA} CASCADE"
+    )))
+    .execute(&mut setup)
+    .await
+    .expect("dropping the binary test schema");
+}
+
+/// The scratch database this target runs against.
+fn database_url() -> String {
+    std::env::var("CMS_DB_TEST_URL")
         .ok()
         .filter(|url| !url.trim().is_empty())
-        .expect("CMS_DB_TEST_URL must name a scratch PostgreSQL database");
-    let mut setup = PgConnection::connect(&url)
+        .expect("CMS_DB_TEST_URL must name a scratch PostgreSQL database")
+}
+
+/// Creates the throwaway schema the binary serves from.
+async fn prepare_schema(url: &str) -> PgConnection {
+    let mut setup = PgConnection::connect(url)
         .await
         .expect("connecting to the scratch database");
     for statement in [
@@ -30,7 +55,12 @@ async fn the_bound_host_answers_queue_status_and_quit_stops_the_process() {
             .await
             .expect("creating the binary test schema");
     }
-    let variables = vec![
+    setup
+}
+
+/// The environment the daemon starts with.
+fn variables(url: &str) -> Vec<(&'static str, String)> {
+    vec![
         (
             DATABASE_URL_VARIABLE,
             format!("{url}?options=-csearch_path%3D{SCHEMA}"),
@@ -38,18 +68,19 @@ async fn the_bound_host_answers_queue_status_and_quit_stops_the_process() {
         (PORT_VARIABLE, "0".to_owned()),
         (SHARD_VARIABLE, "0".to_owned()),
         (SECRET_VARIABLE, SECRET.to_owned()),
-    ];
-    let mut running = spawn_with(&variables);
-    let address = running.started();
-    let mut client = Client::connect(address, Some(SECRET.to_owned()))
-        .expect("the reported listener accepts the test client");
+    ]
+}
 
+fn assert_echo(client: &mut Client) {
     assert_eq!(
         client
             .echo("evaluation host smoke")
             .expect("echo is served"),
         Value::String("evaluation host smoke".to_owned())
     );
+}
+
+fn assert_queue_status(client: &mut Client) {
     assert_eq!(
         client
             .call("queue_status", json!({}))
@@ -57,6 +88,9 @@ async fn the_bound_host_answers_queue_status_and_quit_stops_the_process() {
         Value::Array(Vec::new()),
         "a fresh daemon has no queued operations"
     );
+}
+
+fn assert_quit(client: &mut Client) {
     assert_eq!(
         client
             .call(
@@ -66,7 +100,9 @@ async fn the_bound_host_answers_queue_status_and_quit_stops_the_process() {
             .expect("quit is served"),
         Value::Null
     );
+}
 
+fn assert_stopped(running: crate::Running) {
     let output = finish(running);
     assert!(output.status.success(), "quit exits zero: {output:?}");
     let stderr = String::from_utf8(output.stderr).expect("stderr is UTF-8");

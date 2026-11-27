@@ -133,45 +133,20 @@ impl ObjectWrite {
         connection: &mut PgConnection,
         rows: &[EvaluationRow],
     ) -> Result<(), sqlx::Error> {
-        let mut submission_id = Vec::with_capacity(rows.len());
-        let mut dataset_id = Vec::with_capacity(rows.len());
-        let mut testcase_id = Vec::with_capacity(rows.len());
-        let mut outcome = Vec::with_capacity(rows.len());
-        let mut text = Vec::with_capacity(rows.len());
-        let mut admin_text = Vec::with_capacity(rows.len());
-        let mut execution_time = Vec::with_capacity(rows.len());
-        let mut execution_wall_clock_time = Vec::with_capacity(rows.len());
-        let mut execution_memory = Vec::with_capacity(rows.len());
-        let mut evaluation_shard = Vec::with_capacity(rows.len());
-        let mut evaluation_sandbox_paths = Vec::with_capacity(rows.len());
-        let mut evaluation_sandbox_digests = Vec::with_capacity(rows.len());
-        for row in rows {
-            submission_id.push(row.submission_id.0);
-            dataset_id.push(row.dataset_id.0);
-            testcase_id.push(row.testcase_id);
-            outcome.push(row.outcome.clone());
-            text.push(Some(row.text_literal()));
-            admin_text.push(row.admin_text.clone());
-            execution_time.push(row.execution_time);
-            execution_wall_clock_time.push(row.execution_wall_clock_time);
-            execution_memory.push(row.execution_memory);
-            evaluation_shard.push(row.evaluation_shard);
-            evaluation_sandbox_paths.push(row.sandbox_paths_literal());
-            evaluation_sandbox_digests.push(row.sandbox_digests_literal());
-        }
+        let bound = BoundEvaluations::of(rows);
         sqlx::query(INSERT_EVALUATIONS)
-            .bind(submission_id)
-            .bind(dataset_id)
-            .bind(testcase_id)
-            .bind(outcome)
-            .bind(text)
-            .bind(admin_text)
-            .bind(execution_time)
-            .bind(execution_wall_clock_time)
-            .bind(execution_memory)
-            .bind(evaluation_shard)
-            .bind(evaluation_sandbox_paths)
-            .bind(evaluation_sandbox_digests)
+            .bind(bound.submission_id)
+            .bind(bound.dataset_id)
+            .bind(bound.testcase_id)
+            .bind(bound.outcome)
+            .bind(bound.text)
+            .bind(bound.admin_text)
+            .bind(bound.execution_time)
+            .bind(bound.execution_wall_clock_time)
+            .bind(bound.execution_memory)
+            .bind(bound.evaluation_shard)
+            .bind(bound.evaluation_sandbox_paths)
+            .bind(bound.evaluation_sandbox_digests)
             .execute(connection)
             .await?;
         Ok(())
@@ -207,6 +182,51 @@ impl ObjectWrite {
         self.audit.extend(other.audit.iter().cloned());
         if other.score.is_some() {
             self.score.clone_from(&other.score);
+        }
+    }
+}
+
+/// The `evaluations` columns bound as one array each, in statement order.
+struct BoundEvaluations {
+    submission_id: Vec<i32>,
+    dataset_id: Vec<i32>,
+    testcase_id: Vec<i32>,
+    outcome: Vec<Option<String>>,
+    text: Vec<Option<String>>,
+    admin_text: Vec<Option<String>>,
+    execution_time: Vec<Option<f64>>,
+    execution_wall_clock_time: Vec<Option<f64>>,
+    execution_memory: Vec<Option<i64>>,
+    evaluation_shard: Vec<Option<i32>>,
+    evaluation_sandbox_paths: Vec<Option<String>>,
+    evaluation_sandbox_digests: Vec<Option<String>>,
+}
+
+impl BoundEvaluations {
+    /// Flattens one row set into the per-column arrays `unnest` pairs up.
+    fn of(rows: &[EvaluationRow]) -> Self {
+        Self {
+            submission_id: rows.iter().map(|row| row.submission_id.0).collect(),
+            dataset_id: rows.iter().map(|row| row.dataset_id.0).collect(),
+            testcase_id: rows.iter().map(|row| row.testcase_id).collect(),
+            outcome: rows.iter().map(|row| row.outcome.clone()).collect(),
+            text: rows.iter().map(|row| Some(row.text_literal())).collect(),
+            admin_text: rows.iter().map(|row| row.admin_text.clone()).collect(),
+            execution_time: rows.iter().map(|row| row.execution_time).collect(),
+            execution_wall_clock_time: rows
+                .iter()
+                .map(|row| row.execution_wall_clock_time)
+                .collect(),
+            execution_memory: rows.iter().map(|row| row.execution_memory).collect(),
+            evaluation_shard: rows.iter().map(|row| row.evaluation_shard).collect(),
+            evaluation_sandbox_paths: rows
+                .iter()
+                .map(EvaluationRow::sandbox_paths_literal)
+                .collect(),
+            evaluation_sandbox_digests: rows
+                .iter()
+                .map(EvaluationRow::sandbox_digests_literal)
+                .collect(),
         }
     }
 }

@@ -93,23 +93,11 @@ impl TryFrom<StoredRow> for UserTestResult {
     type Error = UserTestResultReadError;
 
     fn try_from(row: StoredRow) -> Result<Self, Self::Error> {
-        let output = row
-            .output
-            .map(|text| {
-                text.parse()
-                    .map_err(|_| UserTestResultReadError::BadOutput(text))
-            })
-            .transpose()?;
-        let compilation_outcome = parse_outcome(
-            "compilation_outcome",
-            row.compilation_outcome,
-            CompilationOutcome::parse,
-        )?;
-        let evaluation_outcome = parse_outcome(
-            "evaluation_outcome",
-            row.evaluation_outcome,
-            EvaluationOutcome::parse,
-        )?;
+        let ParsedDomains {
+            output,
+            compilation_outcome,
+            evaluation_outcome,
+        } = parse_domains(&row)?;
         Ok(Self {
             user_test_id: row.user_test_id,
             dataset_id: row.dataset_id,
@@ -137,6 +125,40 @@ impl TryFrom<StoredRow> for UserTestResult {
             executables: std::collections::BTreeMap::new(),
         })
     }
+}
+
+/// The three stored columns whose values need domain checks.
+struct ParsedDomains {
+    output: Option<crate::digest::FileDigest>,
+    compilation_outcome: Option<CompilationOutcome>,
+    evaluation_outcome: Option<EvaluationOutcome>,
+}
+
+/// Reads the three columns that need domain checks before the row is built.
+fn parse_domains(row: &StoredRow) -> Result<ParsedDomains, UserTestResultReadError> {
+    let output = row
+        .output
+        .as_deref()
+        .map(|text| {
+            text.parse()
+                .map_err(|_| UserTestResultReadError::BadOutput(text.to_owned()))
+        })
+        .transpose()?;
+    let compilation_outcome = parse_outcome(
+        "compilation_outcome",
+        row.compilation_outcome.clone(),
+        CompilationOutcome::parse,
+    )?;
+    let evaluation_outcome = parse_outcome(
+        "evaluation_outcome",
+        row.evaluation_outcome.clone(),
+        EvaluationOutcome::parse,
+    )?;
+    Ok(ParsedDomains {
+        output,
+        compilation_outcome,
+        evaluation_outcome,
+    })
 }
 
 fn parse_outcome<T>(

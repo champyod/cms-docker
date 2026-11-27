@@ -64,12 +64,7 @@ async fn an_evaluation_writes_only_its_own_half_of_the_result() {
         .expect("the evaluation commits");
 
     let row = stored(&mut connection).await;
-    assert_eq!(
-        row.compilation_outcome.as_deref(),
-        Some("ok"),
-        "compilation survived"
-    );
-    assert_eq!(row.compilation_tries, 1, "the try count survived");
+    assert_compilation_survived(&row);
     assert_eq!(row.output.as_deref(), Some(NEW_DIGEST));
     assert_eq!(row.evaluation_outcome.as_deref(), Some("ok"));
     assert_eq!(row.evaluation_text, vec!["Correct".to_owned()]);
@@ -81,6 +76,16 @@ async fn an_evaluation_writes_only_its_own_half_of_the_result() {
         "the set is untouched"
     );
     close(base).await;
+}
+
+/// The compilation half an evaluation must leave exactly as it found it.
+fn assert_compilation_survived(row: &support::Stored) {
+    assert_eq!(
+        row.compilation_outcome.as_deref(),
+        Some("ok"),
+        "compilation survived"
+    );
+    assert_eq!(row.compilation_tries, 1, "the try count survived");
 }
 
 #[tokio::test]

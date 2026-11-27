@@ -157,12 +157,12 @@ async fn resolve_dataset_task(
     {
         return Ok(());
     }
-    let dataset = dataset_by_id(
-        transaction.connection(),
-        DatasetId(arguments.dataset_id.expect("the dataset was named above")),
-    )
-    .await
-    .map_err(|error| format!("read invalidated dataset: {error}"))?;
+    let Some(dataset_id) = arguments.dataset_id else {
+        return Ok(());
+    };
+    let dataset = dataset_by_id(transaction.connection(), DatasetId(dataset_id))
+        .await
+        .map_err(|error| format!("read invalidated dataset: {error}"))?;
     arguments.task_id = Some(
         dataset
             .ok_or_else(|| "invalidated dataset is missing".to_owned())?

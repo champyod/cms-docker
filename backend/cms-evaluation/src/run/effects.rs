@@ -38,26 +38,24 @@ pub(super) async fn after_submission(
     let stored = stored_submission(evaluation, submission_id, dataset_id).await?;
     match kind {
         OperationKind::Compilation => {
-            let failed = outputs
-                .iter()
-                .any(|output| !output.success || output.compilation_success == Some(false));
-            let rejected = stored.compilation_outcome == Some(CompilationOutcome::Fail);
-            let mut terminal = false;
-            if failed && stored.compilation_outcome.is_none() {
-                terminal = stored.compilation_tries >= MAX_COMPILATION_TRIES;
-                if terminal {
-                    mark_failed(evaluation, submission_id, dataset_id).await?;
-                }
-            }
-            if rejected || terminal {
-                notify_scoring(evaluation, scoring, submission_id, dataset_id);
-            }
+            compilation_verdict(
+                evaluation,
+                scoring,
+                submission_id,
+                dataset_id,
+                &stored,
+                outputs,
+            )
+            .await?;
         }
         OperationKind::Evaluation if stored.evaluated() => {
             notify_scoring(evaluation, scoring, submission_id, dataset_id);
         }
         OperationKind::Evaluation => {
-            eprintln!("cms-evaluation: worker failed to evaluate submission {submission_id}({dataset_id})");
+            eprintln!(
+                "cms-evaluation: worker failed to evaluate submission \
+                 {submission_id}({dataset_id})"
+            );
         }
         other => {
             eprintln!("cms-evaluation: no submission effect for operation kind {other:?}");
@@ -67,6 +65,32 @@ pub(super) async fn after_submission(
         .enqueue_submission(submission_id)
         .await
         .map_err(|error| format!("re-enqueue submission {submission_id}: {error}"))?;
+    Ok(())
+}
+
+/// The three compilation verdicts: rejected, terminally failed, or neither.
+async fn compilation_verdict(
+    evaluation: &Evaluation,
+    scoring: &mut Option<Client>,
+    submission_id: i32,
+    dataset_id: i32,
+    stored: &cms_db::SubmissionResult,
+    outputs: &[WorkerOutput],
+) -> Result<(), String> {
+    let failed = outputs
+        .iter()
+        .any(|output| !output.success || output.compilation_success == Some(false));
+    let rejected = stored.compilation_outcome == Some(CompilationOutcome::Fail);
+    let mut terminal = false;
+    if failed && stored.compilation_outcome.is_none() {
+        terminal = stored.compilation_tries >= MAX_COMPILATION_TRIES;
+        if terminal {
+            mark_failed(evaluation, submission_id, dataset_id).await?;
+        }
+    }
+    if rejected || terminal {
+        notify_scoring(evaluation, scoring, submission_id, dataset_id);
+    }
     Ok(())
 }
 

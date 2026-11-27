@@ -109,6 +109,18 @@ fn compilation(
             before.as_ref(),
         ));
     }
+    let result = compiled_row(output, user_test_id, dataset_id);
+    let executables = executable_rows(output, user_test_id, dataset_id)?;
+    Ok(write(
+        UserTestOperation::Compilation,
+        result,
+        executables,
+        before.as_ref(),
+    ))
+}
+
+/// The row a successful user-test compilation writes, invalidated first.
+fn compiled_row(output: &WorkerOutput, user_test_id: i32, dataset_id: i32) -> UserTestResultRow {
     let stats = output.stats.as_ref();
     let mut result = UserTestResultRow::new(user_test_id, dataset_id);
     result.compilation_outcome = output.compilation_success.map(|success| {
@@ -127,14 +139,7 @@ fn compilation(
     result.compilation_shard = output.shard;
     result.compilation_sandbox_paths = Some(output.sandboxes.clone());
     result.compilation_sandbox_digests = rows::sandbox_digests(output);
-
-    let executables = executable_rows(output, user_test_id, dataset_id)?;
-    Ok(write(
-        UserTestOperation::Compilation,
-        result,
-        executables,
-        before.as_ref(),
-    ))
+    result
 }
 
 fn evaluation(

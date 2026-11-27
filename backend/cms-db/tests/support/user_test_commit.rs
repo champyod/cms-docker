@@ -8,6 +8,8 @@ use cms_db::{
 use sqlx::postgres::PgConnection;
 use sqlx::{AssertSqlSafe, Connection, FromRow};
 
+// Each test target includes this module and uses a different subset of it, so a
+// helper unused by one target is not dead code.
 #[allow(dead_code)]
 #[path = "schema_check.rs"]
 pub mod schema_check;
