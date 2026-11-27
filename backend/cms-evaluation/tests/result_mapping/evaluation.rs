@@ -9,7 +9,8 @@ use serde_json::{json, Value};
 
 use super::support::{
     blank_row, evaluation_body, inputs, operation, prior_result, prior_row, with_executable,
-    with_tombstone, DATASET_ID, DIGEST, GRADER_TEXT, OTHER_DIGEST, SUBMISSION_ID, TESTCASE_ID,
+    with_tombstone, DATASET_ID, DIGEST, GRADER_TEXT, OTHER_DIGEST, SHARD, SUBMISSION_ID,
+    TESTCASE_ID,
 };
 
 fn output(body: &Value) -> WorkerOutput {
@@ -35,7 +36,7 @@ fn expected_evaluation() -> EvaluationRow {
         execution_time: Some(0.5),
         execution_wall_clock_time: Some(0.6),
         execution_memory: Some(2048),
-        evaluation_shard: None,
+        evaluation_shard: Some(SHARD),
         evaluation_sandbox_paths: Some(vec!["box/one".to_string(), "box/two".to_string()]),
         evaluation_sandbox_digests: Some(vec![DIGEST.to_string(), OTHER_DIGEST.to_string()]),
     }

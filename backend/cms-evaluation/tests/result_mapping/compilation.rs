@@ -10,7 +10,7 @@ use serde_json::Value;
 
 use super::support::{
     blank_row, compilation_body, inputs, operation, prior_result, prior_row, COMPILER_TEXT,
-    DATASET_ID, DIGEST, OTHER_DIGEST, SUBMISSION_ID,
+    DATASET_ID, DIGEST, OTHER_DIGEST, SHARD, SUBMISSION_ID,
 };
 
 fn output(body: &Value) -> WorkerOutput {
@@ -37,7 +37,7 @@ fn expected_result() -> ResultRow {
         compilation_time: Some(0.5),
         compilation_wall_clock_time: Some(0.6),
         compilation_memory: Some(2048),
-        compilation_shard: None,
+        compilation_shard: Some(SHARD),
         compilation_sandbox_paths: Some(vec!["box/one".to_string(), "box/two".to_string()]),
         compilation_sandbox_digests: Some(vec![DIGEST.to_string(), OTHER_DIGEST.to_string()]),
         evaluation_outcome: None,

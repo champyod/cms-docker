@@ -83,6 +83,7 @@ fn compiled_row(output: &WorkerOutput, base: ResultRow) -> ResultRow {
         compilation_time: stats.and_then(|stats| stats.execution_time),
         compilation_wall_clock_time: stats.and_then(|stats| stats.wall_clock_time),
         compilation_memory: stats.and_then(|stats| stats.memory_bytes),
+        compilation_shard: output.shard,
         compilation_sandbox_paths: Some(output.sandboxes.clone()),
         compilation_sandbox_digests: rows::sandbox_digests(output),
         ..base

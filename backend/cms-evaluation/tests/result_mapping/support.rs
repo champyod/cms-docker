@@ -19,6 +19,7 @@ pub const DIGEST: &str = "0123456789abcdef0123456789abcdef01234567";
 pub const OTHER_DIGEST: &str = "fedcba9876543210fedcba9876543210fedcba98";
 pub const COMPILER_TEXT: &str = "compiler said";
 pub const GRADER_TEXT: &str = "Output is correct";
+pub const SHARD: i32 = 2;
 const TIMESTAMP_SECONDS: i64 = 1_700_000_000;
 
 /// The stored result the tests replace: every field is distinguishable.
@@ -147,6 +148,7 @@ pub fn compilation_body(success: bool) -> Value {
         "success": success,
         "compilation_success": true,
         "text": [COMPILER_TEXT],
+        "shard": SHARD,
         "sandboxes": ["box/one", "box/two"],
         "sandbox_digests": {"box/one": DIGEST, "box/two": OTHER_DIGEST},
         "executables": {"a.out": DIGEST},
@@ -161,6 +163,7 @@ pub fn evaluation_body(success: bool) -> Value {
         "outcome": "1.0",
         "text": [GRADER_TEXT],
         "admin_text": "internal note",
+        "shard": SHARD,
         "sandboxes": ["box/one", "box/two"],
         "sandbox_digests": {"box/one": DIGEST, "box/two": OTHER_DIGEST},
         "plus": stats_value(false),

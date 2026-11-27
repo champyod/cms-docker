@@ -3,7 +3,7 @@
 use cms_evaluation::{worker_output, WorkerOutputError};
 use serde_json::json;
 
-use super::support::{compilation_body, with_tombstone};
+use super::support::{compilation_body, with_tombstone, SHARD};
 
 fn tombstone(body: serde_json::Value) -> bool {
     worker_output(body.as_object().expect("an object body"))
@@ -51,6 +51,47 @@ fn a_non_boolean_tombstone_is_refused_by_name() {
     match worker_output(body.as_object().expect("an object body")) {
         Err(WorkerOutputError::WrongType { key, .. }) => assert_eq!(key, "tombstone"),
         Err(other) => panic!("expected a wrong-type refusal for tombstone, got {other:?}"),
+        Ok(output) => panic!("expected a refusal, got a default: {output:?}"),
+    }
+}
+
+#[test]
+fn the_shard_the_worker_stamped_is_read_exactly() {
+    let output = worker_output(compilation_body(true).as_object().expect("an object body"))
+        .expect("a valid body");
+    assert_eq!(output.shard, Some(SHARD));
+}
+
+#[test]
+fn a_body_without_a_shard_reads_none() {
+    let mut body = compilation_body(true);
+    body.as_object_mut().expect("an object").remove("shard");
+    let output = worker_output(body.as_object().expect("an object body")).expect("a valid body");
+    assert_eq!(output.shard, None);
+}
+
+#[test]
+fn a_shard_that_is_not_an_integer_is_refused_by_name() {
+    let mut body = compilation_body(true);
+    body.as_object_mut()
+        .expect("an object")
+        .insert("shard".to_string(), json!("two"));
+    match worker_output(body.as_object().expect("an object body")) {
+        Err(WorkerOutputError::WrongType { key, .. }) => assert_eq!(key, "shard"),
+        Err(other) => panic!("expected a wrong-type refusal for shard, got {other:?}"),
+        Ok(output) => panic!("expected a refusal, got a default: {output:?}"),
+    }
+}
+
+#[test]
+fn a_shard_beyond_the_column_range_is_refused_by_name() {
+    let mut body = compilation_body(true);
+    body.as_object_mut()
+        .expect("an object")
+        .insert("shard".to_string(), json!(i64::from(i32::MAX) + 1));
+    match worker_output(body.as_object().expect("an object body")) {
+        Err(WorkerOutputError::WrongType { key, .. }) => assert_eq!(key, "shard"),
+        Err(other) => panic!("expected a range refusal for shard, got {other:?}"),
         Ok(output) => panic!("expected a refusal, got a default: {output:?}"),
     }
 }

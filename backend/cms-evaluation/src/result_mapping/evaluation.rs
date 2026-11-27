@@ -109,7 +109,7 @@ fn evaluation_row(
         execution_time: stats.and_then(|stats| stats.execution_time),
         execution_wall_clock_time: stats.and_then(|stats| stats.wall_clock_time),
         execution_memory: stats.and_then(|stats| stats.memory_bytes),
-        evaluation_shard: None,
+        evaluation_shard: output.shard,
         evaluation_sandbox_paths: Some(output.sandboxes.clone()),
         evaluation_sandbox_digests: rows::sandbox_digests(output),
     }
