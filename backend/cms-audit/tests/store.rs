@@ -44,10 +44,14 @@ async fn the_writer_appends_a_verifiable_chain_and_cannot_rewrite_it(
         "each row links to its own predecessor"
     );
 
-    let rows = read_chain(&pool, first.id).await?;
+    let rows = read_chain(&pool, 1).await?;
     let verdict = verify_chain(&rows, &[]);
     assert!(verdict.ok(), "{:?}", verdict.failures);
-    assert!(verdict.verified >= 2, "both rows verified");
+    assert!(
+        verdict.verified >= 2,
+        "both rows verified, saw {}",
+        verdict.verified
+    );
 
     let update = sqlx::query("UPDATE public.audit_log SET result = 'tampered' WHERE id = $1")
         .bind(first.id)
