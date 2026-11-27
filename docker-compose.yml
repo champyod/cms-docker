@@ -343,6 +343,12 @@ services:
       SERVICE_TYPE: EvaluationService
       SERVICE_SHARD: ${EVALUATION_SERVICE_SHARD:-0}
       CONTEST_ID: ${CONTEST_ID:-1}
+      EVALUATION_SERVICE_SHARD: ${EVALUATION_SERVICE_SHARD:-0}
+      EVALUATION_SERVICE_PORT: ${EVALUATION_SERVICE_PORT:-25000}
+      DATABASE_URL: postgresql://${POSTGRES_USER}:***@database:5432/${POSTGRES_DB:-cmsdb}
+      RPC_SECRET: ${RPC_SECRET}
+      WORKER_SERVICE_ADDRS: ${WORKER_SERVICE_ADDRS:-cms-worker-0:26000}
+      SCORING_SERVICE_ADDR: ${SCORING_SERVICE_ADDR:-cms-scoring-service:28500}
     ports:
       - "${INNER_IP:-127.0.0.1}:25000:25000"
     volumes:
@@ -356,9 +362,9 @@ services:
       sh -c "sudo mkdir -p /var/local/log/cms/EvaluationService-${EVALUATION_SERVICE_SHARD:-0} &&
              sudo chown -R cmsuser:cmsuser /var/local/log/cms &&
              sudo chmod -R 750 /var/local/log/cms &&
-             cmsEvaluationService ${EVALUATION_SERVICE_SHARD:-0}"
+             cms-evaluation"
     healthcheck:
-      test: ["CMD-SHELL", "pgrep -f cmsEvaluationService && python3 -c \"import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.connect((socket.gethostbyname(socket.gethostname()), 25000))\" || exit 1"]
+      test: ["CMD-SHELL", "pgrep -f cms-evaluation && python3 -c \"import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.connect((socket.gethostbyname(socket.gethostname()), 25000))\" || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5

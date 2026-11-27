@@ -27,6 +27,7 @@ COPY backend/ ./
 RUN cargo build --release --package cms-svc --bin cms-log-service --bin cms-resource-service --bin cms-checker
 RUN cargo build --release --package cms-worker --bin cms-worker
 RUN cargo build --release --package cms-scoring --bin cms-scoring
+RUN cargo build --release --package cms-evaluation --bin cms-evaluation
 
 FROM ${BASE_IMAGE}
 
@@ -218,6 +219,7 @@ COPY --from=backend-build --chown=cmsuser:cmsuser /build/target/release/cms-reso
 COPY --from=backend-build --chown=cmsuser:cmsuser /build/target/release/cms-checker /home/cmsuser/cms/bin/cms-checker
 COPY --from=backend-build --chown=cmsuser:cmsuser /build/target/release/cms-worker /home/cmsuser/cms/bin/cms-worker
 COPY --from=backend-build --chown=cmsuser:cmsuser /build/target/release/cms-scoring /home/cmsuser/cms/bin/cms-scoring
+COPY --from=backend-build --chown=cmsuser:cmsuser /build/target/release/cms-evaluation /home/cmsuser/cms/bin/cms-evaluation
 
 # Install CMS package from the src directory
 RUN --mount=type=cache,target=/home/cmsuser/.cache/pip,uid=1001 cd src && python3 install.py cms --devel
