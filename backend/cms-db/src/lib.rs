@@ -144,7 +144,9 @@ pub use grants::{
     ALLOW_OVERRIDE_KEYS, DENY_OVERRIDE_KEYS, GROUP, GROUP_GRANT_KEYS, GROUP_PERMISSION, PERMISSION,
     REGISTERED_KEYS,
 };
-pub use judging::{submission_inputs, JudgingError, JudgingReadError, SubmissionInputs};
+pub use judging::{
+    contest_languages, submission_inputs, JudgingError, JudgingReadError, SubmissionInputs,
+};
 pub use large_object::{LargeObject, LargeObjectError, Mode};
 pub use reads::{
     dataset_from_row, enumerate_files, get_datasets_to_judge, result_from_row, submission_from_row,
@@ -190,10 +192,10 @@ pub use username::{
     CONTEST_USERNAME_HISTORY, USERNAME_POLICY,
 };
 pub use usertest::{
-    Filename, FilenameError, FilenameSchema, ReferentialError, ResultKey, UserTest,
-    UserTestExecutable, UserTestFile, UserTestFiles, UserTestManager, UserTestManagers,
-    UserTestResult, UserTestResults, UserTestStatus, USER_TEST, USER_TEST_EXECUTABLE,
-    USER_TEST_FILE, USER_TEST_MANAGER, USER_TEST_RESULT,
+    user_test_inputs, Filename, FilenameError, FilenameSchema, ReferentialError, ResultKey,
+    UserTest, UserTestExecutable, UserTestFile, UserTestFiles, UserTestInputs, UserTestInputsError,
+    UserTestManager, UserTestManagers, UserTestResult, UserTestResults, UserTestStatus, USER_TEST,
+    USER_TEST_EXECUTABLE, USER_TEST_FILE, USER_TEST_MANAGER, USER_TEST_RESULT,
 };
 pub use writes::{
     commit, group_by_object, AuditRow, CommitError, CompilationOutcome, EvaluationOutcome,

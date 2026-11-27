@@ -19,6 +19,7 @@ pub mod result;
 pub mod runner;
 pub mod service;
 pub mod sweep;
+pub mod user_test_job;
 
 pub use dispatch::{DispatchError, WorkerDispatcher};
 pub use job::{submission_job, SubmissionJobError};
@@ -35,6 +36,7 @@ pub use result::{worker_output, RunStats, WorkerOutput, WorkerOutputError};
 pub use runner::{run_submission, RunnerError};
 pub use service::Evaluation;
 pub use sweep::{contest_operations, submission_operations_by_id, user_test_operations_by_id};
+pub use user_test_job::{user_test_job, UserTestJobError};
 
 #[cfg(test)]
 mod support;
