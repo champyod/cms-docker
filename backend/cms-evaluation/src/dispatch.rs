@@ -41,6 +41,18 @@ impl WorkerDispatcher {
         }
     }
 
+    /// The number of configured shards, which the worker uses to spread objects.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.addresses.len()
+    }
+
+    /// Whether no worker address was configured.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.addresses.is_empty()
+    }
+
     /// Dispatches `jobs` to `shard` and validates the returned [`JobGroup`].
     ///
     /// # Errors

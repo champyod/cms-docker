@@ -26,7 +26,7 @@ const SUBMISSION_ID_ARGUMENT: &str = "submission_id";
 const USER_TEST_ID_ARGUMENT: &str = "user_test_id";
 const POISONED: &str = "the evaluation queue is unusable after a panic while it was held";
 
-/// The session and fair queue one EvaluationService shares.
+/// The session, fair queue and optional ScoringService endpoint one daemon shares.
 ///
 /// Clones share the same session and queue.
 #[derive(Clone)]
@@ -34,17 +34,43 @@ pub struct Evaluation {
     session: Arc<Session>,
     runtime: tokio::runtime::Handle,
     queue: Arc<Mutex<EvaluationQueue>>,
+    scoring_address: Option<String>,
+    rpc_secret: Option<String>,
 }
 
 impl Evaluation {
     /// Builds one context over an open session and the runtime that drives its reads.
     #[must_use]
-    pub fn new(session: Arc<Session>, runtime: tokio::runtime::Handle) -> Self {
+    pub fn new(
+        session: Arc<Session>,
+        runtime: tokio::runtime::Handle,
+        scoring_address: Option<String>,
+        rpc_secret: Option<String>,
+    ) -> Self {
         Self {
             session,
             runtime,
             queue: Arc::new(Mutex::new(EvaluationQueue::default())),
+            scoring_address,
+            rpc_secret,
         }
+    }
+
+    /// The session every read and write shares, for the worker loop.
+    pub(crate) fn session(&self) -> &Session {
+        &self.session
+    }
+
+    /// The optional ScoringService address the worker dials after a verdict.
+    #[must_use]
+    pub fn scoring_address(&self) -> Option<&str> {
+        self.scoring_address.as_deref()
+    }
+
+    /// The optional RPC secret shared with ScoringService.
+    #[must_use]
+    pub fn rpc_secret(&self) -> Option<&str> {
+        self.rpc_secret.as_deref()
     }
 
     /// The base RPC methods followed by the evaluation methods.
