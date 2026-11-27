@@ -23,7 +23,11 @@ import {
   recordFailedAttempt,
 } from '@/lib/auth-rate-limit';
 import { buildCaptchaRequiredState, extractCaptchaProvider, extractCaptchaToken, isCaptchaRequiredForIp, shouldRequireCaptcha } from '@/lib/auth-captcha-helpers';
-import { parseForwardedFor, resolveClientIp } from '@/lib/request-identity';
+import {
+  FORWARDED_TRUST_ENV,
+  resolveClientIp,
+  resolveForwardedAddress,
+} from '@/lib/request-identity';
 import type { LoginAttemptContext } from '@/lib/login-attempts';
 import { isLoginExempt } from '@/lib/security/exemptions';
 import { recordLoginLockout } from '@/lib/security/lockouts';
@@ -57,10 +61,7 @@ async function resolveRequestIdentity(
   username: string,
 ): Promise<{ readonly bucketKeys: readonly string[]; readonly attempt: LoginAttemptContext }> {
   const requestHeaders = await headers();
-  const ip = parseForwardedFor(
-    requestHeaders.get('x-forwarded-for'),
-    requestHeaders.get('x-real-ip'),
-  );
+  const ip = resolveForwardedAddress(requestHeaders, process.env[FORWARDED_TRUST_ENV]);
   const accountKey = buildAccountBucketKey(username, ip);
   const bucketKeys = isLoopbackIp(ip) ? [accountKey] : [accountKey, buildIpBucketKey(ip)];
   return {
