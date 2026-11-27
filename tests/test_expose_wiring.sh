@@ -6,6 +6,7 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 MAKEFILE="${REPO_ROOT}/Makefile"
 COMPOSE="${REPO_ROOT}/docker-compose.yml"
+RENDER="${REPO_ROOT}/scripts/__render_expose.sh"
 
 pass=0
 fail=0
@@ -73,14 +74,37 @@ else
   no "admin-panel-next publishes exactly one host entry (found ${publishes:-0})"
 fi
 
-# Peer-facing binds are single-address by design and stay as they were.
-for var in DB_BIND_IP WORKER_BIND_ADDR; do
-  if grep -qF -- "\${${var}:-" "$COMPOSE"; then
-    ok "peer-facing ${var} left in the base"
-  else
-    no "peer-facing ${var} left in the base"
-  fi
-done
+check_loopback_publish database \
+  '127.0.0.1:${POSTGRES_PORT_EXTERNAL:-5432}:5432'
+
+# Every published port answers on loopback unless an operator opts in, so the base file
+# interpolates no bind key at all. The opt-in lives in the generator, which is where a
+# comma list can be expanded into one entry per address; asserting it there is the
+# invariant, because a key the generator ignores is an opt-in that silently does nothing.
+# The worker keeps its key in the base for now: widening it is WS-24's own decision, and a
+# guard that failed on it would be reporting a different row's work as this one's defect.
+var=DB_BIND_IP
+if grep -qF -- "\${${var}:-" "$COMPOSE"; then
+  no "peer-facing ${var} left in the base"
+else
+  ok "peer-facing ${var} left out of the base"
+fi
+if grep -qF -- "|${var}|" "$RENDER"; then
+  ok "the expose generator honours ${var}"
+else
+  no "the expose generator honours ${var}"
+fi
+var=WORKER_BIND_ADDR
+if grep -qF -- "\${${var}:-" "$COMPOSE"; then
+  ok "worker ${var} still widens the base (WS-24 owns that decision)"
+else
+  no "worker ${var} still widens the base (WS-24 owns that decision)"
+fi
+if grep -qF -- "|${var}|" "$RENDER"; then
+  ok "the expose generator honours ${var}"
+else
+  no "the expose generator honours ${var}"
+fi
 
 # The Makefile regenerates the override and every stack target waits for it.
 if grep -qE '^expose:$' "$MAKEFILE"; then
