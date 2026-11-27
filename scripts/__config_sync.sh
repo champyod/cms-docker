@@ -1186,7 +1186,7 @@ _registry_role_command() {
   local role="$1" shard="$2"
   case "$role" in
     ContestWebServer) printf 'cmsContestWebServer %s' "$shard" ;;
-    EvaluationService) printf 'cmsEvaluationService %s' "$shard" ;;
+    EvaluationService) printf 'cms-evaluation' ;;
     ProxyService) printf 'cmsProxyService %s' "$shard" ;;
     *) return 1 ;;
   esac

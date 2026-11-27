@@ -35,7 +35,8 @@ from cms import config, ServiceCoord, get_service_shards
 from cms.db import SessionGen, Dataset, Participation, Submission, \
     SubmissionResult, Task
 from cms.io import WebService, rpc_method
-from cms.service import EvaluationService
+from cms.service.esoperations import MAX_COMPILATION_TRIES, \
+    MAX_EVALUATION_TRIES
 from cmscommon.binary import hex_to_bin
 from .authentication import AWSAuthMiddleware
 from .handlers import HANDLERS
@@ -161,18 +162,18 @@ class AdminWebServer(WebService):
             queries = {}
             queries['compiling'] = not_compiled.filter(
                 SubmissionResult.compilation_tries <
-                EvaluationService.EvaluationService.MAX_COMPILATION_TRIES)
+                MAX_COMPILATION_TRIES)
             queries['max_compilations'] = not_compiled.filter(
                 SubmissionResult.compilation_tries >=
-                EvaluationService.EvaluationService.MAX_COMPILATION_TRIES)
+                MAX_COMPILATION_TRIES)
             queries['compilation_fail'] = base_query.filter(
                 SubmissionResult.filter_compilation_failed())
             queries['evaluating'] = not_evaluated.filter(
                 SubmissionResult.evaluation_tries <
-                EvaluationService.EvaluationService.MAX_EVALUATION_TRIES)
+                MAX_EVALUATION_TRIES)
             queries['max_evaluations'] = not_evaluated.filter(
                 SubmissionResult.evaluation_tries >=
-                EvaluationService.EvaluationService.MAX_EVALUATION_TRIES)
+                MAX_EVALUATION_TRIES)
             queries['scoring'] = evaluated.filter(
                 not_(SubmissionResult.filter_scored()))
             queries['scored'] = evaluated.filter(

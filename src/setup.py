@@ -115,7 +115,6 @@ setup(
     scripts=[
         "scripts/cmsLogService",
         "scripts/cmsScoringService",
-        "scripts/cmsEvaluationService",
         "scripts/cmsWorker",
         "scripts/cmsResourceService",
         "scripts/cmsChecker",

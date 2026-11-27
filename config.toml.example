@@ -17,7 +17,10 @@ LOG_SERVICE_SHARD = 0           # num; shard index handed to cmsLogService; 0 = 
 RESOURCE_SERVICE_SHARD = 0      # num; shard index handed to cmsResourceService; 0 = single instance — raise only when running multiple shards
 SCORING_SERVICE_SHARD = 0       # num; shard index handed to cms-scoring; 0 = single instance — raise only when running multiple shards
 SCORING_SERVICE_PORT = 28500    # port; container port cms-scoring listens on; the core host publish stays on 28500
-EVALUATION_SERVICE_SHARD = 0    # num; shard index handed to cmsEvaluationService; 0 = single instance — raise only when running multiple shards
+EVALUATION_SERVICE_SHARD = 0    # num; shard index handed to cms-evaluation; 0 = single instance — raise only when running multiple shards
+EVALUATION_SERVICE_PORT = 25000 # port; container port cms-evaluation listens on; the core host publish stays on 25000
+WORKER_SERVICE_ADDRS = "cms-worker-0:26000"      # str; comma-separated host:port list cms-evaluation dispatches jobs to
+SCORING_SERVICE_ADDR = "cms-scoring-service:28500" # str; host:port cms-evaluation notifies when a verdict is final
 PROXY_SERVICE_SHARD = 0         # num; shard index handed to cmsProxyService; 0 = single instance — raise only when running multiple shards
 CHECKER_SERVICE_SHARD = 0       # num; shard index handed to cms-checker; 0 = single instance — raise only when running multiple shards
 CHECKER_SERVICE_PORT = 22000    # port; container port cms-checker listens on; the core host publish stays on 22000
