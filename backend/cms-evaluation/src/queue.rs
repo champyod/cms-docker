@@ -53,6 +53,10 @@ pub struct QueueStatusEntry {
 pub struct EvaluationQueue {
     entries: BinaryHeap<QueueEntry>,
     queued: HashSet<EvaluationOperation>,
+    /// Operations a worker has popped and not yet finished.
+    claimed: HashSet<Operation>,
+    /// Claimed operations an invalidation superseded; their result is dropped.
+    ignored: HashSet<Operation>,
     next_sequence: u64,
 }
 
@@ -73,12 +77,23 @@ impl EvaluationQueue {
         true
     }
 
-    /// Remove and return the most urgent operation.
+    /// Remove and return the most urgent operation, claiming it until release.
     pub fn pop(&mut self) -> Option<(EvaluationOperation, NaiveDateTime)> {
         self.entries.pop().map(|entry| {
             self.queued.remove(&entry.operation);
+            self.claimed.insert(entry.operation.operation.clone());
             (entry.operation, entry.timestamp)
         })
+    }
+
+    /// Gives up a claim and reports whether the result is still wanted.
+    ///
+    /// The reference drops a result whose operation was invalidated while it
+    /// ran (`EvaluationService.py:582-585`), so a worker asks this immediately
+    /// before committing and discards the write when the answer is `false`.
+    pub fn release(&mut self, operation: &Operation) -> bool {
+        self.claimed.remove(operation);
+        !self.ignored.remove(operation)
     }
 
     /// The number of operations waiting.
@@ -97,6 +112,8 @@ impl EvaluationQueue {
     ///
     /// Re-judging first drops work already waiting for the old result; the
     /// planner then puts only the work still owed back on this same queue.
+    /// A claimed operation the predicate names is not waited for: it is marked
+    /// superseded, so the worker drops the result it is about to commit.
     pub fn remove_matching(&mut self, predicate: impl Fn(&Operation) -> bool) -> usize {
         let before = self.entries.len();
         self.entries = std::mem::take(&mut self.entries)
@@ -105,6 +122,8 @@ impl EvaluationQueue {
             .collect();
         self.queued
             .retain(|operation| !predicate(&operation.operation));
+        self.ignored
+            .extend(self.claimed.iter().filter(|op| predicate(op)).cloned());
         before - self.entries.len()
     }
 
@@ -250,6 +269,54 @@ mod tests {
                     multiplicity: 2,
                 },
             ]
+        );
+    }
+
+    #[test]
+    fn a_claimed_operation_the_invalidation_names_reports_its_result_unwanted() {
+        let first = operation(1, Some("alpha"), 2);
+        let mut queue = EvaluationQueue::default();
+        assert!(queue.push(first.clone(), at(1)));
+        let (popped, _) = queue.pop().expect("the operation pops");
+        let running = popped.operation;
+
+        queue.remove_matching(|candidate| candidate.object_id == 1);
+
+        assert!(
+            !queue.release(&running),
+            "an invalidation that landed mid-operation drops the result"
+        );
+    }
+
+    #[test]
+    fn a_claimed_operation_the_invalidation_ignores_keeps_its_result() {
+        let first = operation(1, Some("alpha"), 2);
+        let mut queue = EvaluationQueue::default();
+        assert!(queue.push(first.clone(), at(1)));
+        let (popped, _) = queue.pop().expect("the operation pops");
+        let running = popped.operation;
+
+        queue.remove_matching(|candidate| candidate.object_id == 999);
+
+        assert!(
+            queue.release(&running),
+            "an unrelated invalidation leaves the running result wanted"
+        );
+    }
+
+    #[test]
+    fn releasing_twice_releases_the_claim_once() {
+        let first = operation(1, None, 2);
+        let mut queue = EvaluationQueue::default();
+        assert!(queue.push(first.clone(), at(1)));
+        let (popped, _) = queue.pop().expect("the operation pops");
+        let running = popped.operation;
+        queue.remove_matching(|candidate| candidate.object_id == 1);
+
+        assert!(!queue.release(&running), "the first release reports drop");
+        assert!(
+            queue.release(&running),
+            "the second release has no supersession left to report"
         );
     }
 }

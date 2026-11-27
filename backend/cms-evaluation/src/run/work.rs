@@ -73,7 +73,29 @@ pub(super) async fn process_one(
     _timestamp: chrono::NaiveDateTime,
 ) -> Result<(), WorkError> {
     let operation = queued.operation;
-    let (object_id, dataset_id) = ids(&operation)?;
+    let outcome = attempt(evaluation, dispatcher, scoring, &operation).await;
+    // The claim is released on every path, so a failed operation cannot leave
+    // the queue believing a worker still owns it and a later invalidation can
+    // still supersede it.
+    if !evaluation
+        .release(&operation)
+        .map_err(WorkError::Transaction)?
+    {
+        // An invalidation superseded the work while it ran; the reference drops
+        // that result rather than writing it over the fresh rows.
+        return Ok(());
+    }
+    outcome
+}
+
+/// The one attempt at an operation, before the claim is released.
+async fn attempt(
+    evaluation: &Evaluation,
+    dispatcher: &mut WorkerDispatcher,
+    scoring: &mut Option<Client>,
+    operation: &Operation,
+) -> Result<(), WorkError> {
+    let (object_id, dataset_id) = ids(operation)?;
     if dispatcher.is_empty() {
         return Err(WorkError::Input(
             "no worker addresses are configured".to_owned(),
@@ -87,9 +109,9 @@ pub(super) async fn process_one(
         .map_err(|error| WorkError::Transaction(error.to_string()))?;
     let kind = operation.kind;
     let outputs = if is_user_test(kind) {
-        write_user_test(&mut transaction, &operation, dispatcher, shard).await?
+        write_user_test(&mut transaction, operation, dispatcher, shard).await?
     } else {
-        write_submission(&mut transaction, &operation, dispatcher, shard).await?
+        write_submission(&mut transaction, operation, dispatcher, shard).await?
     };
     transaction
         .commit()

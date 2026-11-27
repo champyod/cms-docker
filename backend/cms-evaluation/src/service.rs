@@ -230,6 +230,16 @@ impl Evaluation {
         Ok(self.queue()?.pop())
     }
 
+    /// Gives up a claim on an operation and reports whether its result is still
+    /// wanted, so the caller can drop a write an invalidation superseded.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`POISONED`] when a panic left the queue locked.
+    pub fn release(&self, operation: &cms_proto::Operation) -> Result<bool, String> {
+        Ok(self.queue()?.release(operation))
+    }
+
     fn queue(&self) -> Result<MutexGuard<'_, EvaluationQueue>, String> {
         self.queue.lock().map_err(|_| POISONED.to_owned())
     }
