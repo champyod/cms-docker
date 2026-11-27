@@ -1395,6 +1395,21 @@ database with a scripted dispatcher, the four end-of-operation branches are pinn
 every guard has a negative control seen red. The compose swap and the deletion of
 `src/cms/service/EvaluationService.py` follow the verified parent gate, in the same epic.
 
+### S-6d4 deletion inventory (measured 2026-11-27)
+
+What must change before `src/cms/service/EvaluationService.py` can be removed, read off the tree:
+
+| Blocker | Evidence |
+|---|---|
+| `invalidate_submission` is a live panel call and has no Rust method | `admin-panel/src/lib/evaluation-rpc.ts:31-55` sends `__method: 'invalidate_submission'`; authorised at `src/cms/server/admin/rpc_authorization.py:45`; `cms_evaluation::service::Evaluation::methods()` lists only four methods |
+| `enable_worker` / `disable_worker` are authorised but have no caller | `src/cms/server/admin/rpc_authorization.py:43-44`; no call site in the Python admin handlers or the panel, so they are dead authorisation rows rather than a missing feature |
+| `MAX_COMPILATION_TRIES` / `MAX_EVALUATION_TRIES` are imported by the Python admin | `src/cms/server/admin/server.py:164-175` reads them off `EvaluationService.EvaluationService`; the Rust constants live in `cms_evaluation::operation` |
+| The compose entrypoint and healthcheck name the Python binary | `docker-compose.yml:355-361` runs `cmsEvaluationService` and healthchecks `pgrep -f cmsEvaluationService && python3 -c …` |
+| Two Python services dial it by `ServiceCoord` | `src/cmscontrib/PrometheusExporter.py:84`, `src/cms/server/contest/server.py:135`, `src/cms/server/admin/server.py:82`, `src/cmscontrib/AddSubmission.py:43` |
+
+The audit-store credentials from S-6d3p-chain belong to this slice's swap: once `cms-evaluation` is
+a binary that consumes `cms-audit`, `CMS_AUDIT_*` keys stop being dead configuration.
+
 ### S-8a: the write surface Decision A needs
 
 The operator chose A on 2026-11-25: the panel keeps its UI and calls a Rust write
