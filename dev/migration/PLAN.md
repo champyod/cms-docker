@@ -1321,7 +1321,7 @@ single-row path); P-43 `n/a — deletion belongs to the later daemon/compose-swa
 Deletion status: capability slice; `src/cms/service/EvaluationService.py` stays and is deleted only
 by the later daemon/compose-swap slice.
 
-### S-6d3p-chain (decision-gated; not an autonomous next slice): audit receipt chaining
+### S-6d3p-chain (approved A): audit receipt chaining
 
 Scope: append the `AuditRow`s the commit hands back (`backend/cms-db/src/writes/commit.rs:70-71`) to
 the audit store with a computed hash chained to the previous row. No chained Rust writer exists:
@@ -1329,48 +1329,37 @@ the audit store with a computed hash chained to the previous row. No chained Rus
 `grep -rn 'sha2::' backend --include='*.rs'` finds no hashing call; the reference chain is
 `admin-panel/src/lib/audit.ts:186-222`.
 
-Three candidates, from the code at this SHA:
-- A Rust SHA-256 chain in `cms-audit`: direct `sha2` dependency plus audit-store credentials and
-  verified TLS (`backend/cms-audit/src/lib.rs:39-72`) — Tier C for the dependency and credentials.
-- A panel HTTP surface that appends through the existing TypeScript chain: a new public route and
-  credentials — Tier C for the new surface.
-- Keep the insert-only writer and accept caller-supplied hashes: rejected, because the S-6d3j review
-  already found unchained rows indistinguishable from tampered ones.
+The operator approved **A** on 2026-11-27: a Rust SHA-256 chain in `cms-audit`, direct `sha2` 0.11,
+audit-store writer credentials and verified TLS (`backend/cms-audit/src/lib.rs:39-72`). The panel
+HTTP surface was rejected because one Rust process must own every database write; a dedicated
+sidecar was rejected because it adds a permanent service and hop; insert-only remains rejected
+because unchained rows cannot be distinguished from tampered ones.
 
-A and B both satisfy tamper-evidence and differ on which process owns the chain and its secret; the
-operator's ruling is required under §1 Tier C and Selection, so no lane opens on this slice alone.
-Tracked as **C5** in `coordination/BOARD.md` § Decision-gated candidates.
-Likely paths: `backend/cms-audit/src/lib.rs`, `backend/cms-audit/Cargo.toml`,
-`backend/cms-evaluation/src/service.rs`, `backend/cms-audit/tests/store.rs`, and a panel route if B
-is chosen.
-Done when: the chosen writer appends each receipt with a recomputable `entry_hash` chained to the
-previous row, an unchained or dropped row fails a named test, and a live store test confirms the
-writer role can insert but not rewrite; the exact gate follows the operator's choice.
-Perspectives touched: P-32 (append-only audit written before the change commits), P-48 (the choice
-and its rejected alternative recorded); P-43 `n/a — deletion belongs to the later daemon/compose-swap
-slice`.
-Deletion status: capability slice, decision-gated; `src/cms/service/EvaluationService.py` stays and
-is deleted only by the later daemon/compose-swap slice.
-
-### S-6d3q (planned): user-test inputs and builders
-
-Scope: read one user test's records, files, managers, executables and languages, then build the same
-compilation and evaluation bodies the reference sends for a user test, reusing the existing
-`CompilationJob::from_user_test` and `EvaluationJob::from_user_test` constructors rather than
-duplicating them (`backend/cms-grading/src/job/user_test.rs:40,118`).
-Likely paths: the measured seam `backend/cms-db/src/{lib.rs,judging.rs,usertest/**}`, exposing the
-private `contest_languages` read (`backend/cms-db/src/judging.rs:153-154`) and adding `UserTestInputs`
-beside `SubmissionInputs` (`backend/cms-db/src/judging.rs:36,233`);
-`backend/cms-evaluation/src/{lib.rs,support.rs,user_test_job.rs}`; tests under
-`backend/cms-evaluation/tests/` and `backend/cms-db/tests/`.
-Done when: one read plus one builder produce the pinned user-test bodies, a missing file or dataset
-is refused by name rather than defaulted, and a control swapping a user-test kind for a submission
-kind fails a named test, then is restored byte-identically.
-Perspectives touched: P-06 (RPC method identity), P-12 (batch equals single-row path), P-13 (empty
-inputs), P-44 (one concept, one definition); P-43 `n/a — deletion belongs to the later
-daemon/compose-swap slice`.
+Likely paths: `backend/Cargo.toml`, `backend/Cargo.lock`, `backend/cms-audit/**`,
+`backend/cms-evaluation/src/service.rs`, `config.toml.example`, `scripts/__config_sync.sh`,
+`docker-compose.yml`, and related tests.
+Done when: the writer canonicalises the TypeScript row payload byte-for-byte, computes SHA-256 over
+`previousHash|canonicalPayload`, serialises concurrent appends, and a live store test confirms the
+writer role can insert but not rewrite. An unchained or dropped row must fail a named test.
+Perspectives touched: P-32 (append-only audit written before the change commits), P-35 (dependency
+supply chain), P-48 (the choice and its rejected alternatives recorded); P-43 `n/a — deletion belongs
+to the later daemon/compose-swap slice`.
 Deletion status: capability slice; `src/cms/service/EvaluationService.py` stays and is deleted only
 by the later daemon/compose-swap slice.
+
+### S-6d3q (landed): user-test inputs and builders
+
+`cms_db::user_test_inputs` reads one user test, its dataset, dataset and user-test managers, uploaded
+files, result executables and contest languages. `cms_evaluation::user_test_job` reuses
+`CompilationJob::from_user_test` and `EvaluationJob::from_user_test`; it does not duplicate their
+validation. A missing user test or dataset, a malformed digest, or a dataset owned by another task is
+refused by name (`src/cms/db/usertest.py:123`). Lane tip `6b39d9e4`, merged `a9e80159`.
+
+Parent evidence: `cargo fmt --check` and `cargo clippy -p cms-db -p cms-evaluation -- -D warnings`
+exit 0; the live input target passes 6/6, the builder target 8/8, and both full serial suites pass.
+Wrong auto-manager, missing language and wrong input-digest controls each failed a named builder test
+and were restored byte-identically. New code files stay below 250 code lines and functions at or below
+40 lines. Python stays until the daemon/compose-swap slice.
 
 ### S-8a: the write surface Decision A needs
 
