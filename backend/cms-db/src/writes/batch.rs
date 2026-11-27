@@ -41,6 +41,10 @@ pub enum RowState {
     Executable(ExecutableRow),
     /// The score fields of one result.
     Score(ScoreRow),
+    /// The result row of one user test on one dataset.
+    UserTestResult(crate::writes::UserTestResultRow),
+    /// One file a user-test compilation produced.
+    UserTestExecutable(crate::writes::UserTestExecutableRow),
 }
 
 /// One mutation, as the audit store records it: who made it, what verb they

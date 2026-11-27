@@ -7,7 +7,9 @@
 //! far one submission has got, the executable set one compilation produced, the
 //! evaluation rows one testcase run produced, and the score fields
 //! `ScoringService` fills in last. User-test operations write
-//! `user_test_results` instead, and are not part of these shapes.
+//! `user_test_results` instead, and are not part of these shapes. Its write
+//! path is the sibling module `usertest`, which writes the result row and the
+//! user-test executables without an evaluation row or a score.
 //!
 //! Every statement is a column-exact constant naming only the columns the shape
 //! beside it declares, and every statement takes one placeholder per column: the
@@ -31,6 +33,7 @@
 //!   rows every batch must carry.
 //! - `commit`: the one transaction that executes the statements for a batch and
 //!   refuses to store audit rows it cannot chain.
+//! - `usertest`: the user-test result row, its executable set and its commit.
 //!
 //! # Errors
 //!
@@ -44,6 +47,7 @@ mod batch;
 mod commit;
 mod shapes;
 mod statements;
+mod usertest;
 
 pub use batch::{group_by_object, AuditRow, ObjectWrite, OperationType, RowState, WriteError};
 pub use commit::{commit, CommitError};
@@ -51,3 +55,7 @@ pub use shapes::{
     CompilationOutcome, EvaluationOutcome, EvaluationRow, ExecutableRow, ResultRow, ScoreRow,
 };
 pub use statements::{INSERT_EVALUATIONS, INSERT_EXECUTABLES, UPSERT_RESULT, UPSERT_SCORE};
+pub use usertest::{
+    commit_user_test, UserTestExecutableRow, UserTestOperation, UserTestResultRow, UserTestWrite,
+    DELETE_USER_TEST_EXECUTABLES, INSERT_USER_TEST_EXECUTABLES, UPSERT_USER_TEST_RESULT,
+};

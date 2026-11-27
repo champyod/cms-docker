@@ -192,13 +192,16 @@ pub use username::{
     CONTEST_USERNAME_HISTORY, USERNAME_POLICY,
 };
 pub use usertest::{
-    user_test_inputs, Filename, FilenameError, FilenameSchema, ReferentialError, ResultKey,
-    UserTest, UserTestExecutable, UserTestFile, UserTestFiles, UserTestInputs, UserTestInputsError,
-    UserTestManager, UserTestManagers, UserTestResult, UserTestResults, UserTestStatus, USER_TEST,
-    USER_TEST_EXECUTABLE, USER_TEST_FILE, USER_TEST_MANAGER, USER_TEST_RESULT,
+    user_test_inputs, user_test_result, Filename, FilenameError, FilenameSchema, ReferentialError,
+    ResultKey, UserTest, UserTestExecutable, UserTestFile, UserTestFiles, UserTestInputs,
+    UserTestInputsError, UserTestManager, UserTestManagers, UserTestResult,
+    UserTestResultReadError, UserTestResults, UserTestStatus, USER_TEST, USER_TEST_EXECUTABLE,
+    USER_TEST_FILE, USER_TEST_MANAGER, USER_TEST_RESULT, USER_TEST_RESULT_BY_ID,
 };
 pub use writes::{
-    commit, group_by_object, AuditRow, CommitError, CompilationOutcome, EvaluationOutcome,
-    EvaluationRow, ExecutableRow, ObjectWrite, OperationType, ResultRow, RowState, ScoreRow,
-    WriteError, INSERT_EVALUATIONS, INSERT_EXECUTABLES, UPSERT_RESULT, UPSERT_SCORE,
+    commit, commit_user_test, group_by_object, AuditRow, CommitError, CompilationOutcome,
+    EvaluationOutcome, EvaluationRow, ExecutableRow, ObjectWrite, OperationType, ResultRow,
+    RowState, ScoreRow, UserTestExecutableRow, UserTestOperation, UserTestResultRow, UserTestWrite,
+    WriteError, DELETE_USER_TEST_EXECUTABLES, INSERT_EVALUATIONS, INSERT_EXECUTABLES,
+    INSERT_USER_TEST_EXECUTABLES, UPSERT_RESULT, UPSERT_SCORE, UPSERT_USER_TEST_RESULT,
 };

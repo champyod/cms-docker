@@ -50,6 +50,9 @@ pub enum CommitError {
     /// A statement or the transaction itself was refused by the driver.
     #[error(transparent)]
     Database(#[from] sqlx::Error),
+    /// A write carried no audit row, so the change would go unrecorded.
+    #[error("a user-test write must carry an audit row")]
+    AuditNotWired,
 }
 
 /// Commit grouped object writes into rows in one transaction.
