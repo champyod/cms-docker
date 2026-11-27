@@ -19,6 +19,7 @@ const LIVE_REQUIRED: &str = "CMS_DB_TEST_URL must name a scratch PostgreSQL data
 /// One test's session and the URL the daemon binary can be pointed at.
 pub struct Fixture {
     session: Arc<Session>,
+    #[allow(dead_code)]
     url: String,
 }
 
@@ -49,6 +50,7 @@ impl Fixture {
     }
 
     /// The URL with the test schema selected, for a daemon under test.
+    #[allow(dead_code)]
     pub fn url(&self) -> &str {
         &self.url
     }

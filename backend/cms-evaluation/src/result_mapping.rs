@@ -22,7 +22,9 @@ mod usertest;
 pub use error::MapError;
 pub use usertest::map_user_test_result;
 
-use cms_db::{DatasetId, ObjectWrite, SubmissionId, SubmissionInputs};
+use cms_db::{
+    DatasetId, ObjectWrite, OperationType, SubmissionId, SubmissionInputs, SubmissionResult,
+};
 use cms_proto::{Operation, OperationKind};
 
 use crate::WorkerOutput;
@@ -69,6 +71,33 @@ pub fn map_result(
             )
         }
         other => Err(MapError::UnsupportedOperation { kind: other.name() }),
+    }
+}
+
+/// Builds the write that persists one re-judge invalidation of a stored result.
+///
+/// The row shapes and audit verb are the same ones a worker result uses, so an
+/// invalidation cannot take a second route into the result table.
+#[must_use]
+pub fn invalidation_write(
+    before: &SubmissionResult,
+    after: &SubmissionResult,
+    operation: OperationType,
+    archive_sandbox: bool,
+) -> ObjectWrite {
+    let previous = rows::stored(before);
+    let result = rows::stored(after);
+    let audit = vec![rows::result_audit(Some(&previous), &result)];
+    ObjectWrite {
+        operation,
+        submission_id: after.submission_id,
+        dataset_id: after.dataset_id,
+        archive_sandbox,
+        result,
+        executables: Vec::new(),
+        evaluations: Vec::new(),
+        score: None,
+        audit,
     }
 }
 

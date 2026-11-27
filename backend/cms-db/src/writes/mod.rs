@@ -54,7 +54,10 @@ pub use commit::{commit, CommitError};
 pub use shapes::{
     CompilationOutcome, EvaluationOutcome, EvaluationRow, ExecutableRow, ResultRow, ScoreRow,
 };
-pub use statements::{INSERT_EVALUATIONS, INSERT_EXECUTABLES, UPSERT_RESULT, UPSERT_SCORE};
+pub use statements::{
+    CLEAR_SCORE_FOR_COMPILATION, INSERT_EVALUATIONS, INSERT_EXECUTABLES, UPSERT_RESULT,
+    UPSERT_SCORE,
+};
 pub use usertest::{
     commit_user_test, UserTestExecutableRow, UserTestOperation, UserTestResultRow, UserTestWrite,
     DELETE_USER_TEST_EXECUTABLES, INSERT_USER_TEST_EXECUTABLES, UPSERT_USER_TEST_RESULT,

@@ -202,6 +202,7 @@ pub use writes::{
     commit, commit_user_test, group_by_object, AuditRow, CommitError, CompilationOutcome,
     EvaluationOutcome, EvaluationRow, ExecutableRow, ObjectWrite, OperationType, ResultRow,
     RowState, ScoreRow, UserTestExecutableRow, UserTestOperation, UserTestResultRow, UserTestWrite,
-    WriteError, DELETE_USER_TEST_EXECUTABLES, INSERT_EVALUATIONS, INSERT_EXECUTABLES,
-    INSERT_USER_TEST_EXECUTABLES, UPSERT_RESULT, UPSERT_SCORE, UPSERT_USER_TEST_RESULT,
+    WriteError, CLEAR_SCORE_FOR_COMPILATION, DELETE_USER_TEST_EXECUTABLES, INSERT_EVALUATIONS,
+    INSERT_EXECUTABLES, INSERT_USER_TEST_EXECUTABLES, UPSERT_RESULT, UPSERT_SCORE,
+    UPSERT_USER_TEST_RESULT,
 };

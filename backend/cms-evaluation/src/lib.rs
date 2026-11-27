@@ -35,7 +35,7 @@ pub use plan::{
 };
 pub use queue::{EvaluationOperation, EvaluationQueue, QueueStatusEntry};
 pub use result::{worker_output, RunStats, WorkerOutput, WorkerOutputError};
-pub use result_mapping::{map_result, map_user_test_result, MapError};
+pub use result_mapping::{invalidation_write, map_result, map_user_test_result, MapError};
 pub use run::{process_operation, sweeper, worker, RunError, SWEEP_INTERVAL};
 pub use runner::{run_submission, run_user_test, RunnerError};
 pub use service::Evaluation;
