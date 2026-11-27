@@ -61,6 +61,8 @@ pub enum CommitError {
 /// `evaluation_outcome = 'ok'` when the stored evaluation count equals the
 /// dataset's testcase count. One duplicate evaluation row is tolerated per row
 /// without losing the others.
+/// A Compilation group first invalidates the previous executables, evaluations
+/// and score through the shared statements.
 ///
 /// # Errors
 ///
@@ -72,9 +74,12 @@ pub async fn commit(
     let mut transaction = connection.begin().await?;
     for group in writes {
         write_result(&mut transaction, &group.result).await?;
-        // A compilation replaces the whole set; clear it even when the new set is empty.
+        // A compilation invalidates what its predecessor produced, even when the set is empty.
         if group.operation == OperationType::Compilation {
             delete_executables(&mut transaction, group.submission_id, group.dataset_id).await?;
+            delete_evaluations(&mut transaction, group.submission_id, group.dataset_id).await?;
+            crate::invalidate_score(&mut transaction, group.submission_id, group.dataset_id)
+                .await?;
         }
         if !group.executables.is_empty() {
             insert_executables(&mut transaction, &group.executables).await?;
@@ -129,6 +134,21 @@ async fn delete_executables(
     sqlx::query(crate::DELETE_EXECUTABLES)
         .bind(submission.0)
         .bind(dataset.0)
+        .execute(&mut *connection)
+        .await?;
+    Ok(())
+}
+
+/// Remove one object's whole evaluation set, the way `invalidate_evaluation` does.
+async fn delete_evaluations(
+    connection: &mut PgConnection,
+    submission: SubmissionId,
+    dataset: DatasetId,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(crate::DELETE_EVALUATIONS)
+        .bind(submission.0)
+        .bind(dataset.0)
+        .bind(None::<i32>)
         .execute(&mut *connection)
         .await?;
     Ok(())

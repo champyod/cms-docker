@@ -12,8 +12,8 @@
 //! the batch's audit rows back instead of storing them.
 
 use cms_db::{
-    commit, AuditRow, DatasetId, EvaluationRow, ExecutableRow, ObjectWrite, OperationType,
-    ResultRow, RowState, SubmissionId,
+    commit, AuditRow, CompilationOutcome, DatasetId, EvaluationRow, ExecutableRow, ObjectWrite,
+    OperationType, ResultRow, RowState, SubmissionId,
 };
 use sqlx::postgres::PgConnection;
 use sqlx::{AssertSqlSafe, Connection, FromRow};
@@ -439,6 +439,108 @@ async fn an_evaluation_write_keeps_the_executable_set() {
     assert_eq!(stored.len(), 1, "the executable survives");
     assert_eq!(stored[0].filename, "old.bin");
     assert_eq!(stored[0].digest, OLD_DIGEST, "the digest is unchanged");
+
+    drop(connection);
+    schema_check::drop_database(&mut base, CHECK_DATABASE).await;
+}
+
+/// Stale evaluations and a fully scored result the recompilation must invalidate.
+async fn seed_scored_result(connection: &mut PgConnection) {
+    sqlx::raw_sql(AssertSqlSafe(
+        "INSERT INTO evaluations (id, submission_id, dataset_id, testcase_id, outcome, text) \
+         VALUES (500, 100, 20, 40, '1.0', ARRAY['en: right']::varchar[]), \
+                (501, 100, 20, 41, '0.0', ARRAY['en: wrong']::varchar[])",
+    ))
+    .execute(&mut *connection)
+    .await
+    .expect("seeding stale evaluations");
+    sqlx::raw_sql(AssertSqlSafe(
+        "INSERT INTO submission_results (submission_id, dataset_id, compilation_outcome, \
+            compilation_text, compilation_tries, evaluation_outcome, evaluation_tries, \
+            score, score_details, scored_at, public_score, public_score_details, \
+            ranking_score_details) \
+         VALUES (100, 20, 'ok', ARRAY['old']::varchar[], 1, 'ok', 3, \
+            12.5, '{\"score\": 12.5}', '2026-01-01 00:00:09', \
+            7.25, '{\"public\": 7.25}', ARRAY['12.5']::varchar[])",
+    ))
+    .execute(&mut *connection)
+    .await
+    .expect("seeding a scored result");
+}
+
+#[derive(Debug, FromRow)]
+struct StoredScore {
+    score: Option<f64>,
+    score_details: Option<String>,
+    scored_at: Option<String>,
+    public_score: Option<f64>,
+    public_score_details: Option<String>,
+    ranking_score_details: Option<Vec<String>>,
+}
+
+/// The score columns and stamp the object holds after the commit.
+async fn stored_score(connection: &mut PgConnection) -> StoredScore {
+    sqlx::query_as::<_, StoredScore>(
+        "SELECT score, score_details::text AS score_details, \
+                scored_at::text AS scored_at, public_score, \
+                public_score_details::text AS public_score_details, ranking_score_details \
+         FROM submission_results WHERE submission_id = $1 AND dataset_id = $2",
+    )
+    .bind(SUBMISSION)
+    .bind(DATASET)
+    .fetch_one(connection)
+    .await
+    .expect("reading the stored score")
+}
+
+/// Assert the recompilation removed the stale rows and kept the score stamp.
+async fn assert_invalidation(connection: &mut PgConnection) {
+    assert!(
+        stored_evaluations(connection).await.is_empty(),
+        "stale evaluations are invalidated"
+    );
+    let result = stored_result(connection).await;
+    assert_eq!(
+        result.evaluation_outcome, None,
+        "evaluation outcome is cleared"
+    );
+    assert_eq!(result.evaluation_tries, 0, "evaluation tries are cleared");
+    assert_eq!(result.compilation_outcome.as_deref(), Some("ok"));
+    assert_eq!(result.compilation_tries, 1);
+
+    let score = stored_score(connection).await;
+    assert_eq!(score.score, None, "score is cleared");
+    assert_eq!(score.score_details, None, "score details are cleared");
+    assert_eq!(score.public_score, None, "public score is cleared");
+    assert_eq!(
+        score.public_score_details, None,
+        "public details are cleared"
+    );
+    assert_eq!(
+        score.ranking_score_details, None,
+        "ranking details are cleared"
+    );
+    assert_eq!(score.scored_at.as_deref(), Some("2026-01-01 00:00:09"));
+}
+
+/// A recompilation drops stale evaluations and score fields but keeps the stamp.
+#[tokio::test]
+async fn a_compilation_clears_evaluations_and_score_but_keeps_scored_at() {
+    let (mut base, mut connection) = require_open().await;
+    seed_scored_result(&mut connection).await;
+
+    let mut written = compilation_batch(vec![executable_row("new.bin", NEW_DIGEST)]);
+    written.result = ResultRow {
+        compilation_outcome: Some(CompilationOutcome::Ok),
+        compilation_tries: 1,
+        evaluation_tries: 0,
+        ..result_row()
+    };
+    commit(&mut connection, &[written])
+        .await
+        .expect("committing a recompilation over a scored result");
+
+    assert_invalidation(&mut connection).await;
 
     drop(connection);
     schema_check::drop_database(&mut base, CHECK_DATABASE).await;
