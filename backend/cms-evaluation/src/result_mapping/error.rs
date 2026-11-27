@@ -48,6 +48,13 @@ pub enum MapError {
         /// The digest parser's own account of the refusal.
         detail: String,
     },
+    /// A produced executable's filename violates the `FILENAME` domain.
+    BadUserTestFilename {
+        /// The filename the domain refused.
+        filename: String,
+        /// The filename parser's own account of the refusal.
+        detail: String,
+    },
     /// A tombstone flag has no matching tombstone executable to invalidate.
     NoWriteRequired,
 }
@@ -82,6 +89,10 @@ impl fmt::Display for MapError {
                     "executable `{filename}` digest is invalid: {detail}"
                 )
             }
+            Self::BadUserTestFilename { filename, detail } => write!(
+                formatter,
+                "user-test executable `{filename}` is invalid: {detail}"
+            ),
             Self::NoWriteRequired => write!(formatter, "no write follows this tombstone result"),
         }
     }

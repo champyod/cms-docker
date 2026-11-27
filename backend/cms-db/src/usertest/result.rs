@@ -108,7 +108,7 @@ pub struct UserTestResult {
     pub evaluation_sandbox_paths: Option<Vec<String>>,
     /// `user_test_results.evaluation_sandbox_digests`.
     pub evaluation_sandbox_digests: Option<Vec<String>>,
-    executables: BTreeMap<String, UserTestExecutable>,
+    pub(super) executables: BTreeMap<String, UserTestExecutable>,
 }
 
 impl UserTestResult {

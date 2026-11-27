@@ -1,6 +1,7 @@
 //! The EvaluationService's in-memory queue and its RPC surface.
 //!
-//! Requests touch only the queue; a sweep reads the database and enqueues the
+//! Requests touch the queue, except `invalidate_submission`, which also clears
+//! stored verdicts; a sweep reads the database and enqueues the
 //! planned operations. Result writing and worker dispatch belong to the runner,
 //! so this context can be tested without a worker.
 
@@ -14,6 +15,8 @@ use cms_db::Session;
 use cms_proto::Method;
 use serde_json::{json, Value};
 
+mod invalidate;
+
 use crate::queue::{EvaluationOperation, EvaluationQueue, QueueStatusEntry};
 use crate::sweep::{contest_operations, submission_operations_by_id, user_test_operations_by_id};
 use crate::PlannedOperation;
@@ -22,11 +25,12 @@ const NEW_SUBMISSION_METHOD: &str = "new_submission";
 const NEW_USER_TEST_METHOD: &str = "new_user_test";
 const QUEUE_STATUS_METHOD: &str = "queue_status";
 const WORKERS_STATUS_METHOD: &str = "workers_status";
+const INVALIDATE_METHOD: &str = "invalidate_submission";
 const SUBMISSION_ID_ARGUMENT: &str = "submission_id";
 const USER_TEST_ID_ARGUMENT: &str = "user_test_id";
 const POISONED: &str = "the evaluation queue is unusable after a panic while it was held";
 
-/// The session and fair queue one EvaluationService shares.
+/// The session, fair queue and optional ScoringService endpoint one daemon shares.
 ///
 /// Clones share the same session and queue.
 #[derive(Clone)]
@@ -34,17 +38,43 @@ pub struct Evaluation {
     session: Arc<Session>,
     runtime: tokio::runtime::Handle,
     queue: Arc<Mutex<EvaluationQueue>>,
+    scoring_address: Option<String>,
+    rpc_secret: Option<String>,
 }
 
 impl Evaluation {
     /// Builds one context over an open session and the runtime that drives its reads.
     #[must_use]
-    pub fn new(session: Arc<Session>, runtime: tokio::runtime::Handle) -> Self {
+    pub fn new(
+        session: Arc<Session>,
+        runtime: tokio::runtime::Handle,
+        scoring_address: Option<String>,
+        rpc_secret: Option<String>,
+    ) -> Self {
         Self {
             session,
             runtime,
             queue: Arc::new(Mutex::new(EvaluationQueue::default())),
+            scoring_address,
+            rpc_secret,
         }
+    }
+
+    /// The session every read and write shares, for the worker loop.
+    pub(crate) fn session(&self) -> &Session {
+        &self.session
+    }
+
+    /// The optional ScoringService address the worker dials after a verdict.
+    #[must_use]
+    pub fn scoring_address(&self) -> Option<&str> {
+        self.scoring_address.as_deref()
+    }
+
+    /// The optional RPC secret shared with ScoringService.
+    #[must_use]
+    pub fn rpc_secret(&self) -> Option<&str> {
+        self.rpc_secret.as_deref()
     }
 
     /// The base RPC methods followed by the evaluation methods.
@@ -59,6 +89,7 @@ impl Evaluation {
             (NEW_USER_TEST_METHOD, new_user_test),
             (QUEUE_STATUS_METHOD, queue_status),
             (WORKERS_STATUS_METHOD, workers_status),
+            (INVALIDATE_METHOD, invalidate_submission),
         ] {
             methods.push(Method {
                 name,
@@ -87,18 +118,34 @@ impl Evaluation {
     ///
     /// Returns a named database or queue failure.
     pub async fn enqueue_submission(&self, submission_id: i32) -> Result<usize, String> {
+        self.enqueue_submission_with(submission_id, false).await
+    }
+
+    /// Re-runs the same planner with the archive flag a re-judge carried.
+    ///
+    /// # Errors
+    ///
+    /// Returns a named database or queue failure.
+    pub async fn enqueue_submission_with(
+        &self,
+        submission_id: i32,
+        archive_sandbox: bool,
+    ) -> Result<usize, String> {
         let mut transaction = self
             .session
             .begin()
             .await
             .map_err(|error| format!("begin submission read: {error}"))?;
-        let planned = submission_operations_by_id(transaction.connection(), submission_id)
+        let mut planned = submission_operations_by_id(transaction.connection(), submission_id)
             .await
             .map_err(|error| format!("read submission {submission_id}: {error}"))?;
         transaction
             .commit()
             .await
             .map_err(|error| format!("commit submission read: {error}"))?;
+        for item in &mut planned {
+            item.operation.archive_sandbox = archive_sandbox;
+        }
         self.enqueue(planned)
     }
 
@@ -166,6 +213,14 @@ impl Evaluation {
         Ok(inserted)
     }
 
+    /// Removes queued operations that the re-judge planner will replace.
+    pub fn remove_matching(&self, predicate: impl Fn(&cms_proto::Operation) -> bool) -> usize {
+        self.queue
+            .lock()
+            .expect(POISONED)
+            .remove_matching(predicate)
+    }
+
     /// Removes and returns the most urgent operation, if any.
     ///
     /// # Errors
@@ -227,6 +282,27 @@ pub fn queue_status(_data: &Value, evaluation: &Evaluation) -> Result<Value, Str
     Ok(Value::Array(status))
 }
 
+/// Clear the named level of stored verdicts, then re-plan what is still owed.
+///
+/// # Errors
+///
+/// Refuses an unknown level, a malformed filter or a database failure.
+pub fn invalidate_submission(data: &Value, evaluation: &Evaluation) -> Result<Value, String> {
+    invalidate::handle(data, evaluation)
+}
+
+/// The same invalidation for a caller that already owns a runtime.
+///
+/// # Errors
+///
+/// Refuses an unknown level, a malformed filter or a database failure.
+pub async fn invalidate_submission_async(
+    data: &Value,
+    evaluation: &Evaluation,
+) -> Result<Value, String> {
+    invalidate::apply_value(data, evaluation).await
+}
+
 /// The worker pool is not part of this context yet; the reference's empty map is.
 pub fn workers_status(_data: &Value, _evaluation: &Evaluation) -> Result<Value, String> {
     Ok(json!({}))
@@ -242,4 +318,16 @@ fn required_i32(data: &Value, argument: &str, method: &str) -> Result<i32, Strin
 fn timestamp(timestamp: NaiveDateTime) -> f64 {
     timestamp.and_utc().timestamp() as f64
         + f64::from(timestamp.and_utc().timestamp_subsec_micros()) / 1_000_000.0
+}
+
+/// Reads an optional integer argument, distinguishing null from a wrong type.
+fn optional_i32(data: &Value, argument: &str, method: &str) -> Result<Option<i32>, String> {
+    match data.get(argument) {
+        None | Some(Value::Null) => Ok(None),
+        Some(value) => value
+            .as_i64()
+            .and_then(|value| i32::try_from(value).ok())
+            .map(Some)
+            .ok_or_else(|| format!("{method}() requires an integer `{argument}`")),
+    }
 }

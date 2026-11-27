@@ -3,6 +3,10 @@ name = "cms-evaluation"
 version = "0.1.0"
 edition = "2021"
 
+[[bin]]
+name = "cms-evaluation"
+path = "src/bin/cms-evaluation.rs"
+
 [dependencies]
 cms-db = { path = "../cms-db" }
 cms-grading = { path = "../cms-grading" }
@@ -11,4 +15,4 @@ cms-svc = { path = "../cms-svc" }
 chrono = { workspace = true }
 serde_json = { workspace = true }
 sqlx = { workspace = true }
-tokio = { workspace = true }
+tokio = { workspace = true, features = ["time"] }

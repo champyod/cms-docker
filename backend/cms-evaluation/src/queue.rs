@@ -93,6 +93,21 @@ impl EvaluationQueue {
         self.entries.is_empty()
     }
 
+    /// Removes every queued operation the predicate names, returning the count.
+    ///
+    /// Re-judging first drops work already waiting for the old result; the
+    /// planner then puts only the work still owed back on this same queue.
+    pub fn remove_matching(&mut self, predicate: impl Fn(&Operation) -> bool) -> usize {
+        let before = self.entries.len();
+        self.entries = std::mem::take(&mut self.entries)
+            .into_iter()
+            .filter(|entry| !predicate(&entry.operation.operation))
+            .collect();
+        self.queued
+            .retain(|operation| !predicate(&operation.operation));
+        before - self.entries.len()
+    }
+
     /// The cumulative status ordered by priority and first timestamp.
     #[must_use]
     pub fn status(&self) -> Vec<QueueStatusEntry> {

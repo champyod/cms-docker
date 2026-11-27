@@ -15,6 +15,7 @@ use serde_json::{Map, Value};
 use crate::dispatch::{DispatchError, WorkerDispatcher};
 use crate::job::{submission_job, SubmissionJobError};
 use crate::result::{worker_output, WorkerOutput, WorkerOutputError};
+use crate::user_test_job::{user_test_job, UserTestJobError};
 
 /// Why one submission did not yield a set of storable outputs.
 ///
@@ -25,6 +26,8 @@ use crate::result::{worker_output, WorkerOutput, WorkerOutputError};
 pub enum RunnerError {
     /// The worker body could not be built from the bundle.
     Job(SubmissionJobError),
+    /// The user-test worker body could not be built from the bundle.
+    UserTestJob(UserTestJobError),
     /// The one job could not be dispatched to the shard.
     Dispatch(DispatchError),
     /// A returned job was not a JSON object.
@@ -37,6 +40,7 @@ impl fmt::Display for RunnerError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Job(source) => write!(f, "cannot build the submission job: {source}"),
+            Self::UserTestJob(source) => write!(f, "cannot build the user-test job: {source}"),
             Self::Dispatch(source) => write!(f, "cannot dispatch the submission job: {source}"),
             Self::NonObjectBody => write!(f, "a returned job body is not a JSON object"),
             Self::Output(source) => write!(f, "cannot read a returned job body: {source}"),
@@ -48,6 +52,7 @@ impl std::error::Error for RunnerError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Job(source) => Some(source),
+            Self::UserTestJob(source) => Some(source),
             Self::Dispatch(source) => Some(source),
             Self::Output(source) => Some(source),
             Self::NonObjectBody => None,
@@ -70,7 +75,7 @@ fn parse_bodies(jobs: &[Value]) -> Result<Vec<WorkerOutput>, RunnerError> {
 ///
 /// # Errors
 ///
-/// [`RunnerError::Job`] when the body cannot be built,
+/// [`RunnerError::Job`] when a submission body cannot be built,
 /// [`RunnerError::Dispatch`] when the shard dispatch fails,
 /// [`RunnerError::NonObjectBody`] when a returned job is not an object, and
 /// [`RunnerError::Output`] when a returned object's result keys are malformed.
@@ -81,6 +86,26 @@ pub fn run_submission(
     shard: usize,
 ) -> Result<Vec<WorkerOutput>, RunnerError> {
     let body = submission_job(operation, inputs).map_err(RunnerError::Job)?;
+    let group = dispatcher
+        .dispatch(shard, vec![body])
+        .map_err(RunnerError::Dispatch)?;
+    parse_bodies(&group.jobs)
+}
+
+/// Builds one user-test body, dispatches it to `shard`, and parses every
+/// returned body in the order it was returned.
+///
+/// # Errors
+///
+/// [`RunnerError::UserTestJob`] when the body cannot be built, and the same
+/// dispatch and parse refusals as [`run_submission`] for the returned group.
+pub fn run_user_test(
+    operation: &Operation,
+    inputs: &cms_db::UserTestInputs,
+    dispatcher: &mut WorkerDispatcher,
+    shard: usize,
+) -> Result<Vec<WorkerOutput>, RunnerError> {
+    let body = user_test_job(operation, inputs).map_err(RunnerError::UserTestJob)?;
     let group = dispatcher
         .dispatch(shard, vec![body])
         .map_err(RunnerError::Dispatch)?;

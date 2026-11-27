@@ -14,6 +14,7 @@ mod model;
 mod name;
 mod referential;
 mod result;
+mod result_read;
 mod results;
 mod schema;
 
@@ -23,6 +24,7 @@ pub use model::{UserTest, UserTestExecutable, UserTestFile, UserTestManager};
 pub use name::{Filename, FilenameError, FilenameSchema};
 pub use referential::ReferentialError;
 pub use result::{ResultKey, UserTestResult, UserTestStatus};
+pub use result_read::{user_test_result, UserTestResultReadError, USER_TEST_RESULT_BY_ID};
 pub use results::UserTestResults;
 pub use schema::{
     USER_TEST, USER_TEST_EXECUTABLE, USER_TEST_FILE, USER_TEST_MANAGER, USER_TEST_RESULT,
