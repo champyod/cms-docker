@@ -105,7 +105,7 @@ services:
 
   # PostgreSQL Database
   database:
-    image: postgres:15@sha256:5a407822929c3789ff5154d3d35bd7e2090318149344c8a3d4ca942b035822ed
+    image: postgres:15@sha256:868b5ee219026c0f34c99d696d4494ccb3705cf1a18bed1e0b9de64d9c011ccd
     container_name: cms-database
     restart: unless-stopped
     profiles:
@@ -480,7 +480,7 @@ services:
 
   # Optional contest front door (TLS via ENABLE_TLS=true).
   nginx-proxy:
-    image: nginx:alpine@sha256:713fc2ebfd92e8217db451477182ee91944b123d2b1ee9fd5a8c6e91ca6c3a11
+    image: nginx:alpine@sha256:7fc0fb4af7bf006aeb31aea88069976060f8f0a0a86b667126742cc17f4e31ae
     container_name: cms-nginx-contest
     restart: unless-stopped
     profiles:
